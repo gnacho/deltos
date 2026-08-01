@@ -7,7 +7,7 @@ describe('auth', () => {
   it('login correcto devuelve cookie y /api/auth/me funciona', async () => {
     const { app } = await makeInstance()
     const cookie = await loginAdmin(app)
-    expect(cookie).toMatch(/^nido_session=.+\..+/)
+    expect(cookie).toMatch(/^deltos_session=.+\..+/)
 
     const me = await app.request('/api/auth/me', { headers: { cookie } })
     expect(me.status).toBe(200)

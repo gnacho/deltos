@@ -6,7 +6,7 @@ import { serialize, parse } from 'cookie'
 import { kvGet, kvSet } from './db.js'
 
 export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000 // 30 días
-export const COOKIE_NAME = 'nido_session'
+export const COOKIE_NAME = 'deltos_session'
 const LOCK_MS = 5 * 60 * 1000 // 5 min de bloqueo tras 5 intentos fallidos
 
 // Secret HMAC: env SESSION_SECRET o autogenerado persistido en kv
