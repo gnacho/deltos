@@ -278,9 +278,9 @@ function LanguageCard() {
         onChange={(e) => void change(e.target.value as Language)}
         className={inputCls}
       >
-        <option value="auto">{t('settings.langAuto')}</option>
-        <option value="es">Español</option>
-        <option value="en">English</option>
+        <option value="auto">🌐 {t('settings.langAuto')}</option>
+        <option value="es">🇪🇸 Español</option>
+        <option value="en">🇬🇧 English</option>
       </select>
       {error && (
         <p role="alert" className="text-[13px] font-medium text-rose-600 dark:text-rose-400 mt-2">
@@ -577,8 +577,8 @@ function UsersCard() {
             <div>
               <label htmlFor="nu-lang" className={labelCls}>{t('settings.users.language')}</label>
               <select id="nu-lang" value={language} onChange={(e) => setLanguage(e.target.value)} className={inputCls}>
-                <option value="es">Español</option>
-                <option value="en">English</option>
+                <option value="es">🇪🇸 Español</option>
+                <option value="en">🇬🇧 English</option>
               </select>
             </div>
             <div>
