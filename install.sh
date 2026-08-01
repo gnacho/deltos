@@ -169,11 +169,41 @@ pick_port() {
     return 1
 }
 
+tty_ok() { (exec 3<>/dev/tty) 2>/dev/null; }
+
+# choose_port WANT — interactive (TTY): asks which port to use, suggesting the
+# next free one and rejecting busy/invalid answers. Non-interactive: prints the
+# next free port. Prints the chosen port on stdout; fails if none is free.
+choose_port() {
+    _want=$1
+    _next=$(pick_port "$((_want + 1))") || _next=""
+    if [ "$UNATTENDED" -eq 0 ] && tty_ok; then
+        while :; do
+            printf 'Port %s is already in use.\nWhich port should %s listen on? [%s] ' \
+                "$_want" "$APP_NAME" "${_next:-none free}" > /dev/tty
+            IFS= read -r _r < /dev/tty || _r=""
+            _r="${_r:-$_next}"
+            case "$_r" in
+                ''|*[!0-9]*) printf 'Please enter a port number.\n' > /dev/tty; continue ;;
+            esac
+            if [ "$_r" -lt 1 ] || [ "$_r" -gt 65535 ]; then
+                printf 'Out of range (1-65535).\n' > /dev/tty; continue
+            fi
+            if port_in_use "$_r"; then
+                printf 'Port %s is also in use.\n' "$_r" > /dev/tty; continue
+            fi
+            printf '%s' "$_r"; return 0
+        done
+    fi
+    [ -n "$_next" ] || return 1
+    printf '%s' "$_next"
+}
+
 # Fresh install only: an upgrade keeps the port from the existing env file.
 PORT="$DEFAULT_PORT"
 if [ ! -f "$ENV_FILE" ]; then
     if port_in_use "$DEFAULT_PORT"; then
-        PORT=$(pick_port "$((DEFAULT_PORT + 1))") \
+        PORT=$(choose_port "$DEFAULT_PORT") \
             || fatal 25 "port $DEFAULT_PORT is busy and no free port found in $((DEFAULT_PORT + 1))-$((DEFAULT_PORT + 21)) — set one manually in $ENV_FILE after install"
         warn "port $DEFAULT_PORT is already in use — Deltos will listen on $PORT instead"
     else
@@ -343,6 +373,8 @@ printf '  systemctl status %s\n  journalctl -u %s -f\n' "$SERVICE_NAME" "$SERVIC
 printf '  sh install.sh              # update to the latest stable version\n'
 printf '  sh install.sh --uninstall\n'
 printf '\nNotes:\n'
+printf '  - A populated DEMO database (sample boards/tasks, users mar/jordi) is\n'
+printf '    seeded alongside the real one — enable demo mode from Settings to explore.\n'
 printf '  - No firewall port was opened. If you need one:\n'
 printf '      firewall-cmd --permanent --add-port=%s/tcp && firewall-cmd --reload\n' "$PORT"
 printf '      ufw allow %s/tcp\n' "$PORT"
