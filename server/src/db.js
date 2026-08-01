@@ -105,6 +105,50 @@ CREATE TABLE IF NOT EXISTS activity_events (
   created_at INTEGER NOT NULL
 );
 
+-- Web Push: una fila por dispositivo/navegador suscrito (un usuario puede tener N).
+-- endpoint = capability URL: SECRETA, nunca en logs. Ciclo de vida: upsert por
+-- endpoint en subscribe; DELETE cuando el push service devuelve 404/410.
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  endpoint TEXT UNIQUE NOT NULL,
+  p256dh TEXT NOT NULL,
+  auth TEXT NOT NULL,
+  user_agent TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+-- Preferencias por usuario y tipo de alerta (sin fila = activado, normal).
+CREATE TABLE IF NOT EXISTS notification_preferences (
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  tipo TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  min_severity TEXT NOT NULL DEFAULT 'normal',
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY (user_id, tipo)
+);
+
+-- Quiet hours (hora local del usuario; NULL = sin ventana). Puede cruzar medianoche.
+CREATE TABLE IF NOT EXISTS notification_quiet_hours (
+  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  quiet_start INTEGER,
+  quiet_end INTEGER,
+  tz TEXT NOT NULL DEFAULT 'Europe/Madrid',
+  updated_at INTEGER NOT NULL
+);
+
+-- Cola de alertas pospuestas por quiet hours: el mantenimiento horario las
+-- consolida (un resumen por usuario+tipo) al terminar la ventana.
+CREATE TABLE IF NOT EXISTS notification_queue (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  tipo TEXT NOT NULL,
+  severity TEXT NOT NULL DEFAULT 'normal',
+  datos_json TEXT NOT NULL DEFAULT '{}',
+  created_at INTEGER NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_tasks_column ON tasks("column", position);
 CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id);
 CREATE INDEX IF NOT EXISTS idx_task_labels_task ON task_labels(task_id);
@@ -113,6 +157,8 @@ CREATE INDEX IF NOT EXISTS idx_comments_task ON comments(task_id);
 CREATE INDEX IF NOT EXISTS idx_activity_task ON activity_events(task_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_activity_created ON activity_events(created_at);
 CREATE INDEX IF NOT EXISTS idx_sessions_expiry ON sessions(expires_at);
+CREATE INDEX IF NOT EXISTS idx_push_subs_user ON push_subscriptions(user_id);
+CREATE INDEX IF NOT EXISTS idx_notification_queue_user ON notification_queue(user_id, tipo);
 `
 
 export function openDb(file) {

@@ -9,6 +9,7 @@ import { z } from 'zod'
 import * as auth from './auth.js'
 import { kvGet } from './db.js'
 import { registerDomainRoutes } from './routes-domain.js'
+import { registerPushRoutes } from './routes-push.js'
 import { registerHealth } from './health.js'
 
 const registerSchema = z.object({
@@ -192,8 +193,9 @@ export function createApp(ctx) {
     })
   })
 
-  // --- Dominio + health ---
+  // --- Dominio + push + health ---
   registerDomainRoutes(app, { hub, uploadsDir: ctx.uploadsDir, prod })
+  registerPushRoutes(app)
   registerHealth(app, { prod, demo })
 
   // --- Estáticos + SPA fallback (excluyendo /api/* y /assets/*) ---

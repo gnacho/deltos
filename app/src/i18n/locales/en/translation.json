@@ -309,7 +309,19 @@
       "viewRelease": "View release",
       "updateError": "Could not check for updates. Try again.",
       "updateNow": "Update and reload"
-    }
+    },
+    "notifications": "Notifications",
+    "notifHint": "Get notified when the other person creates, moves, comments on or assigns you cards, even with the app closed.",
+    "notifEnable": "Enable alerts",
+    "notifDisable": "Disable on this device",
+    "notifEnabled": "Enabled on this device",
+    "notifBlocked": "Blocked by the browser. Re-enable the permission in the browser or system settings.",
+    "notifHttps": "Requires HTTPS: on the local network (http) they stay dormant and will turn on by themselves once the app is served over HTTPS.",
+    "notifUnsupported": "This browser does not support push notifications.",
+    "notifNotConfigured": "The server has no push keys configured.",
+    "notifDemo": "Not available in demo mode.",
+    "notifIos": "On iPhone/iPad alerts only work with the app installed: Share → Add to Home Screen.",
+    "notifError": "Could not enable alerts. Try again."
   },
   "connection": {
     "live": "Live",

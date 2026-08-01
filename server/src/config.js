@@ -27,6 +27,13 @@ const envSchema = z.object({
   COOKIE_SECURE: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
   MAX_SSE_CLIENTS: z.coerce.number().int().min(1).max(200).default(20),
   MAX_UPLOAD_MB: z.coerce.number().int().min(1).max(100).default(10),
+  // Web Push (VAPID): las tres o ninguna. Sin ellas el push queda DESACTIVADO
+  // (la app arranca igual: en LAN HTTP el push está dormido por secure context;
+  // generar con `npx web-push generate-vapid-keys --json`). Subject SIEMPRE
+  // mailto: (un https://localhost rompe Safari con BadJwtToken).
+  VAPID_PUBLIC_KEY: z.string().min(1).optional(),
+  VAPID_PRIVATE_KEY: z.string().min(1).optional(),
+  VAPID_SUBJECT: z.string().min(1).optional(),
 })
 
 export function loadConfig(env = process.env) {

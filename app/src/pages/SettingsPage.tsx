@@ -18,6 +18,7 @@ import {
   ExternalLink,
   RefreshCw,
   Trash2,
+  Bell,
 } from 'lucide-react';
 import { z } from 'zod';
 import { apiFetch, apiPost, apiPut, apiDelete, dispatchUnauthorized, ApiError } from '@/data/api-client';
@@ -29,6 +30,7 @@ import { applyUserLanguage } from '@/i18n';
 import { Avatar } from '@/components/Avatar';
 import { useInstallPrompt } from '@/hooks/useInstallPrompt';
 import { useAppUpdate } from '@/hooks/useAppUpdate';
+import { usePush } from '@/hooks/usePush';
 import pkg from '../../package.json';
 
 function Card({ children }: { children: React.ReactNode }) {
@@ -389,6 +391,71 @@ function DemoCard() {
         <p role="alert" className="text-[13px] font-medium text-rose-600 dark:text-rose-400 mt-2">
           {error}
         </p>
+      )}
+    </Card>
+  );
+}
+
+/* ---------------- Notificaciones push ---------------- */
+function NotificationsCard() {
+  const { t } = useTranslation();
+  const { soporte, estado, activar, desactivar } = usePush();
+
+  return (
+    <Card>
+      <Heading icon={Bell}>{t('settings.notifications')}</Heading>
+      <p className="text-[13px] text-faint mb-3">{t('settings.notifHint')}</p>
+
+      {estado.cargando ? null : (
+        <>
+          {soporte === 'requiere-https' && (
+            <p className="text-[13px] text-faint">{t('settings.notifHttps')}</p>
+          )}
+          {soporte === 'no-soportado' && (
+            <p className="text-[13px] text-faint">{t('settings.notifUnsupported')}</p>
+          )}
+          {soporte === 'no-configurado' && (
+            <p className="text-[13px] text-faint">{t('settings.notifNotConfigured')}</p>
+          )}
+          {soporte === 'demo' && (
+            <p className="text-[13px] text-faint">{t('settings.notifDemo')}</p>
+          )}
+          {soporte === 'ios-necesita-instalacion' && (
+            <p className="text-[13px] text-faint">{t('settings.notifIos')}</p>
+          )}
+          {soporte === 'ok' && estado.permiso === 'denied' && (
+            <p role="alert" className="text-[13px] font-medium text-rose-600 dark:text-rose-400">
+              {t('settings.notifBlocked')}
+            </p>
+          )}
+          {soporte === 'ok' && estado.permiso !== 'denied' && (
+            <div className="flex items-center justify-between gap-4">
+              {estado.suscrito && (
+                <span className="inline-flex items-center gap-1.5 text-[13px] font-medium text-emerald-600 dark:text-emerald-400">
+                  <Check className="w-3.5 h-3.5" aria-hidden="true" />
+                  {t('settings.notifEnabled')}
+                </span>
+              )}
+              <button
+                type="button"
+                disabled={estado.cargando}
+                onClick={() => void (estado.suscrito ? desactivar() : activar())}
+                className={`${estado.suscrito ? '' : 'ml-auto '}rounded-xl px-4 py-2 text-[13px] font-semibold border transition-colors disabled:opacity-50 ${
+                  estado.suscrito
+                    ? 'border-app text-faint hover:text-app hover:border-strong'
+                    : 'bg-emerald-500 border-emerald-500 text-white hover:bg-emerald-600'
+                }`}
+              >
+                {estado.suscrito ? t('settings.notifDisable') : t('settings.notifEnable')}
+              </button>
+            </div>
+          )}
+          {estado.error && (
+            <p role="alert" className="text-[13px] font-medium text-rose-600 dark:text-rose-400 mt-2">
+              {t('settings.notifError')}
+            </p>
+          )}
+        </>
       )}
     </Card>
   );
@@ -932,6 +999,7 @@ export default function SettingsPage() {
         <ProfileCard />
         <AppearanceCard />
         <LanguageCard />
+        <NotificationsCard />
         {user.role === 'admin' && !demo && <UsersCard />}
         {user.role === 'admin' && !demo && <DemoCard />}
         <SessionCard />

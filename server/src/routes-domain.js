@@ -8,6 +8,15 @@ import { z } from 'zod'
 import bcrypt from 'bcryptjs'
 import { requireAdmin } from './auth.js'
 import { kvGet, kvSet } from './db.js'
+import { notifyUsers, notifyAllExcept } from './push.js'
+
+// Notificación fire-and-forget a usuarios concretos (nunca bloquea la HTTP).
+function notifyIds(db, demo, ids, tipo, datos, opciones = {}) {
+  if (!ids || ids.length === 0) return
+  notifyUsers(db, ids, tipo, datos, { ...opciones, demo }).catch((err) =>
+    console.error('[push] error notificando:', err)
+  )
+}
 
 // --- Validación zod (límites de input) -------------------------------------
 
@@ -306,6 +315,13 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod }) {
     })
     create()
     hub.broadcast('tasks')
+    // Push: 'tarea_creada' a todos menos actor y asignado; el asignado recibe
+    // 'asignacion' (así no le llegan dos avisos de la misma tarjeta).
+    const datosPush = { usuario: user.username, titulo: data.title }
+    const asignado = data.assignee_id && data.assignee_id !== user.id ? data.assignee_id : null
+    if (asignado) notifyIds(db, c.get('demo'), [asignado], 'asignacion', datosPush)
+    const otros = db.prepare('SELECT id FROM users WHERE id != ? AND id != ?').all(user.id, asignado || '').map((r) => r.id)
+    notifyIds(db, c.get('demo'), otros, 'tarea_creada', datosPush)
     return c.json({ task: hydrateTasks(db, 'WHERE t.id = ?', [id])[0] }, 201)
   })
 
@@ -348,6 +364,10 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod }) {
     })
     update()
     hub.broadcast('tasks')
+    // Push: cambio de asignación → aviso al nuevo asignado.
+    if (data.assignee_id !== undefined && data.assignee_id && data.assignee_id !== task.assignee_id && data.assignee_id !== user.id) {
+      notifyIds(db, c.get('demo'), [data.assignee_id], 'asignacion', { usuario: user.username, titulo: task.title })
+    }
     return c.json({ task: hydrateTasks(db, 'WHERE t.id = ?', [task.id])[0] })
   })
 
@@ -392,6 +412,7 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod }) {
     })
     move()
     hub.broadcast('tasks')
+    notifyAllExcept(db, c.get('demo'), user.id, 'tarea_movida', { usuario: user.username, titulo: task.title, columna: toCol })
     return c.json({ task: hydrateTasks(db, 'WHERE t.id = ?', [task.id])[0] })
   })
 
@@ -454,6 +475,7 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod }) {
       .run(id, task.id, user.id, data.body, now)
     db.prepare('UPDATE tasks SET updated_at = ? WHERE id = ?').run(now, task.id)
     hub.broadcast('comments')
+    notifyAllExcept(db, c.get('demo'), user.id, 'comentario', { usuario: user.username, titulo: task.title })
     return c.json(
       { comment: { id, body: data.body, created_at: now, user_id: user.id, username: user.username, user_color: user.color } },
       201

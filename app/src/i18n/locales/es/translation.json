@@ -309,7 +309,19 @@
       "viewRelease": "Ver novedades",
       "updateError": "No se pudo comprobar. Inténtalo de nuevo.",
       "updateNow": "Actualizar y recargar"
-    }
+    },
+    "notifications": "Notificaciones",
+    "notifHint": "Avisos cuando la otra persona cree, mueva, comente o te asigne tarjetas, aunque tengas la app cerrada.",
+    "notifEnable": "Activar alertas",
+    "notifDisable": "Desactivar en este dispositivo",
+    "notifEnabled": "Activadas en este dispositivo",
+    "notifBlocked": "Bloqueadas por el navegador. Reactiva el permiso en los ajustes del navegador o del sistema.",
+    "notifHttps": "Requiere HTTPS: en la red local (http) están dormidas y se activarán solas cuando la app se sirva por HTTPS.",
+    "notifUnsupported": "Este navegador no soporta notificaciones push.",
+    "notifNotConfigured": "El servidor no tiene claves push configuradas.",
+    "notifDemo": "No disponible en modo demo.",
+    "notifIos": "En iPhone/iPad las alertas solo funcionan con la app instalada: Compartir → Añadir a pantalla de inicio.",
+    "notifError": "No se pudieron activar las alertas. Inténtalo de nuevo."
   },
   "connection": {
     "live": "En vivo",

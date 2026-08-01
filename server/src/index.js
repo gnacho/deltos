@@ -10,6 +10,7 @@ import * as auth from './auth.js'
 import { createHub } from './sse.js'
 import { seedDemo } from './demo.js'
 import { createApp } from './app.js'
+import { configurePush, flushNotificationQueue } from './push.js'
 
 // Config validada con zod: si es inválida, no arranca la app rota
 let config
@@ -39,6 +40,15 @@ await auth.ensureBootstrapAdmin(prod, config.AUTH_USER, config.AUTH_PASS)
 seedDemo(demo, uploadsDir) // idempotente: solo si la BD demo está vacía
 
 const hub = createHub(config.MAX_SSE_CLIENTS)
+
+// Web Push: activo solo si están las 3 variables VAPID (sin ellas la app
+// arranca igual y el push queda dormido — ver push.js).
+configurePush({
+  publicKey: config.VAPID_PUBLIC_KEY,
+  privateKey: config.VAPID_PRIVATE_KEY,
+  subject: config.VAPID_SUBJECT,
+})
+
 const app = createApp({
   prod,
   demo,
@@ -59,10 +69,12 @@ const server = serve({ fetch: app.fetch, port: config.PORT }, (info) => {
 })
 
 // Checkpoint WAL TRUNCATE cada hora (sin esto el WAL crece indefinidamente)
+// + entrega consolidada de las notificaciones pospuestas por quiet hours.
 const maintenance = setInterval(() => {
   try {
     hourlyMaintenance(prod, 'prod')
     hourlyMaintenance(demo, 'demo')
+    flushNotificationQueue(prod).catch((err) => console.error('[push] error en flush de cola:', err))
   } catch (err) {
     console.error('[db] error en mantenimiento horario:', err)
   }
