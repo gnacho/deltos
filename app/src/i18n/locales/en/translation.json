@@ -12,7 +12,8 @@
     "delete": "Delete",
     "create": "Create",
     "none": "Not set",
-    "demoBadge": "DEMO"
+    "demoBadge": "DEMO",
+    "confirm": "Confirm"
   },
   "login": {
     "title": "Sign in to Deltos",
@@ -290,12 +291,24 @@
       "creating": "Creating…",
       "createError": "Could not create user",
       "created": "User created",
-      "empty": "No users"
+      "empty": "No users",
+      "resetPassword": "Reset password",
+      "newPassword": "New password",
+      "deleteUser": "Delete user",
+      "updateError": "Could not update user"
     },
     "about": {
       "title": "About",
       "desc": "Couple task manager. 100% local, no cloud.",
-      "version": "Deltos v{{version}}"
+      "version": "Deltos v{{version}}",
+      "source": "Source code",
+      "checkUpdates": "Check for updates",
+      "checking": "Checking…",
+      "upToDate": "You're up to date — v{{version}} is the latest version",
+      "updateAvailable": "New version available: v{{version}}",
+      "viewRelease": "View release",
+      "updateError": "Could not check for updates. Try again.",
+      "updateNow": "Update and reload"
     }
   },
   "connection": {

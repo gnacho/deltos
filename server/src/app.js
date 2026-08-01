@@ -65,7 +65,7 @@ export function createApp(ctx) {
     }
     c.header(
       'Content-Security-Policy',
-      "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'"
+      "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://api.github.com"
     )
     await next()
   })

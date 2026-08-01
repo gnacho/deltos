@@ -15,9 +15,12 @@ import {
   Check,
   UserPlus,
   Info,
+  ExternalLink,
+  RefreshCw,
+  Trash2,
 } from 'lucide-react';
 import { z } from 'zod';
-import { apiFetch, apiPost, apiPut, dispatchUnauthorized, ApiError } from '@/data/api-client';
+import { apiFetch, apiPost, apiPut, apiDelete, dispatchUnauthorized, ApiError } from '@/data/api-client';
 import type { Language, SessionUser } from '@/data/types';
 import { useSession } from '@/auth/session-context';
 import { useTheme } from '@/theme/theme-context';
@@ -25,6 +28,7 @@ import type { ThemeMode } from '@/theme/theme-context';
 import { applyUserLanguage } from '@/i18n';
 import { Avatar } from '@/components/Avatar';
 import { useInstallPrompt } from '@/hooks/useInstallPrompt';
+import { useAppUpdate } from '@/hooks/useAppUpdate';
 import pkg from '../../package.json';
 
 function Card({ children }: { children: React.ReactNode }) {
@@ -503,14 +507,18 @@ function UsersCard() {
   const [password, setPassword] = useState('');
   const [language, setLanguage] = useState('es');
   const [role, setRole] = useState<'user' | 'admin'>('user');
+  const [pwdFor, setPwdFor] = useState<string | null>(null);
+  const [newPwd, setNewPwd] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
 
+  const reload = () =>
+    apiFetch<{ users?: AdminUser[] }>('/api/users').then((d) => setUsers(d.users ?? []));
+
   useEffect(() => {
-    apiFetch<{ users?: AdminUser[] }>('/api/users')
-      .then((d) => setUsers(d.users ?? []))
-      .catch(() => setUsers([]));
+    reload().catch(() => setUsers([]));
   }, []);
 
   const create = async (e: FormEvent) => {
@@ -533,26 +541,176 @@ function UsersCard() {
     }
   };
 
+  const changeRole = async (id: string, r: string) => {
+    setError(null);
+    try {
+      await apiPut(`/api/users/${id}/role`, { role: r });
+      await reload();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t('settings.users.updateError'));
+      await reload();
+    }
+  };
+
+  const changeLanguage = async (id: string, l: string) => {
+    setError(null);
+    try {
+      await apiPut(`/api/users/${id}/language`, { language: l });
+      await reload();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t('settings.users.updateError'));
+      await reload();
+    }
+  };
+
+  const resetPassword = async (id: string) => {
+    if (newPwd.length < 6) return;
+    setError(null);
+    try {
+      await apiPut(`/api/users/${id}/password`, { password: newPwd });
+      setPwdFor(null);
+      setNewPwd('');
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t('settings.users.updateError'));
+    }
+  };
+
+  const remove = async (id: string) => {
+    setError(null);
+    try {
+      await apiDelete(`/api/users/${id}`);
+      setConfirmDelete(null);
+      setUsers((us) => us.filter((u) => u.id !== id));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t('settings.users.updateError'));
+      setConfirmDelete(null);
+    }
+  };
+
+  const selectCls = `${inputCls} !w-auto !py-1.5 text-[13px]`;
+  const iconBtnCls =
+    'inline-flex h-9 w-9 items-center justify-center rounded-xl border border-app bg-surface2 text-muted hover:text-text';
+
   return (
     <Card>
       <Heading icon={Users}>{t('settings.users.title')}</Heading>
       <p className="text-[13px] text-faint mb-4">{t('settings.users.subtitle')}</p>
       <ul className="space-y-2 mb-4">
         {users.map((u) => (
-          <li key={u.id} className="flex items-center gap-3 rounded-xl border border-app bg-surface2 px-3.5 py-2.5">
-            <Avatar name={u.username} color={u.color ?? null} size="md" />
-            <div className="min-w-0 flex-1">
-              <p className="text-[14px] font-medium leading-tight truncate">
-                {u.username}
-                {u.id === me.id && <span className="ml-1.5 text-[12px] font-normal text-faint">({t('settings.users.you')})</span>}
-              </p>
-              <p className="text-[12px] text-faint leading-tight">
-                {u.role === 'admin' ? t('settings.users.roleAdmin') : t('settings.users.roleUser')}
-              </p>
+          <li key={u.id} className="rounded-xl border border-app bg-surface2 px-3.5 py-2.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <Avatar name={u.username} color={u.color ?? null} size="md" />
+              <div className="min-w-0 flex-1">
+                <p className="text-[14px] font-medium leading-tight truncate">
+                  {u.username}
+                  {u.id === me.id && (
+                    <span className="ml-1.5 text-[12px] font-normal text-faint">
+                      ({t('settings.users.you')})
+                    </span>
+                  )}
+                </p>
+                <p className="text-[12px] text-faint leading-tight">
+                  {u.role === 'admin' ? t('settings.users.roleAdmin') : t('settings.users.roleUser')}
+                </p>
+              </div>
+              <select
+                aria-label={t('settings.users.language')}
+                value={u.language ?? 'auto'}
+                onChange={(e) => void changeLanguage(u.id, e.target.value)}
+                className={selectCls}
+              >
+                <option value="auto">🌐 Auto</option>
+                <option value="es">🇪🇸 Español</option>
+                <option value="en">🇬🇧 English</option>
+              </select>
+              {u.id !== me.id && (
+                <>
+                  <select
+                    aria-label={t('settings.users.role')}
+                    value={u.role}
+                    onChange={(e) => void changeRole(u.id, e.target.value)}
+                    className={selectCls}
+                  >
+                    <option value="user">{t('settings.users.roleUser')}</option>
+                    <option value="admin">{t('settings.users.roleAdmin')}</option>
+                  </select>
+                  <button
+                    type="button"
+                    aria-label={t('settings.users.resetPassword')}
+                    title={t('settings.users.resetPassword')}
+                    className={iconBtnCls}
+                    onClick={() => {
+                      setPwdFor(pwdFor === u.id ? null : u.id);
+                      setNewPwd('');
+                    }}
+                  >
+                    <KeyRound className="w-4 h-4" aria-hidden="true" />
+                  </button>
+                  {confirmDelete === u.id ? (
+                    <span className="flex gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => void remove(u.id)}
+                        className="h-9 rounded-xl bg-rose-600 px-3 text-[13px] font-semibold text-white"
+                      >
+                        {t('common.confirm')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDelete(null)}
+                        className="h-9 rounded-xl border border-app px-3 text-[13px] text-muted"
+                      >
+                        {t('common.cancel')}
+                      </button>
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      aria-label={t('settings.users.deleteUser')}
+                      title={t('settings.users.deleteUser')}
+                      className={`${iconBtnCls} hover:text-rose-600 dark:hover:text-rose-400`}
+                      onClick={() => setConfirmDelete(u.id)}
+                    >
+                      <Trash2 className="w-4 h-4" aria-hidden="true" />
+                    </button>
+                  )}
+                </>
+              )}
             </div>
+            {pwdFor === u.id && (
+              <form
+                className="mt-3 flex items-end gap-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void resetPassword(u.id);
+                }}
+              >
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  minLength={6}
+                  value={newPwd}
+                  onChange={(e) => setNewPwd(e.target.value)}
+                  placeholder={t('settings.users.newPassword')}
+                  className={`${inputCls} flex-1`}
+                />
+                <button
+                  type="submit"
+                  disabled={newPwd.length < 6}
+                  className="h-[42px] rounded-xl bg-emerald-500 px-4 text-[13px] font-semibold text-white hover:bg-emerald-600 disabled:opacity-60"
+                >
+                  {t('common.save')}
+                </button>
+              </form>
+            )}
           </li>
         ))}
       </ul>
+      {error && (
+        <p role="alert" className="mb-4 text-[13px] font-medium text-rose-600 dark:text-rose-400">
+          {error}
+        </p>
+      )}
 
       {!showCreate ? (
         <button
@@ -670,13 +828,86 @@ function SessionCard() {
 }
 
 /* ---------------- Acerca de ---------------- */
+const REPO_URL = 'https://github.com/gnacho/deltos';
+
 function AboutCard() {
   const { t } = useTranslation();
+  const upd = useAppUpdate(pkg.version, REPO_URL);
   return (
     <Card>
       <Heading icon={Info}>{t('settings.about.title')}</Heading>
       <p className="text-[14px] font-medium">{t('settings.about.version', { version: pkg.version })}</p>
       <p className="text-[13px] text-faint mt-1">{t('settings.about.desc')}</p>
+      <a
+        href={REPO_URL}
+        target="_blank"
+        rel="noreferrer"
+        className="mt-3 inline-flex h-9 items-center gap-2 rounded-xl border border-app bg-surface2 px-3.5 text-[13px] font-medium text-muted hover:text-text"
+      >
+        <ExternalLink className="w-4 h-4" aria-hidden="true" />
+        {t('settings.about.source')}
+      </a>
+
+      {/* Comprobar actualizaciones: nada si no hay repo ni service worker */}
+      {upd.supported && (
+        <div className="mt-3 flex flex-wrap items-center gap-2.5">
+          {upd.swWaiting ? (
+            <button
+              type="button"
+              onClick={upd.applySw}
+              className="inline-flex h-10 items-center gap-2 rounded-xl bg-emerald-500 px-4 text-[14px] font-semibold text-white hover:bg-emerald-600"
+            >
+              <Download className="w-4 h-4" aria-hidden="true" />
+              {t('settings.about.updateNow')}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void upd.check()}
+              disabled={upd.state === 'checking'}
+              className="inline-flex h-10 items-center gap-2 rounded-xl border border-app bg-surface2 px-4 text-[14px] font-semibold hover:bg-surface disabled:opacity-60"
+            >
+              <RefreshCw
+                className={`w-4 h-4 ${upd.state === 'checking' ? 'animate-spin' : ''}`}
+                aria-hidden="true"
+              />
+              {upd.state === 'checking'
+                ? t('settings.about.checking')
+                : t('settings.about.checkUpdates')}
+            </button>
+          )}
+          {upd.state === 'up-to-date' && (
+            <span
+              role="status"
+              className="inline-flex items-center gap-1.5 text-[13px] font-medium text-emerald-600 dark:text-emerald-400"
+            >
+              <Check className="w-4 h-4" aria-hidden="true" />
+              {t('settings.about.upToDate', { version: pkg.version })}
+            </span>
+          )}
+          {upd.state === 'available' && upd.latest && (
+            <>
+              <span role="status" className="text-[13px] font-medium text-emerald-600 dark:text-emerald-400">
+                {t('settings.about.updateAvailable', { version: upd.latest.version })}
+              </span>
+              <a
+                href={upd.latest.url}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 text-[13px] font-medium text-emerald-600 dark:text-emerald-400"
+              >
+                <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" />
+                {t('settings.about.viewRelease')}
+              </a>
+            </>
+          )}
+          {upd.state === 'error' && (
+            <span role="alert" className="text-[13px] font-medium text-rose-600 dark:text-rose-400">
+              {t('settings.about.updateError')}
+            </span>
+          )}
+        </div>
+      )}
     </Card>
   );
 }

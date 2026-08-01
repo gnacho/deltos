@@ -12,7 +12,8 @@
     "delete": "Eliminar",
     "create": "Crear",
     "none": "Sin especificar",
-    "demoBadge": "DEMO"
+    "demoBadge": "DEMO",
+    "confirm": "Confirmar"
   },
   "login": {
     "title": "Entra en Deltos",
@@ -290,12 +291,24 @@
       "creating": "Creando…",
       "createError": "No se pudo crear el usuario",
       "created": "Usuario creado",
-      "empty": "No hay usuarios"
+      "empty": "No hay usuarios",
+      "resetPassword": "Restablecer contraseña",
+      "newPassword": "Nueva contraseña",
+      "deleteUser": "Eliminar usuario",
+      "updateError": "No se pudo actualizar el usuario"
     },
     "about": {
       "title": "Acerca de",
       "desc": "Tareas en pareja. 100% local, sin nube.",
-      "version": "Deltos v{{version}}"
+      "version": "Deltos v{{version}}",
+      "source": "Código fuente",
+      "checkUpdates": "Comprobar actualizaciones",
+      "checking": "Comprobando…",
+      "upToDate": "Estás al día — v{{version}} es la última versión",
+      "updateAvailable": "Nueva versión disponible: v{{version}}",
+      "viewRelease": "Ver novedades",
+      "updateError": "No se pudo comprobar. Inténtalo de nuevo.",
+      "updateNow": "Actualizar y recargar"
     }
   },
   "connection": {

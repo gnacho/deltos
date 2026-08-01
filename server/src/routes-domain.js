@@ -69,6 +69,18 @@ const userCreateSchema = z.object({
 
 const demoToggleSchema = z.object({ enabled: z.boolean() })
 
+const userRoleSchema = z.object({ role: z.enum(['admin', 'user']) })
+const userPasswordSchema = z.object({
+  password: z.string().min(6, 'la contraseña debe tener al menos 6 caracteres').max(100),
+})
+const userLanguageSchema = z.object({ language: z.enum(['auto', 'es', 'en']) })
+
+function countAdmins(db) {
+  return db.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'admin'").get().n
+}
+
+const USER_COLS = 'id, username, email, phone, color, language, role, created_at'
+
 // --- Helpers ----------------------------------------------------------------
 
 async function parseJson(c, schema) {
@@ -555,6 +567,80 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod }) {
       { user: db.prepare('SELECT id, username, email, phone, color, language, role, created_at FROM users WHERE id = ?').get(id) },
       201
     )
+  })
+
+  // Cambio de rol (admin). Salvaguardas: no auto-cambio y protección último admin.
+  app.put('/api/users/:id/role', async (c) => {
+    const denied = requireAdmin(c)
+    if (denied) return denied
+    const db = c.get('db')
+    const me = c.get('user')
+    const id = c.req.param('id')
+    if (id === me.id) return c.json({ error: 'no puedes cambiar tu propio rol' }, 400)
+    const { data, error } = await parseJson(c, userRoleSchema)
+    if (error) return c.json({ error }, 400)
+    const target = db.prepare(`SELECT ${USER_COLS} FROM users WHERE id = ?`).get(id)
+    if (!target) return c.json({ error: 'usuario no encontrado' }, 404)
+    if (target.role === 'admin' && data.role === 'user' && countAdmins(db) <= 1) {
+      return c.json({ error: 'debe quedar al menos un administrador' }, 400)
+    }
+    db.prepare('UPDATE users SET role = ? WHERE id = ?').run(data.role, id)
+    hub.broadcast('users')
+    return c.json({ user: db.prepare(`SELECT ${USER_COLS} FROM users WHERE id = ?`).get(id) })
+  })
+
+  // Reset de contraseña (admin): re-hashea y destruye las sesiones del usuario.
+  app.put('/api/users/:id/password', async (c) => {
+    const denied = requireAdmin(c)
+    if (denied) return denied
+    const db = c.get('db')
+    const id = c.req.param('id')
+    const { data, error } = await parseJson(c, userPasswordSchema)
+    if (error) return c.json({ error }, 400)
+    if (!db.prepare('SELECT id FROM users WHERE id = ?').get(id)) {
+      return c.json({ error: 'usuario no encontrado' }, 404)
+    }
+    const hash = await bcrypt.hash(data.password, 10)
+    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, id)
+    db.prepare('DELETE FROM sessions WHERE user_id = ?').run(id)
+    hub.broadcast('users')
+    return c.json({ ok: true })
+  })
+
+  // Idioma de un usuario (admin): users.language es la fuente de verdad.
+  app.put('/api/users/:id/language', async (c) => {
+    const denied = requireAdmin(c)
+    if (denied) return denied
+    const db = c.get('db')
+    const id = c.req.param('id')
+    const { data, error } = await parseJson(c, userLanguageSchema)
+    if (error) return c.json({ error }, 400)
+    if (!db.prepare('SELECT id FROM users WHERE id = ?').get(id)) {
+      return c.json({ error: 'usuario no encontrado' }, 404)
+    }
+    db.prepare('UPDATE users SET language = ? WHERE id = ?').run(data.language, id)
+    hub.broadcast('users')
+    return c.json({ user: db.prepare(`SELECT ${USER_COLS} FROM users WHERE id = ?`).get(id) })
+  })
+
+  // Borrado (admin). Salvaguardas: no auto-borrado, protección último admin;
+  // destruye las sesiones del usuario eliminado.
+  app.delete('/api/users/:id', (c) => {
+    const denied = requireAdmin(c)
+    if (denied) return denied
+    const db = c.get('db')
+    const me = c.get('user')
+    const id = c.req.param('id')
+    if (id === me.id) return c.json({ error: 'no puedes eliminarte a ti mismo' }, 400)
+    const target = db.prepare(`SELECT ${USER_COLS} FROM users WHERE id = ?`).get(id)
+    if (!target) return c.json({ error: 'usuario no encontrado' }, 404)
+    if (target.role === 'admin' && countAdmins(db) <= 1) {
+      return c.json({ error: 'debe quedar al menos un administrador' }, 400)
+    }
+    db.prepare('DELETE FROM sessions WHERE user_id = ?').run(id)
+    db.prepare('DELETE FROM users WHERE id = ?').run(id)
+    hub.broadcast('users')
+    return c.json({ ok: true })
   })
 
   // --- Ajustes: modo demo (flag en kv de producción) ---
