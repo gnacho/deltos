@@ -5,7 +5,9 @@
 @tailwind utilities;
 
 /* Tokens (mockup aprobado). --text-faint ajustado a contraste AA (>=4.5:1 sobre surface) */
-:root {
+/* .light permite forzar el tema claro en previews dentro de páginas oscuras */
+:root,
+.light {
   --bg: #f4f6fa;
   --surface: #ffffff;
   --surface-2: #eef1f6;
@@ -13,6 +15,22 @@
   --text: #0c1425;
   --text-muted: #5b6b84;
   --text-faint: #64748b;
+
+  /* Tokens canónicos webapp-shell (RGB triplets; sufijo -rgb por colisión con los legacy hex) */
+  --canvas-rgb: 244 246 250;
+  --surface-rgb: 255 255 255;
+  --elevated-rgb: 238 241 246;
+  --hover-rgb: 226 232 240;
+  --border-rgb: 227 232 240;
+  --border-strong-rgb: 203 213 225;
+  --text-primary-rgb: 12 20 37;
+  --text-secondary-rgb: 91 107 132;
+  --text-muted-rgb: 100 116 139;
+  --accent-rgb: 16 185 129; /* emerald-500, marca Nido */
+  --ok-rgb: 16 185 129;
+  --warn-rgb: 217 119 6;
+  --danger-rgb: 244 63 94;
+  --info-rgb: 14 165 233;
 }
 .dark {
   --bg: #080d1a; /* azul noche, nunca negro puro */
@@ -22,6 +40,21 @@
   --text: #e9eef7;
   --text-muted: #93a1b8;
   --text-faint: #7a8aa5;
+
+  --canvas-rgb: 8 13 26;
+  --surface-rgb: 16 24 40;
+  --elevated-rgb: 24 35 56;
+  --hover-rgb: 30 43 66;
+  --border-rgb: 30 43 66;
+  --border-strong-rgb: 42 58 82;
+  --text-primary-rgb: 233 238 247;
+  --text-secondary-rgb: 147 161 184;
+  --text-muted-rgb: 122 138 165;
+  --accent-rgb: 52 211 153; /* emerald-400 */
+  --ok-rgb: 52 211 153;
+  --warn-rgb: 251 191 36;
+  --danger-rgb: 251 113 133;
+  --info-rgb: 56 189 248;
 }
 
 html {
@@ -210,4 +243,12 @@ section[data-col].col-target {
 /* Safe-area para bottom-nav en móvil con notch/home indicator */
 .bottom-nav {
   padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Reducir animaciones: switch de Ajustes (clase en <html>) */
+html.reduce-motion *,
+html.reduce-motion *::before,
+html.reduce-motion *::after {
+  animation-duration: 0.01ms !important;
+  transition-duration: 0.01ms !important;
 }

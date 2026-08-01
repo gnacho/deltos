@@ -2,6 +2,8 @@ import { createContext, useContext } from 'react';
 
 export type ThemeMode = 'auto' | 'light' | 'dark';
 
+export type Density = 'comfortable' | 'compact';
+
 export interface ThemeApi {
   mode: ThemeMode;
   /** Tema efectivamente aplicado. */
@@ -9,6 +11,10 @@ export interface ThemeApi {
   setMode: (mode: ThemeMode) => void;
   /** Toggle rápido del header: fuerza claro/oscuro explícito. */
   toggle: () => void;
+  density: Density;
+  setDensity: (d: Density) => void;
+  reduceMotion: boolean;
+  setReduceMotion: (v: boolean) => void;
 }
 
 export const ThemeContext = createContext<ThemeApi | null>(null);

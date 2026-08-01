@@ -1,8 +1,34 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { ThemeContext, type ThemeApi, type ThemeMode } from './theme-context';
+import { ThemeContext, type Density, type ThemeApi, type ThemeMode } from './theme-context';
 
 const STORAGE_KEY = 'nido-theme';
+const DENSITY_KEY = 'nido-density';
+const REDUCE_MOTION_KEY = 'nido-reduce-motion';
+
+function readDensity(): Density {
+  try {
+    return localStorage.getItem(DENSITY_KEY) === 'compact' ? 'compact' : 'comfortable';
+  } catch {
+    return 'comfortable';
+  }
+}
+
+function applyDensity(d: Density) {
+  document.documentElement.style.fontSize = d === 'compact' ? '13.5px' : '16px';
+}
+
+/** Anti-FOUC: aplicar preferencias antes del primer render (main.tsx). */
+export function applyBootPreferences() {
+  try {
+    applyDensity(readDensity());
+    if (localStorage.getItem(REDUCE_MOTION_KEY) === '1') {
+      document.documentElement.classList.add('reduce-motion');
+    }
+  } catch {
+    /* sin localStorage */
+  }
+}
 const darkMQ = window.matchMedia('(prefers-color-scheme: dark)');
 
 function readMode(): ThemeMode {
@@ -21,6 +47,14 @@ function effectiveDark(mode: ThemeMode): boolean {
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [mode, setModeState] = useState<ThemeMode>(readMode);
   const [dark, setDark] = useState<boolean>(() => effectiveDark(readMode()));
+  const [density, setDensityState] = useState<Density>(readDensity);
+  const [reduceMotion, setReduceMotionState] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(REDUCE_MOTION_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
 
   const apply = useCallback((m: ThemeMode) => {
     const d = effectiveDark(m);
@@ -62,9 +96,29 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const setDensity = useCallback((d: Density) => {
+    setDensityState(d);
+    try {
+      localStorage.setItem(DENSITY_KEY, d);
+    } catch {
+      /* sin localStorage */
+    }
+    applyDensity(d);
+  }, []);
+
+  const setReduceMotion = useCallback((v: boolean) => {
+    setReduceMotionState(v);
+    try {
+      localStorage.setItem(REDUCE_MOTION_KEY, v ? '1' : '0');
+    } catch {
+      /* sin localStorage */
+    }
+    document.documentElement.classList.toggle('reduce-motion', v);
+  }, []);
+
   const value = useMemo<ThemeApi>(
-    () => ({ mode, dark, setMode, toggle }),
-    [mode, dark, setMode, toggle],
+    () => ({ mode, dark, setMode, toggle, density, setDensity, reduceMotion, setReduceMotion }),
+    [mode, dark, setMode, toggle, density, setDensity, reduceMotion, setReduceMotion],
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

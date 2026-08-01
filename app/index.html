@@ -30,6 +30,8 @@
         if (dark) document.documentElement.classList.add('dark');
         var m = document.getElementById('theme-color-meta');
         if (m) m.setAttribute('content', dark ? '#080D1A' : '#F4F6FA');
+        if (localStorage.getItem('nido-density') === 'compact') document.documentElement.style.fontSize = '13.5px';
+        if (localStorage.getItem('nido-reduce-motion') === '1') document.documentElement.classList.add('reduce-motion');
       })();
     </script>
     <script>

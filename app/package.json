@@ -11,13 +11,16 @@
     "icons": "node scripts/generate-icons.mjs"
   },
   "dependencies": {
+    "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
+    "framer-motion": "^12.43.0",
     "i18next": "^25.3.2",
     "lucide-react": "^0.525.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-i18next": "^15.6.0",
     "react-router-dom": "^7.7.0",
+    "tailwind-merge": "^3.6.0",
     "zod": "^4.0.5"
   },
   "devDependencies": {
