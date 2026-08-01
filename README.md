@@ -10,6 +10,22 @@ viewer, activity feed, filters, light/dark mode, i18n (es/en) and installable as
   frontend statics and the SSE stream on the same port (no CORS).
 - **Frontend** (`app/`): React 19 + Vite + Tailwind, built to `app/dist/`.
 
+## Install (Linux server, one-liner)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/gnacho/nido/main/install.sh | sh
+```
+
+Detects your distro/arch (amd64, arm64), downloads the verified release (sha256
+against `checksums.txt`), installs a versioned Node runtime and the app under
+`/opt/nido`, creates a sandboxed `nido` systemd service and prints the initial
+admin password. Requires systemd. Update = re-run the same line; remove with
+`sh install.sh --uninstall`. Inspect first if you prefer:
+`curl -fsSL …/install.sh -o install.sh && less install.sh`.
+
+Releases are published per `v*` tag with `node_modules` pre-built per arch
+(`.github/workflows/release.yml`) — no compiler needed on the server.
+
 ## Development
 
 Requirement: Node ≥ 22.
