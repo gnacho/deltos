@@ -73,7 +73,7 @@ jobs:
         if: github.ref_type != 'tag'
         uses: actions/upload-artifact@v4
         with:
-          name: nido-snapshot-linux-${{ matrix.arch }}
+          name: deltos-snapshot-linux-${{ matrix.arch }}
           path: |
             nido_*.tar.gz
             checksums.txt

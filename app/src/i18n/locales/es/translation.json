@@ -1,6 +1,6 @@
 {
   "common": {
-    "appName": "Nido",
+    "appName": "Deltos",
     "tagline": "Tareas en pareja",
     "loading": "Cargando…",
     "error": "Algo ha fallado",
@@ -15,14 +15,14 @@
     "demoBadge": "DEMO"
   },
   "login": {
-    "title": "Entra en Nido",
+    "title": "Entra en Deltos",
     "subtitle": "Las tareas de casa y del trabajo, en un solo tablero compartido.",
     "username": "Usuario",
     "password": "Contraseña",
     "submit": "Entrar",
     "submitting": "Entrando…",
     "demo": "Entrar como demo",
-    "demoHint": "Explora Nido con datos de ejemplo.",
+    "demoHint": "Explora Deltos con datos de ejemplo.",
     "errorRequired": "Indica usuario y contraseña",
     "errorGeneric": "No se ha podido iniciar sesión"
   },
@@ -238,10 +238,10 @@
     "langAuto": "Automático",
     "langHint": "Automático usa el idioma de tu navegador.",
     "install": "Instalar app",
-    "installButton": "Instalar Nido",
-    "installHint": "Añade Nido a tu pantalla de inicio para abrirlo como una app.",
+    "installButton": "Instalar Deltos",
+    "installHint": "Añade Deltos a tu pantalla de inicio para abrirlo como una app.",
     "installUnavailable": "La instalación no está disponible en este navegador. Usa «Añadir a pantalla de inicio» desde el menú.",
-    "installDone": "Nido ya está instalado en este dispositivo.",
+    "installDone": "Deltos ya está instalado en este dispositivo.",
     "demoMode": "Modo demo",
     "demoHint": "Permite entrar con datos de ejemplo desde la pantalla de login.",
     "demoError": "No se ha podido cambiar el modo demo",
@@ -295,7 +295,7 @@
     "about": {
       "title": "Acerca de",
       "desc": "Tareas en pareja. 100% local, sin nube.",
-      "version": "Nido v{{version}}"
+      "version": "Deltos v{{version}}"
     }
   },
   "connection": {

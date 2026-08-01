@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>Nido — Tareas en pareja</title>
+    <title>Deltos — Tareas en pareja</title>
     <meta
       name="description"
-      content="Nido: PWA para gestionar tareas personales y laborales en pareja."
+      content="Deltos: PWA para gestionar tareas personales y laborales en pareja."
     />
     <meta name="theme-color" id="theme-color-meta" content="#F4F6FA" />
     <link rel="manifest" href="/manifest.webmanifest" />
@@ -19,7 +19,7 @@
       (function () {
         var dark = false;
         try {
-          var saved = localStorage.getItem('nido-theme'); /* 'light' | 'dark' | 'auto' | null */
+          var saved = localStorage.getItem('deltos-theme'); /* 'light' | 'dark' | 'auto' | null */
           dark =
             saved === 'dark'
               ? true
@@ -30,8 +30,8 @@
         if (dark) document.documentElement.classList.add('dark');
         var m = document.getElementById('theme-color-meta');
         if (m) m.setAttribute('content', dark ? '#080D1A' : '#F4F6FA');
-        if (localStorage.getItem('nido-density') === 'compact') document.documentElement.style.fontSize = '13.5px';
-        if (localStorage.getItem('nido-reduce-motion') === '1') document.documentElement.classList.add('reduce-motion');
+        if (localStorage.getItem('deltos-density') === 'compact') document.documentElement.style.fontSize = '13.5px';
+        if (localStorage.getItem('deltos-reduce-motion') === '1') document.documentElement.classList.add('reduce-motion');
       })();
     </script>
     <script>

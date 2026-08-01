@@ -12,8 +12,8 @@ type GateState = 'loading' | 'login' | 'authed';
 /**
  * AuthGate: loading → login → app.
  * Contrato de eventos (base común):
- *  - `nido-authed` (login OK) → refetch /me y entra
- *  - `nido-unauthorized` (401 o logout) → vuelve a login
+ *  - `deltos-authed` (login OK) → refetch /me y entra
+ *  - `deltos-unauthorized` (401 o logout) → vuelve a login
  */
 export default function AuthGate({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
@@ -55,11 +55,11 @@ export default function AuthGate({ children }: { children: ReactNode }) {
       setDemo(false);
       setState('login');
     };
-    window.addEventListener('nido-authed', onAuthed);
-    window.addEventListener('nido-unauthorized', onUnauthorized);
+    window.addEventListener('deltos-authed', onAuthed);
+    window.addEventListener('deltos-unauthorized', onUnauthorized);
     return () => {
-      window.removeEventListener('nido-authed', onAuthed);
-      window.removeEventListener('nido-unauthorized', onUnauthorized);
+      window.removeEventListener('deltos-authed', onAuthed);
+      window.removeEventListener('deltos-unauthorized', onUnauthorized);
     };
   }, [fetchMe]);
 

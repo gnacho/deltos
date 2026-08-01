@@ -54,8 +54,8 @@ const app = createApp({
 })
 
 const server = serve({ fetch: app.fetch, port: config.PORT }, (info) => {
-  console.log(`[nido] escuchando en http://localhost:${info.port}`)
-  console.log(`[nido] datos en ${config.DATA_DIR} · estáticos en ${config.STATIC_DIR}`)
+  console.log(`[deltos] escuchando en http://localhost:${info.port}`)
+  console.log(`[deltos] datos en ${config.DATA_DIR} · estáticos en ${config.STATIC_DIR}`)
 })
 
 // Checkpoint WAL TRUNCATE cada hora (sin esto el WAL crece indefinidamente)
@@ -71,7 +71,7 @@ maintenance.unref()
 
 // Graceful shutdown: notifica a clientes SSE, cierra server y BD
 function shutdown(signal) {
-  console.log(`[nido] ${signal} recibido, cerrando...`)
+  console.log(`[deltos] ${signal} recibido, cerrando...`)
   clearInterval(maintenance)
   hub.shutdown()
   server.close(() => {

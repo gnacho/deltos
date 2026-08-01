@@ -1,4 +1,4 @@
-/** Tipos del dominio Nido — snake_case, igual que la API (ver server/README.md). */
+/** Tipos del dominio Deltos — snake_case, igual que la API (ver server/README.md). */
 
 export type ColumnId = 'nuevo' | 'encurso' | 'hecho';
 export type Priority = 'alta' | 'media' | 'baja';

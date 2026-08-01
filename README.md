@@ -1,4 +1,4 @@
-# Nido
+# Deltos
 
 > [Versión en español](README.es.md)
 
@@ -13,12 +13,12 @@ viewer, activity feed, filters, light/dark mode, i18n (es/en) and installable as
 ## Install (Linux server, one-liner)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/gnacho/nido/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/gnacho/deltos/main/install.sh | sh
 ```
 
 Detects your distro/arch (amd64, arm64), downloads the verified release (sha256
 against `checksums.txt`), installs a versioned Node runtime and the app under
-`/opt/nido`, creates a sandboxed `nido` systemd service and prints the initial
+`/opt/deltos`, creates a sandboxed `deltos` systemd service and prints the initial
 admin password. Requires systemd. Update = re-run the same line; remove with
 `sh install.sh --uninstall`. Inspect first if you prefer:
 `curl -fsSL …/install.sh -o install.sh && less install.sh`.
@@ -67,11 +67,11 @@ cd server && npm test          # vitest: 30 API/auth/attachment tests
 ## Docker
 
 ```bash
-docker build -t nido .
-docker run -d --name nido -p 3000:3000 \
+docker build -t deltos .
+docker run -d --name deltos -p 3000:3000 \
   -e AUTH_USER=admin -e AUTH_PASS='use-a-strong-password' \
-  -v nido-data:/app/data \
-  nido
+  -v deltos-data:/app/data \
+  deltos
 ```
 
 - Multi-stage `node:22-slim` image: `npm ci --omit=dev` for the server + `server/` + `app/dist/`.
@@ -91,18 +91,18 @@ For VPS deployment with systemd + reverse proxy (Caddy/nginx with TLS and
 
 ```ini
 [Unit]
-Description=Nido
+Description=Deltos
 After=network.target
 
 [Service]
-WorkingDirectory=/opt/nido/server
+WorkingDirectory=/opt/deltos/server
 Environment=PORT=3000
-Environment=DATA_DIR=/var/lib/nido
+Environment=DATA_DIR=/var/lib/deltos
 Environment=AUTH_USER=admin
 Environment=AUTH_PASS=change-this
 ExecStart=/usr/bin/node src/index.js
 Restart=always
-User=nido
+User=deltos
 
 [Install]
 WantedBy=multi-user.target

@@ -26,7 +26,7 @@ import { NewTaskModal } from '@/components/NewTaskModal';
 
 /**
  * AppLayout unificado (skill webapp-shell):
- *  - ≥lg: sidebar 232px colapsable a raíl 64px (persiste en nido-sidebar-collapsed)
+ *  - ≥lg: sidebar 232px colapsable a raíl 64px (persiste en deltos-sidebar-collapsed)
  *  - md: raíl 64px con tooltips
  *  - <md: header móvil + bottom nav (4 items)
  *  - Topbar desktop/tablet: título | selector de tablero, conexión, tema
@@ -34,7 +34,7 @@ import { NewTaskModal } from '@/components/NewTaskModal';
  *  - Conserva: ModalContext, modales globales, select de tablero, a11y-announce
  */
 
-const COLLAPSED_KEY = 'nido-sidebar-collapsed';
+const COLLAPSED_KEY = 'deltos-sidebar-collapsed';
 
 function ThemeToggleButton({ mobile }: { mobile?: boolean }) {
   const { t } = useTranslation();

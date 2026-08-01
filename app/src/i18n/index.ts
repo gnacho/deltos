@@ -6,8 +6,8 @@ import type { Language } from '@/data/types';
 import es from './locales/es/translation.json';
 import en from './locales/en/translation.json';
 
-const LANG_MODE_KEY = 'nido-lang-mode'; // 'auto' | 'manual' (clave propia, distinta de i18nextLng)
-const LANG_KEY = 'nido-lang'; // idioma elegido manualmente (caché local)
+const LANG_MODE_KEY = 'deltos-lang-mode'; // 'auto' | 'manual' (clave propia, distinta de i18nextLng)
+const LANG_KEY = 'deltos-lang'; // idioma elegido manualmente (caché local)
 
 export type ResolvedLanguage = 'es' | 'en';
 

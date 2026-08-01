@@ -7,7 +7,7 @@ interface BeforeInstallPromptEvent extends Event {
 
 export type InstallState = 'available' | 'unavailable' | 'installed' | 'ios' | 'hidden';
 
-/** Captura beforeinstallprompt para el botón grande "Instalar Nido". */
+/** Captura beforeinstallprompt para el botón grande "Instalar Deltos". */
 export function useInstallPrompt(): { state: InstallState; install: () => Promise<void> } {
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null);
   const [installed, setInstalled] = useState(

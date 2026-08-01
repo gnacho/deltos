@@ -10,7 +10,7 @@ import { createApp } from '../src/app.js'
 
 // Crea una instancia completa (BD prod + demo en dir temporal) para tests.
 export async function makeInstance({ adminPass = 'admin123', seedDemoData = true } = {}) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nido-test-'))
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'deltos-test-'))
   const uploadsDir = path.join(dir, 'uploads')
   const prod = openDb(path.join(dir, 'app.db'))
   const demo = openDb(path.join(dir, 'app_demo.db'))

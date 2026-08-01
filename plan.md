@@ -1,10 +1,10 @@
-# Plan — Nido (PWA gestor de tareas en pareja)
+# Plan — Deltos (PWA gestor de tareas en pareja)
 
 ## Contexto
 - Skill propio del usuario: Node 22 + Hono + better-sqlite3 (sin ORM) + React 19 + Vite + Tailwind 3 + shadcn. Auth multiusuario cookie HMAC, i18n ES+EN, modo demo, SSE, PWA. Reglas a fuego en SKILL.md.
 - Mockup aprobado: `/mnt/agents/output/taskdeck-mockup/index.html` (mobile-first, kanban 3 estados, detalle 4 pestañas, vistas Todo/Proyectos/Actividad/Ajustes, DnD desktop, filtros).
 - Stack confirmado con el usuario: Node completo, sin híbrido Go.
-- Proyecto real en: `/mnt/agents/output/nido/` (server/ + app/).
+- Proyecto real en: `/mnt/agents/output/deltos/` (server/ + app/).
 
 ## Etapas
 1. **Backend** (coder): leer `references/arquitectura.md`, `references/auth.md`, `references/seguridad.md`, `assets/schema.sql` del skill. Construir `server/`: schema SQLite (users, sessions, projects, labels, tasks, task_labels, attachments, comments, activity_events, kv), auth completa + modo demo (BD separada), CRUD, mover tarea (posición), adjuntos, SSE con X-Accel-Buffering:no, rate-limit SQLite, headers seguridad, zod env, graceful shutdown, WAL checkpoint, vitest. Seeds: Mar/Jordi + dataset del mockup.

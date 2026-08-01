@@ -21,23 +21,23 @@ function dueStr(offsetDays) {
 const SEED_FILES = {
   'presupuesto-empresa-a.pdf': {
     mime: 'application/pdf',
-    content: '%PDF-1.4\n% Nido (demo) — archivo ficticio\n% Presupuesto empresa A: reforma de baño.\n',
+    content: '%PDF-1.4\n% Deltos (demo) — archivo ficticio\n% Presupuesto empresa A: reforma de baño.\n',
   },
   'presupuesto-empresa-b.pdf': {
     mime: 'application/pdf',
-    content: '%PDF-1.4\n% Nido (demo) — archivo ficticio\n% Presupuesto empresa B: reforma de baño.\n',
+    content: '%PDF-1.4\n% Deltos (demo) — archivo ficticio\n% Presupuesto empresa B: reforma de baño.\n',
   },
   'ventas-q3.xlsx': {
     mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    content: 'Nido (demo) — archivo ficticio. Ventas Q3 por canal.\n',
+    content: 'Deltos (demo) — archivo ficticio. Ventas Q3 por canal.\n',
   },
   'plantilla-presentacion.key': {
     mime: 'application/vnd.apple.keynote',
-    content: 'Nido (demo) — archivo ficticio. Plantilla de presentación.\n',
+    content: 'Deltos (demo) — archivo ficticio. Plantilla de presentación.\n',
   },
   'opciones-hotel.ods': {
     mime: 'application/vnd.oasis.opendocument.spreadsheet',
-    content: 'Nido (demo) — archivo ficticio. Cuatro opciones de hotel en Lisboa.\n',
+    content: 'Deltos (demo) — archivo ficticio. Cuatro opciones de hotel en Lisboa.\n',
   },
 }
 
@@ -47,7 +47,7 @@ export function seedDemo(db, uploadsDir) {
   if (count > 0) return false
 
   const now = Date.now()
-  const hash = bcrypt.hashSync('nido-demo', 10) // contraseña de mar/jordi (documentada en README)
+  const hash = bcrypt.hashSync('deltos-demo', 10) // contraseña de mar/jordi (documentada en README)
 
   const tx = db.transaction(() => {
     // --- Usuarios: Mar / Jordi + demo (sin contraseña usable) ---

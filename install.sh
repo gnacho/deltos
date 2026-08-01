@@ -1,33 +1,33 @@
 #!/bin/sh
 # =============================================================================
-# Nido — one-liner installer (Linux server)
+# Deltos — one-liner installer (Linux server)
 #
 #   Kanban PWA for shared tasks and boards (Node 22 + SQLite, frontend built).
 #   Installs the versioned Node runtime + the app release (node_modules
 #   pre-built) as a sandboxed systemd service.
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/gnacho/nido/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/gnacho/deltos/main/install.sh | sh
 #   sh install.sh --version=1.0.0 --unattended
 #   sh install.sh --dry-run          # describe every step, touches nothing
-#   sh install.sh --uninstall        # keeps /var/lib/nido (data) and /etc/nido
+#   sh install.sh --uninstall        # keeps /var/lib/deltos (data) and /etc/deltos
 #   sh install.sh --uninstall --purge
 #
 # Requirements: Linux with systemd (Debian/Ubuntu/Fedora/Arch/...),
 # amd64 / arm64. Verifies sha256 of every download (checksums.txt).
 #
 # Layout (capistrano-style):
-#   /opt/nido/node-v<ver>-linux-<arch>/   versioned Node runtime
-#   /opt/nido/node -> node-v<ver>...      runtime symlink
-#   /opt/nido/releases/v<ver>/            app release (server/ + dist/)
-#   /opt/nido/current -> releases/v<ver>  live symlink (update = flip, rollback = flip back)
-#   /var/lib/nido                         SQLite + uploads (StateDirectory)
-#   /etc/nido/env                         config (0600)
+#   /opt/deltos/node-v<ver>-linux-<arch>/   versioned Node runtime
+#   /opt/deltos/node -> node-v<ver>...      runtime symlink
+#   /opt/deltos/releases/v<ver>/            app release (server/ + dist/)
+#   /opt/deltos/current -> releases/v<ver>  live symlink (update = flip, rollback = flip back)
+#   /var/lib/deltos                         SQLite + uploads (StateDirectory)
+#   /etc/deltos/env                         config (0600)
 # =============================================================================
 set -eu
 
-APP_NAME="nido"
-GH_REPO="gnacho/nido"
+APP_NAME="deltos"
+GH_REPO="gnacho/deltos"
 DESCRIPTION="Kanban PWA for shared tasks and boards"
 DEFAULT_PORT="3000"
 NODE_VERSION="22.23.2"
@@ -52,7 +52,7 @@ run()   { if [ "$DRY_RUN" -eq 1 ]; then info "[dry-run] $*"; else "$@"; fi; }
 
 usage() {
     cat <<EOF
-Nido — installer ($DESCRIPTION)
+Deltos — installer ($DESCRIPTION)
 
 Usage: sh install.sh [options]
   --version=X.Y.Z   version to install (default: latest stable release)
@@ -127,7 +127,7 @@ case "$ARCH" in
 esac
 
 if [ ! -d /run/systemd/system ] || ! command -v systemctl >/dev/null 2>&1; then
-    fatal 23 "Nido needs systemd (this machine doesn't run it). See https://github.com/$GH_REPO for manual setup"
+    fatal 23 "Deltos needs systemd (this machine doesn't run it). See https://github.com/$GH_REPO for manual setup"
 fi
 info "detected: $OS_PRETTY · linux/$REL_ARCH · systemd"
 
@@ -235,7 +235,7 @@ fi
 if [ "$DRY_RUN" -eq 1 ]; then info "[dry-run] would write systemd unit + enable --now"; else
     $SUDO tee "/etc/systemd/system/$SERVICE_NAME.service" >/dev/null <<EOF
 [Unit]
-Description=Nido — $DESCRIPTION
+Description=Deltos — $DESCRIPTION
 After=network-online.target
 Wants=network-online.target
 

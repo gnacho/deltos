@@ -3,15 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Nido — Tareas en pareja</title>
-<meta name="description" content="Nido: maqueta de PWA para gestionar tareas personales y laborales en pareja.">
+<title>Deltos — Tareas en pareja</title>
+<meta name="description" content="Deltos: maqueta de PWA para gestionar tareas personales y laborales en pareja.">
 <meta name="theme-color" id="meta-theme" content="#F4F6FA">
 <script>
 /* Anti-FOUC: aplica el tema guardado antes de pintar */
 (function () {
   var dark = false;
   try {
-    var saved = localStorage.getItem('nido-theme'); /* 'light' | 'dark' | 'auto' | null */
+    var saved = localStorage.getItem('deltos-theme'); /* 'light' | 'dark' | 'auto' | null */
     dark = saved === 'dark' ? true
          : saved === 'light' ? false
          : window.matchMedia('(prefers-color-scheme: dark)').matches; /* auto */
@@ -123,7 +123,7 @@ tailwind.config = {
       <span class="w-8 h-8 rounded-lg bg-emerald-500 text-white flex items-center justify-center shadow-soft">
         <svg class="w-4.5 h-4.5 w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4.5 12.5 5 5 10-11"/></svg>
       </span>
-      <span class="font-display font-700 font-bold text-lg tracking-tight">Nido</span>
+      <span class="font-display font-700 font-bold text-lg tracking-tight">Deltos</span>
     </button>
   </div>
 
@@ -151,7 +151,7 @@ tailwind.config = {
     <span class="w-7 h-7 rounded-lg bg-emerald-500 text-white flex items-center justify-center">
       <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4.5 12.5 5 5 10-11"/></svg>
     </span>
-    <span class="font-display font-bold text-base tracking-tight">Nido</span>
+    <span class="font-display font-bold text-base tracking-tight">Deltos</span>
   </button>
   <div class="flex-1 min-w-0 flex justify-center">
     <label class="sr-only" for="mobile-view">Proyecto</label>
@@ -224,7 +224,7 @@ tailwind.config = {
 
 <script>
 /* ================================================================
-   NIDO — maqueta estática. Datos en memoria, sin backend.
+   DELTOS — maqueta estática. Datos en memoria, sin backend.
    Hoy simulado: 1 de agosto de 2026.
    ================================================================ */
 
@@ -743,7 +743,7 @@ function setView(v) {
 }
 
 /* ---------- Persistencia del tablero (localStorage) ---------- */
-const STORAGE_KEY = 'nido-board-v1';
+const STORAGE_KEY = 'deltos-board-v1';
 const MOVE_LOG = {};  /* taskId -> [{from,to,ts}] movimientos generados por la usuaria */
 const ORIG_COL = {};  /* columna original del dataset (para la narrativa del detalle genérico) */
 TASKS.forEach(t => { ORIG_COL[t.id] = t.col; });
@@ -1188,7 +1188,7 @@ const darkMQ = window.matchMedia('(prefers-color-scheme: dark)');
 
 function themeMode() {
   try {
-    const m = localStorage.getItem('nido-theme');
+    const m = localStorage.getItem('deltos-theme');
     return (m === 'light' || m === 'dark') ? m : 'auto';
   } catch (e) { return 'auto'; }
 }
@@ -1203,7 +1203,7 @@ function applyTheme() {
 }
 
 function setThemeMode(mode) {
-  try { localStorage.setItem('nido-theme', mode); } catch (e) {}
+  try { localStorage.setItem('deltos-theme', mode); } catch (e) {}
   applyTheme();
 }
 
@@ -1358,7 +1358,7 @@ function projectsScreenHTML() {
 
 /* ---------- Pantalla Ajustes ---------- */
 function currentLang() {
-  try { return localStorage.getItem('nido-lang') === 'en' ? 'en' : 'es'; } catch (e) { return 'es'; }
+  try { return localStorage.getItem('deltos-lang') === 'en' ? 'en' : 'es'; } catch (e) { return 'es'; }
 }
 
 function settingsScreenHTML() {
@@ -1384,7 +1384,7 @@ function settingsScreenHTML() {
       '<div class="flex items-center gap-3.5">' +
         '<span class="w-12 h-12 rounded-full ' + AVATAR.violet + ' inline-flex items-center justify-center text-lg font-semibold shrink-0" aria-hidden="true">M</span>' +
         '<div class="min-w-0"><p class="text-[16px] font-semibold leading-tight">Mar</p>' +
-        '<p class="text-[13px] text-faint leading-tight mt-0.5 truncate">mar@nido.app</p></div>' +
+        '<p class="text-[13px] text-faint leading-tight mt-0.5 truncate">mar@deltos.app</p></div>' +
       '</div>') +
 
     card(heading('sun', 'Apariencia') +
@@ -1406,8 +1406,8 @@ function settingsScreenHTML() {
     card(heading('download', 'Instalar app') +
       '<button type="button" title="Decorativo en esta maqueta" ' +
         'class="h-14 px-8 rounded-2xl bg-emerald-500 text-white text-[16px] font-semibold inline-flex items-center gap-2.5 hover:bg-emerald-600 shadow-soft">' +
-        svg(P.download, 'w-5 h-5') + 'Instalar Nido</button>' +
-      '<p class="text-[13px] text-faint mt-3">Añade Nido a tu pantalla de inicio para abrirlo como una app.</p>') +
+        svg(P.download, 'w-5 h-5') + 'Instalar Deltos</button>' +
+      '<p class="text-[13px] text-faint mt-3">Añade Deltos a tu pantalla de inicio para abrirlo como una app.</p>') +
 
     card(heading('sparkles', 'Modo demo') +
       '<div class="flex items-center justify-between gap-4">' +
@@ -1518,7 +1518,7 @@ $('#screen').addEventListener('change', (e) => {
   if (e.target.id === 'set-lang') {
     const lang = e.target.value === 'en' ? 'en' : 'es';
     document.documentElement.lang = lang;
-    try { localStorage.setItem('nido-lang', lang); } catch (err) {}
+    try { localStorage.setItem('deltos-lang', lang); } catch (err) {}
     announce(lang === 'en' ? 'Idioma cambiado a inglés' : 'Idioma cambiado a español');
   }
 });

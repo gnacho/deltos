@@ -1,6 +1,6 @@
-# Nido — server
+# Deltos — server
 
-Backend de **Nido**, PWA de gestión de tareas para una pareja (multiusuario).
+Backend de **Deltos**, PWA de gestión de tareas para una pareja (multiusuario).
 Node 22+ ESM · Hono 4 + @hono/node-server · better-sqlite3 (SQL directo, WAL) · bcryptjs · cookie · zod.
 
 ## Arranque
@@ -15,7 +15,7 @@ npm test                  # vitest (30 tests)
 
 - **Producción arranca VACÍA**: solo se crea el admin bootstrap de `.env` (`AUTH_USER`/`AUTH_PASS`, bcrypt, idempotente).
 - **Modo demo**: BD separada (`app_demo.db`) con seed determinista del mockup (Mar/Jordi/demo, 4 proyectos, 6 etiquetas, 15 tareas con fechas relativas a hoy, 3 tareas con descripción + adjuntos + comentarios + eventos). Botón "Entrar como demo" → `POST /api/auth/demo` (sin contraseña). Desactivable con `PUT /api/settings/demo` (admin).
-  - En la BD demo, `mar` (admin) y `jordi` (user) tienen contraseña `nido-demo`; `demo` no tiene contraseña usable.
+  - En la BD demo, `mar` (admin) y `jordi` (user) tienen contraseña `deltos-demo`; `demo` no tiene contraseña usable.
 - Datos en `DATA_DIR` (`app.db`, `app_demo.db`, `uploads/`). El frontend compilado se sirve desde `STATIC_DIR` (`../app/dist`) con SPA fallback.
 
 ## Autenticación

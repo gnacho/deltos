@@ -2,9 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { ThemeContext, type Density, type ThemeApi, type ThemeMode } from './theme-context';
 
-const STORAGE_KEY = 'nido-theme';
-const DENSITY_KEY = 'nido-density';
-const REDUCE_MOTION_KEY = 'nido-reduce-motion';
+const STORAGE_KEY = 'deltos-theme';
+const DENSITY_KEY = 'deltos-density';
+const REDUCE_MOTION_KEY = 'deltos-reduce-motion';
 
 function readDensity(): Density {
   try {

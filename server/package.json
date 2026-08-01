@@ -1,7 +1,7 @@
 {
-  "name": "nido-server",
-  "version": "1.0.0",
-  "description": "Backend de Nido — PWA de gestión de tareas para pareja (Hono + better-sqlite3)",
+  "name": "deltos-server",
+  "version": "1.2.0",
+  "description": "Backend de Deltos — PWA de gestión de tareas para pareja (Hono + better-sqlite3)",
   "type": "module",
   "engines": {
     "node": ">=22"

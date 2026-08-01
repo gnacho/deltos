@@ -210,8 +210,8 @@ export function createApp(ctx) {
       return c.html(html)
     } catch {
       return c.html(
-        '<!doctype html><html lang="es"><meta charset="utf-8"><title>Nido</title>' +
-          '<body><h1>Nido — API</h1><p>El frontend aún no está compilado (app/dist). La API responde en /api/* y /health.</p></body></html>'
+        '<!doctype html><html lang="es"><meta charset="utf-8"><title>Deltos</title>' +
+          '<body><h1>Deltos — API</h1><p>El frontend aún no está compilado (app/dist). La API responde en /api/* y /health.</p></body></html>'
       )
     }
   })

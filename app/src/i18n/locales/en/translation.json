@@ -1,6 +1,6 @@
 {
   "common": {
-    "appName": "Nido",
+    "appName": "Deltos",
     "tagline": "Tasks for two",
     "loading": "Loading…",
     "error": "Something went wrong",
@@ -15,14 +15,14 @@
     "demoBadge": "DEMO"
   },
   "login": {
-    "title": "Sign in to Nido",
+    "title": "Sign in to Deltos",
     "subtitle": "Home and work tasks, in one shared board.",
     "username": "Username",
     "password": "Password",
     "submit": "Sign in",
     "submitting": "Signing in…",
     "demo": "Enter as demo",
-    "demoHint": "Explore Nido with sample data.",
+    "demoHint": "Explore Deltos with sample data.",
     "errorRequired": "Enter username and password",
     "errorGeneric": "Could not sign in"
   },
@@ -238,10 +238,10 @@
     "langAuto": "Automatic",
     "langHint": "Automatic uses your browser language.",
     "install": "Install app",
-    "installButton": "Install Nido",
-    "installHint": "Add Nido to your home screen to open it as an app.",
+    "installButton": "Install Deltos",
+    "installHint": "Add Deltos to your home screen to open it as an app.",
     "installUnavailable": "Install is not available in this browser. Use \"Add to home screen\" from the menu.",
-    "installDone": "Nido is already installed on this device.",
+    "installDone": "Deltos is already installed on this device.",
     "demoMode": "Demo mode",
     "demoHint": "Allows signing in with sample data from the login screen.",
     "demoError": "Could not change demo mode",
@@ -295,7 +295,7 @@
     "about": {
       "title": "About",
       "desc": "Couple task manager. 100% local, no cloud.",
-      "version": "Nido v{{version}}"
+      "version": "Deltos v{{version}}"
     }
   },
   "connection": {

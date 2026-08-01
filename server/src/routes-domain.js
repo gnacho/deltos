@@ -1,4 +1,4 @@
-// routes-domain.js — rutas del dominio Nido: bootstrap, proyectos, etiquetas,
+// routes-domain.js — rutas del dominio Deltos: bootstrap, proyectos, etiquetas,
 // tareas (CRUD + mover), comentarios, adjuntos, feed de actividad.
 // Todas bajo requireAuth; c.get('db') apunta a la BD de la sesión (prod o demo).
 import crypto from 'node:crypto'

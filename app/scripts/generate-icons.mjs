@@ -1,5 +1,5 @@
 /**
- * Genera los iconos PWA de Nido (PNG) sin dependencias nativas:
+ * Genera los iconos PWA de Deltos (PNG) sin dependencias nativas:
  * cuadrado redondeado emerald con un check blanco.
  * - icon-192.png / icon-512.png: fondo transparente, squircle con margen
  * - icon-maskable-512.png: fondo emerald completo (safe zone 80%)

@@ -4,7 +4,7 @@ import Database from 'better-sqlite3'
 import fs from 'node:fs'
 import path from 'node:path'
 
-// Esquema completo: base común (users/sessions/login_attempts/kv) + dominio Nido.
+// Esquema completo: base común (users/sessions/login_attempts/kv) + dominio Deltos.
 // Las fechas son epoch ms (INTEGER) salvo due_date, que es 'YYYY-MM-DD'.
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS users (

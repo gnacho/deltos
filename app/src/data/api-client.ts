@@ -3,13 +3,13 @@
  * Nada de fetch() disperso por componentes.
  *
  * - Auth por cookie HttpOnly (credentials: 'same-origin').
- * - 401 → despacha `nido-unauthorized` UNA vez (anti-cascada). AuthGate reacciona
+ * - 401 → despacha `deltos-unauthorized` UNA vez (anti-cascada). AuthGate reacciona
  *   y muestra Login. NUNCA location.assign('/login').
  * - Login/check inicial/logout pasan `noAuthEvent` para no auto-disparar el evento.
  * - Errores tipados del backend ({error} → ApiError con .status/.body).
  */
 
-const APP_SLUG = 'nido';
+const APP_SLUG = 'deltos';
 
 export class ApiError extends Error {
   readonly status: number;
@@ -51,7 +51,7 @@ function handleUnauthorized(): never {
 }
 
 export interface ApiOptions extends RequestInit {
-  /** No despachar `nido-unauthorized` ante un 401 (login, me inicial, logout). */
+  /** No despachar `deltos-unauthorized` ante un 401 (login, me inicial, logout). */
   noAuthEvent?: boolean;
 }
 
