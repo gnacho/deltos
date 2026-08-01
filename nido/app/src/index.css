@@ -1,0 +1,213 @@
+@import './fonts.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Tokens (mockup aprobado). --text-faint ajustado a contraste AA (>=4.5:1 sobre surface) */
+:root {
+  --bg: #f4f6fa;
+  --surface: #ffffff;
+  --surface-2: #eef1f6;
+  --border: #e3e8f0;
+  --text: #0c1425;
+  --text-muted: #5b6b84;
+  --text-faint: #64748b;
+}
+.dark {
+  --bg: #080d1a; /* azul noche, nunca negro puro */
+  --surface: #101828;
+  --surface-2: #182338;
+  --border: #1e2b42;
+  --text: #e9eef7;
+  --text-muted: #93a1b8;
+  --text-faint: #7a8aa5;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+body {
+  background-color: var(--bg);
+  color: var(--text);
+}
+
+/* Crossfade de tema: .45s ease en fondo, color y borde */
+*,
+*::before,
+*::after {
+  transition-property: background-color, border-color, color, fill, stroke;
+  transition-duration: 0.45s;
+  transition-timing-function: ease;
+}
+
+/* Utilidades sobre los tokens */
+.bg-surface {
+  background-color: var(--surface);
+}
+.bg-surface2 {
+  background-color: var(--surface-2);
+}
+.border-app {
+  border-color: var(--border);
+}
+.text-muted {
+  color: var(--text-muted);
+}
+.text-faint {
+  color: var(--text-faint);
+}
+.divide-app > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--border);
+}
+
+.tnum {
+  font-feature-settings: 'tnum';
+}
+
+.shadow-soft {
+  box-shadow:
+    0 1px 2px rgba(12, 20, 37, 0.04),
+    0 4px 14px rgba(12, 20, 37, 0.05);
+}
+.dark .shadow-soft {
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.35),
+    0 6px 18px rgba(0, 0, 0, 0.35);
+}
+
+/* Foco visible */
+:focus-visible {
+  outline: 2px solid #10b981;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Entrada de tarjetas: opacity + translateY 8px, con stagger */
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.card {
+  animation: card-in 0.35s ease both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .card {
+    animation: none;
+  }
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01s !important;
+  }
+}
+
+/* Transición de ruta: fade + y 8px (250ms) */
+@keyframes view-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.view-in {
+  animation: view-in 0.25s ease both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .view-in {
+    animation: none;
+  }
+}
+
+/* Scrollbars discretos */
+.nice-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.nice-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.nice-scroll::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 999px;
+}
+.nice-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Línea del timeline de actividad */
+.timeline {
+  position: relative;
+}
+.timeline::before {
+  content: '';
+  position: absolute;
+  left: 13px;
+  top: 10px;
+  bottom: 10px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--border);
+}
+.timeline > li {
+  position: relative;
+}
+
+/* ---------- Drag & drop ---------- */
+.card[draggable='true'] {
+  cursor: grab;
+}
+.card.dragging {
+  animation: none;
+  opacity: 0.4;
+  transform: rotate(1.5deg) scale(0.98);
+  cursor: grabbing;
+}
+.drop-placeholder {
+  border: 2px dashed rgb(var(--accent, 148 163 184) / 0.55);
+  border-radius: 1rem;
+  background: rgb(var(--accent, 148 163 184) / 0.08);
+}
+section[data-col] {
+  border-radius: 1rem;
+  transition:
+    background-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+section[data-col].col-target {
+  background-color: var(--surface-2);
+  box-shadow: inset 0 0 0 1.5px rgb(var(--accent, 148 163 184) / 0.4);
+}
+/* Durante un re-render con FLIP se desactiva la animación de entrada */
+.no-anim .card {
+  animation: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .card.dragging {
+    transform: none;
+  }
+  section[data-col] {
+    transition: none;
+  }
+}
+
+/* Safe-area para bottom-nav en móvil con notch/home indicator */
+.bottom-nav {
+  padding-bottom: env(safe-area-inset-bottom);
+}

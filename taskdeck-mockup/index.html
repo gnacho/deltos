@@ -1,0 +1,1631 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Nido — Tareas en pareja</title>
+<meta name="description" content="Nido: maqueta de PWA para gestionar tareas personales y laborales en pareja.">
+<meta name="theme-color" id="meta-theme" content="#F4F6FA">
+<script>
+/* Anti-FOUC: aplica el tema guardado antes de pintar */
+(function () {
+  var dark = false;
+  try {
+    var saved = localStorage.getItem('nido-theme'); /* 'light' | 'dark' | 'auto' | null */
+    dark = saved === 'dark' ? true
+         : saved === 'light' ? false
+         : window.matchMedia('(prefers-color-scheme: dark)').matches; /* auto */
+  } catch (e) {}
+  if (dark) document.documentElement.classList.add('dark');
+  var m = document.getElementById('meta-theme');
+  if (m) m.setAttribute('content', dark ? '#080D1A' : '#F4F6FA');
+})();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  darkMode: 'class',
+  theme: {
+    extend: {
+      fontFamily: {
+        display: ['"Space Grotesk"', 'sans-serif'],
+        sans: ['Inter', 'system-ui', 'sans-serif']
+      }
+    }
+  }
+};
+</script>
+<style>
+  /* --text-faint ajustado a contraste AA (>=4.5:1 sobre surface): #64748B claro / #7A8AA5 oscuro */
+  :root { --bg:#F4F6FA; --surface:#FFFFFF; --surface-2:#EEF1F6; --border:#E3E8F0; --text:#0C1425; --text-muted:#5B6B84; --text-faint:#64748B; }
+  .dark { --bg:#080D1A; --surface:#101828; --surface-2:#182338; --border:#1E2B42; --text:#E9EEF7; --text-muted:#93A1B8; --text-faint:#7A8AA5; }
+
+  html { -webkit-text-size-adjust: 100%; }
+  body { background-color: var(--bg); color: var(--text); }
+
+  /* Crossfade de tema: .45s ease en fondo, color y borde */
+  *, *::before, *::after {
+    transition-property: background-color, border-color, color, fill, stroke;
+    transition-duration: .45s;
+    transition-timing-function: ease;
+  }
+
+  /* Utilidades sobre los tokens */
+  .bg-surface   { background-color: var(--surface); }
+  .bg-surface2  { background-color: var(--surface-2); }
+  .border-app   { border-color: var(--border); }
+  .text-muted   { color: var(--text-muted); }
+  .text-faint   { color: var(--text-faint); }
+  .divide-app > :not([hidden]) ~ :not([hidden]) { border-color: var(--border); }
+
+  .tnum { font-feature-settings: "tnum"; }
+
+  .shadow-soft { box-shadow: 0 1px 2px rgba(12,20,37,.04), 0 4px 14px rgba(12,20,37,.05); }
+  .dark .shadow-soft { box-shadow: 0 1px 2px rgba(0,0,0,.35), 0 6px 18px rgba(0,0,0,.35); }
+
+  /* Foco visible */
+  :focus-visible { outline: 2px solid #10B981; outline-offset: 2px; border-radius: 6px; }
+
+  /* Entrada de tarjetas: opacity + translateY 8px, con stagger */
+  @keyframes card-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .card { animation: card-in .35s ease both; }
+  @media (prefers-reduced-motion: reduce) {
+    .card { animation: none; }
+    *, *::before, *::after { transition-duration: .01s !important; }
+  }
+
+  /* Scrollbars discretos */
+  .nice-scroll { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+  .nice-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+  .nice-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; }
+  .nice-scroll::-webkit-scrollbar-track { background: transparent; }
+  .no-scrollbar { scrollbar-width: none; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+
+  /* Línea del timeline de actividad */
+  .timeline { position: relative; }
+  .timeline::before {
+    content: ''; position: absolute; left: 13px; top: 10px; bottom: 10px;
+    width: 2px; border-radius: 2px; background: var(--border);
+  }
+  .timeline > li { position: relative; }
+
+  /* ---------- Drag & drop ---------- */
+  .card[draggable="true"] { cursor: grab; }
+  .card.dragging { animation: none; opacity: .4; transform: rotate(1.5deg) scale(.98); cursor: grabbing; }
+  .drop-placeholder {
+    border: 2px dashed rgb(var(--accent, 148 163 184) / .55);
+    border-radius: 1rem;
+    background: rgb(var(--accent, 148 163 184) / .08);
+  }
+  section[data-col] { border-radius: 1rem; transition: background-color .2s ease, box-shadow .2s ease; }
+  section[data-col].col-target {
+    background-color: var(--surface-2);
+    box-shadow: inset 0 0 0 1.5px rgb(var(--accent, 148 163 184) / .4);
+  }
+  /* Durante un re-render con FLIP se desactiva la animación de entrada */
+  .no-anim .card { animation: none !important; }
+  @media (prefers-reduced-motion: reduce) {
+    .card.dragging { transform: none; }
+    section[data-col] { transition: none; }
+  }
+</style>
+</head>
+<body class="font-sans antialiased min-h-screen">
+
+<!-- ============ SIDEBAR (lg+) ============ -->
+<aside class="hidden lg:flex fixed inset-y-0 left-0 w-[232px] flex-col bg-surface border-r border-app z-40">
+  <div class="px-4 pt-5 pb-4">
+    <button id="logo-desktop" class="flex items-center gap-2.5 group" aria-label="Ir a la vista Todo">
+      <span class="w-8 h-8 rounded-lg bg-emerald-500 text-white flex items-center justify-center shadow-soft">
+        <svg class="w-4.5 h-4.5 w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4.5 12.5 5 5 10-11"/></svg>
+      </span>
+      <span class="font-display font-700 font-bold text-lg tracking-tight">Nido</span>
+    </button>
+  </div>
+
+  <nav class="flex-1 overflow-y-auto nice-scroll px-3 pb-3" aria-label="Navegación principal">
+    <div id="side-main" class="space-y-0.5 mb-5"></div>
+    <p class="px-2 pb-2 text-[11px] font-semibold tracking-widest text-faint">PROYECTOS</p>
+    <div id="side-nav" class="space-y-0.5"></div>
+  </nav>
+
+  <div class="border-t border-app p-3 space-y-1">
+    <button id="theme-toggle-desktop" class="w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm text-muted hover:bg-surface2" aria-label="Cambiar tema"></button>
+    <div class="flex items-center gap-2.5 rounded-xl px-3 py-2">
+      <span class="w-8 h-8 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-300 inline-flex items-center justify-center text-xs font-semibold" aria-hidden="true">M</span>
+      <div class="min-w-0">
+        <p class="text-sm font-medium leading-tight truncate">Mar</p>
+        <p class="text-xs text-faint leading-tight">Cuenta actual</p>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<!-- ============ HEADER MÓVIL (<lg) ============ -->
+<header class="lg:hidden fixed top-0 inset-x-0 h-14 bg-surface border-b border-app z-40 flex items-center gap-2 px-3" style="padding-top:env(safe-area-inset-top)">
+  <button id="logo-mobile" class="flex items-center gap-2 shrink-0" aria-label="Ir a la vista Todo">
+    <span class="w-7 h-7 rounded-lg bg-emerald-500 text-white flex items-center justify-center">
+      <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4.5 12.5 5 5 10-11"/></svg>
+    </span>
+    <span class="font-display font-bold text-base tracking-tight">Nido</span>
+  </button>
+  <div class="flex-1 min-w-0 flex justify-center">
+    <label class="sr-only" for="mobile-view">Proyecto</label>
+    <select id="mobile-view" class="max-w-[180px] truncate bg-surface2 border border-app rounded-lg pl-2.5 pr-7 py-1.5 text-sm font-medium appearance-none bg-no-repeat" style="background-image:url(&quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2394A3B8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E&quot;);background-position:right 6px center;background-size:16px">
+    </select>
+  </div>
+  <button id="theme-toggle-mobile" class="w-9 h-9 rounded-lg text-muted hover:bg-surface2 flex items-center justify-center shrink-0" aria-label="Cambiar tema"></button>
+</header>
+
+<!-- ============ SEGMENTED CONTROL MÓVIL (<lg): navegación por estados ============ -->
+<div id="seg-wrap" class="lg:hidden fixed top-14 inset-x-0 z-30 border-b border-app px-4 py-2.5" style="background-color:var(--bg)">
+  <div id="seg-control" role="tablist" aria-label="Estado de las tareas" class="flex items-center gap-1 rounded-full bg-surface2 p-1"></div>
+</div>
+
+<!-- ============ CONTENIDO ============ -->
+<main id="main" class="lg:pl-[232px] pt-[120px] lg:pt-0 pb-[calc(84px+env(safe-area-inset-bottom))] lg:pb-8">
+  <div class="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 pt-5 lg:pt-7">
+
+    <!-- Cabecera de vista -->
+    <div class="flex flex-wrap items-end justify-between gap-3 mb-5">
+      <div>
+        <h1 id="view-title" class="font-display font-bold text-2xl lg:text-[28px] tracking-tight">Todo</h1>
+        <p id="view-sub" class="text-sm text-muted mt-0.5"></p>
+      </div>
+      <p id="view-stats" class="tnum text-sm text-muted"></p>
+    </div>
+
+    <!-- Barra de filtros (solo vista Todo) -->
+    <div id="filters" class="mb-6"></div>
+
+    <!-- Lista móvil (<lg): un solo estado, tarjetas simplificadas -->
+    <div id="mobile-list" class="lg:hidden space-y-3 pb-4" aria-live="polite" aria-label="Lista de tareas del estado seleccionado"></div>
+
+    <!-- Tablero escritorio (lg+): kanban 3 columnas con drag & drop -->
+    <div id="board" class="hidden lg:grid lg:grid-cols-3 lg:items-start gap-4" aria-live="polite"></div>
+
+    <!-- Pantallas auxiliares: Proyectos / Actividad / Ajustes -->
+    <div id="screen" class="hidden pb-4" aria-live="polite"></div>
+
+  </div>
+</main>
+
+<!-- ============ BOTTOM NAV MÓVIL ============ -->
+<nav class="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-surface border-t border-app" style="padding-bottom:env(safe-area-inset-bottom)" aria-label="Navegación principal">
+  <div class="h-16 grid grid-cols-4">
+    <button id="bn-todo" class="flex flex-col items-center justify-center gap-1 text-emerald-700 dark:text-emerald-400" aria-current="page">
+      <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+      <span class="text-[11px] font-medium">Todo</span>
+    </button>
+    <button id="bn-projects" class="flex flex-col items-center justify-center gap-1 text-faint">
+      <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>
+      <span class="text-[11px] font-medium">Proyectos</span>
+    </button>
+    <button id="bn-activity" class="flex flex-col items-center justify-center gap-1 text-faint">
+      <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+      <span class="text-[11px] font-medium">Actividad</span>
+    </button>
+    <button id="bn-settings" class="flex flex-col items-center justify-center gap-1 text-faint">
+      <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2Z"/><circle cx="12" cy="12" r="3"/></svg>
+      <span class="text-[11px] font-medium">Ajustes</span>
+    </button>
+  </div>
+</nav>
+
+<!-- ============ MODAL ============ -->
+<div id="modal-root"></div>
+
+<!-- Avisador discreto para lector de pantalla (movimientos de tarjetas) -->
+<div id="a11y-announce" class="sr-only" role="status" aria-live="polite"></div>
+
+<script>
+/* ================================================================
+   NIDO — maqueta estática. Datos en memoria, sin backend.
+   Hoy simulado: 1 de agosto de 2026.
+   ================================================================ */
+
+/* ---------- Iconos SVG inline (estilo lucide/heroicons) ---------- */
+const svg = (paths, cls) =>
+  '<svg class="' + (cls || 'w-4 h-4') + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + paths + '</svg>';
+
+const P = {
+  arrowUp:    '<path d="M12 19V5"/><path d="m5 12 7-7 7 7"/>',
+  arrowRight: '<path d="M5 12h14"/><path d="m13 6 6 6-6 6"/>',
+  arrowDown:  '<path d="M12 5v14"/><path d="m19 12-7 7-7-7"/>',
+  calendar:   '<rect x="3" y="4.5" width="18" height="17" rx="3"/><path d="M8 2.5v4M16 2.5v4M3 9.5h18"/>',
+  chat:       '<path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5c-1.5 0-3-.4-4.2-1.1L3 20l1.1-5.3A8.5 8.5 0 1 1 21 11.5Z"/>',
+  clip:       '<path d="m21.4 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>',
+  plus:       '<path d="M12 5v14M5 12h14"/>',
+  x:          '<path d="M18 6 6 18M6 6l12 12"/>',
+  sun:        '<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  moon:       '<path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8Z"/>',
+  move:       '<path d="M5 9l-3 3 3 3"/><path d="M9 5l3-3 3 3"/><path d="M15 19l-3 3-3-3"/><path d="M19 9l3 3-3 3"/><path d="M2 12h20M12 2v20"/>',
+  flag:       '<path d="M4 22V4c4-2 8 2 12 0v10c-4 2-8-2-12 0"/>',
+  fileDoc:    '<path d="M14 2.5H7a2 2 0 0 0-2 2v15a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-12Z"/><path d="M14 2.5v5h5"/>',
+  fileSheet:  '<path d="M14 2.5H7a2 2 0 0 0-2 2v15a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-12Z"/><path d="M14 2.5v5h5"/><path d="M8.5 13h7M8.5 17h7M12 13v4"/>',
+  fileSlides: '<path d="M14 2.5H7a2 2 0 0 0-2 2v15a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-12Z"/><path d="M14 2.5v5h5"/><rect x="8.5" y="12.5" width="7" height="5" rx="1"/>',
+  layers:     '<path d="m12 2 9 5-9 5-9-5Z"/><path d="m3 12 9 5 9-5"/><path d="m3 17 9 5 9-5"/>',
+  user:       '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5"/>',
+  info:       '<circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 8h.01"/>',
+  clock:      '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  funnel:     '<path d="M4 5h16l-6.2 7.3V19l-3.6 2v-8.7L4 5Z"/>',
+  chevDown:   '<path d="m6 9 6 6 6-6"/>',
+  chevRight:  '<path d="m9 18 6-6-6-6"/>',
+  settings:   '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2Z"/><circle cx="12" cy="12" r="3"/>',
+  download:   '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/>',
+  globe:      '<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.5 2.6 4 5.6 4 9s-1.5 6.4-4 9c-2.5-2.6-4-5.6-4-9s1.5-6.4 4-9Z"/>',
+  reset:      '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>',
+  logout:     '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>',
+  sparkles:   '<path d="m12 3 1.9 5.8a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-1.9a2 2 0 0 0 1.3-1.3Z"/>',
+  monitor:    '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>',
+  folder:     '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/>'
+};
+
+/* ---------- Datos mock ---------- */
+const USERS = {
+  mar:   { id: 'mar',   name: 'Mar',   initials: 'M', color: 'violet' },
+  jordi: { id: 'jordi', name: 'Jordi', initials: 'J', color: 'teal' }
+};
+const CURRENT_USER = 'mar';
+
+const PROJECTS = [
+  { id: 'casa',    name: 'Casa',            emoji: '🏠', color: 'sky' },
+  { id: 'trabajo', name: 'Trabajo',         emoji: '💼', color: 'blue' },
+  { id: 'viaje',   name: 'Viaje a Lisboa',  emoji: '✈️', color: 'amber' },
+  { id: 'huerto',  name: 'Huerto',          emoji: '🌱', color: 'emerald' }
+];
+
+const TAGS = {
+  urgente: { name: 'Urgente', color: 'rose' },
+  compras: { name: 'Compras', color: 'amber' },
+  admin:   { name: 'Admin',   color: 'blue' },
+  diseno:  { name: 'Diseño',  color: 'violet' },
+  dev:     { name: 'Dev',     color: 'cyan' },
+  familia: { name: 'Familia', color: 'pink' }
+};
+
+const COLUMNS = [
+  { id: 'nuevo', name: 'Nuevo',    color: 'sky' },
+  { id: 'curso', name: 'En curso', color: 'amber' },
+  { id: 'hecho', name: 'Hecho',    color: 'emerald' }
+];
+
+const PRIORITIES = {
+  alta:  { label: 'Alta',  icon: P.arrowUp,
+           badge: 'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300' },
+  media: { label: 'Media', icon: P.arrowRight,
+           badge: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300' },
+  baja:  { label: 'Baja',  icon: P.arrowDown,
+           badge: 'bg-slate-200/70 text-slate-600 dark:bg-slate-500/20 dark:text-slate-300' }
+};
+
+/* Paleta compartida: dot / chip / avatar por color */
+const COLORS = {
+  sky:     { dot: 'bg-sky-500',     chip: 'bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300' },
+  blue:    { dot: 'bg-blue-500',    chip: 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300' },
+  amber:   { dot: 'bg-amber-500',   chip: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300' },
+  emerald: { dot: 'bg-emerald-500', chip: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300' },
+  rose:    { dot: 'bg-rose-500',    chip: 'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300' },
+  violet:  { dot: 'bg-violet-500',  chip: 'bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300' },
+  cyan:    { dot: 'bg-cyan-500',    chip: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-500/15 dark:text-cyan-300' },
+  pink:    { dot: 'bg-pink-500',    chip: 'bg-pink-100 text-pink-700 dark:bg-pink-500/15 dark:text-pink-300' },
+  slate:   { dot: 'bg-slate-400',   chip: 'bg-slate-200/70 text-slate-600 dark:bg-slate-500/20 dark:text-slate-300' },
+  teal:    { dot: 'bg-teal-500',    chip: 'bg-teal-100 text-teal-700 dark:bg-teal-500/15 dark:text-teal-300' }
+};
+const AVATAR = {
+  violet: 'bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-300',
+  teal:   'bg-teal-100 text-teal-700 dark:bg-teal-500/20 dark:text-teal-300'
+};
+
+/* Tareas: col ∈ nuevo|curso|hecho · pr ∈ alta|media|baja|null · as ∈ mar|jordi|null */
+const TASKS = [
+  { id: 't1',  project: 'casa',    title: 'Pedir cita ITV',                     col: 'nuevo', pr: 'alta',  due: '2026-08-03', as: 'mar',   tags: ['admin'],            c: 2, a: 1 },
+  { id: 't2',  project: 'casa',    title: 'Revisar presupuesto reforma baño',   col: 'curso', pr: 'media', due: '2026-07-29', as: 'jordi', tags: ['admin','urgente'], c: 4, a: 2 },
+  { id: 't3',  project: 'casa',    title: 'Comprar bombillas para el recibidor', col: 'hecho', pr: 'baja', due: null,         as: 'mar',   tags: ['compras'],          c: 1, a: 0 },
+  { id: 't4',  project: 'casa',    title: 'Llamar al seguro del coche',         col: 'nuevo', pr: 'media', due: '2026-08-10', as: null,    tags: ['admin'],            c: 0, a: 0 },
+  { id: 't5',  project: 'trabajo', title: 'Preparar presentación Q3',           col: 'curso', pr: 'alta',  due: '2026-08-01', as: 'mar',   tags: ['diseno'],           c: 3, a: 2 },
+  { id: 't6',  project: 'trabajo', title: 'Enviar factura de julio al cliente', col: 'nuevo', pr: 'alta',  due: '2026-08-01', as: 'mar',   tags: ['admin','urgente'],  c: 1, a: 1 },
+  { id: 't7',  project: 'trabajo', title: 'Actualizar CV',                      col: 'nuevo', pr: 'baja',  due: null,         as: null,    tags: [],                   c: 0, a: 0 },
+  { id: 't8',  project: 'trabajo', title: 'Corregir bug de inicio de sesión',   col: 'curso', pr: 'media', due: '2026-08-05', as: 'jordi', tags: ['dev','urgente'],    c: 5, a: 0 },
+  { id: 't9',  project: 'trabajo', title: 'Preparar retro del sprint 12',       col: 'hecho', pr: 'baja',  due: '2026-07-30', as: 'jordi', tags: ['dev'],              c: 2, a: 0 },
+  { id: 't10', project: 'viaje',   title: 'Reservar hotel en Lisboa',           col: 'curso', pr: 'alta',  due: '2026-08-04', as: 'mar',   tags: ['familia'],          c: 3, a: 1 },
+  { id: 't11', project: 'viaje',   title: 'Sacar billetes de tren',             col: 'nuevo', pr: 'media', due: '2026-08-07', as: 'jordi', tags: ['compras'],          c: 1, a: 0 },
+  { id: 't12', project: 'viaje',   title: 'Hacer lista de restaurantes',        col: 'hecho', pr: 'baja',  due: null,         as: 'mar',   tags: ['familia'],          c: 2, a: 0 },
+  { id: 't13', project: 'huerto',  title: 'Comprar sustrato y semillas',        col: 'hecho', pr: 'media', due: '2026-07-29', as: 'jordi', tags: ['compras'],          c: 1, a: 1 },
+  { id: 't14', project: 'huerto',  title: 'Montar riego por goteo',             col: 'nuevo', pr: 'media', due: '2026-08-12', as: 'jordi', tags: [],                   c: 0, a: 0 },
+  { id: 't15', project: 'huerto',  title: 'Trasplantar tomateras',              col: 'curso', pr: 'baja',  due: '2026-08-02', as: 'mar',   tags: [],                   c: 1, a: 0 }
+];
+
+/* Detalles completos (3 tareas). El resto usa detalle genérico. */
+const DETAILS = {
+  t2: {
+    desc: 'Comparar los dos presupuestos del albañil y comprobar que incluyen fontanería, electricidad y alicatado. Confirmar plazos de ejecución antes de dar el visto bueno y pedir referencias de la segunda empresa, que es la que mejor precio tiene.',
+    files: [
+      { name: 'presupuesto-empresa-a.pdf', size: '182 KB', by: 'mar',   type: 'doc' },
+      { name: 'presupuesto-empresa-b.pdf', size: '164 KB', by: 'jordi', type: 'doc' }
+    ],
+    activity: [
+      { k: 'sys', icon: 'plus',     text: 'Tarjeta creada por <b>Mar</b>', time: 'hace 8 días' },
+      { k: 'sys', icon: 'clip',     text: '<b>Mar</b> adjuntó presupuesto-empresa-a.pdf', time: 'hace 7 días' },
+      { k: 'sys', icon: 'clip',     text: '<b>Jordi</b> adjuntó presupuesto-empresa-b.pdf', time: 'hace 5 días' },
+      { k: 'sys', icon: 'move',     text: '<b>Jordi</b> movió la tarjeta de Nuevo a En curso', time: 'hace 4 días' },
+      { k: 'com', by: 'jordi', text: 'El presupuesto B no incluye electricidad, se lo he pedido desglosado por email.', time: 'hace 4 días' },
+      { k: 'sys', icon: 'calendar', text: '<b>Mar</b> cambió el vencimiento al 29 jul', time: 'hace 3 días' },
+      { k: 'com', by: 'mar',   text: 'Vale, yo llamo mañana para pedir referencias de la empresa A antes de decidir.', time: 'hace 2 días' },
+      { k: 'com', by: 'jordi', text: 'Referencias recibidas: dos reformas parecidas y buenas reseñas. Pinta bien.', time: 'ayer' },
+      { k: 'com', by: 'mar',   text: 'Tenemos que decidirlo esta semana, que la fecha ya se nos ha echado encima.', time: 'hace 5 h' }
+    ]
+  },
+  t5: {
+    desc: 'Estructurar los resultados del trimestre y preparar las diapositivas clave para la reunión con dirección. Incluir gráficos de ventas por canal, comparativa con Q2 y propuesta de objetivos para Q4. Revisar los datos definitivos con Ana antes del martes.',
+    files: [
+      { name: 'ventas-q3.xlsx',            size: '84 KB',   by: 'mar',   type: 'sheet' },
+      { name: 'plantilla-presentacion.key', size: '2,4 MB', by: 'jordi', type: 'slides' }
+    ],
+    activity: [
+      { k: 'sys', icon: 'plus',     text: 'Tarjeta creada por <b>Mar</b>', time: 'hace 6 días' },
+      { k: 'sys', icon: 'move',     text: '<b>Mar</b> movió la tarjeta de Nuevo a En curso', time: 'hace 2 días' },
+      { k: 'sys', icon: 'clip',     text: '<b>Mar</b> adjuntó ventas-q3.xlsx', time: 'hace 2 días' },
+      { k: 'com', by: 'mar',   text: 'Ya tengo los datos de ventas del trimestre, mañana preparo los gráficos por canal.', time: 'hace 2 días' },
+      { k: 'sys', icon: 'flag',     text: '<b>Jordi</b> cambió la prioridad a Alta', time: 'ayer' },
+      { k: 'sys', icon: 'calendar', text: '<b>Mar</b> cambió el vencimiento al 1 ago', time: 'ayer' },
+      { k: 'com', by: 'jordi', text: 'Genial, yo repaso la parte de objetivos de Q4 y te paso comentarios.', time: 'ayer' },
+      { k: 'com', by: 'mar',   text: 'Subida la primera versión a la carpeta compartida, echadle un ojo cuando podáis.', time: 'hace 3 h' }
+    ]
+  },
+  t10: {
+    desc: 'Buscar hotel céntrico para las cuatro noches del 12 al 16 de agosto, idealmente en Baixa o Chiado. Presupuesto máximo de 120 € por noche con desayuno incluido. Comprobar que tenga cancelación gratuita antes de confirmar la reserva.',
+    files: [
+      { name: 'opciones-hotel.ods', size: '36 KB', by: 'jordi', type: 'sheet' }
+    ],
+    activity: [
+      { k: 'sys', icon: 'plus',     text: 'Tarjeta creada por <b>Jordi</b>', time: 'hace 5 días' },
+      { k: 'sys', icon: 'clip',     text: '<b>Jordi</b> adjuntó opciones-hotel.ods', time: 'hace 5 días' },
+      { k: 'com', by: 'jordi', text: 'He hecho una tabla con cuatro opciones; las dos primeras tienen cancelación gratuita.', time: 'hace 4 días' },
+      { k: 'sys', icon: 'move',     text: '<b>Jordi</b> movió la tarjeta de Nuevo a En curso', time: 'hace 2 días' },
+      { k: 'sys', icon: 'flag',     text: '<b>Mar</b> cambió la prioridad a Alta', time: 'ayer' },
+      { k: 'sys', icon: 'calendar', text: '<b>Jordi</b> cambió el vencimiento al 4 ago', time: 'ayer' },
+      { k: 'com', by: 'mar',   text: 'Me gusta la segunda, la de Chiado. La reservo esta noche si no me dices lo contrario.', time: 'ayer' },
+      { k: 'com', by: 'jordi', text: 'Perfecto, adelante. Guarda luego el justificante en la carpeta del viaje.', time: 'hace 2 h' }
+    ]
+  }
+};
+</script>
+
+<script>
+/* ---------- Estado ---------- */
+const state = {
+  view: 'todo', /* 'todo' | id de proyecto */
+  seg: 'nuevo', /* estado seleccionado en el segmented control móvil */
+  filters: { projects: new Set(), people: new Set(), priorities: new Set(), tags: new Set() },
+  filtersOpen: false /* panel de filtros desplegado (solo afecta a <lg; en desktop siempre visible) */
+};
+
+const $ = (sel) => document.querySelector(sel);
+const boardEl = $('#board'), filtersEl = $('#filters'), sideNavEl = $('#side-nav');
+const TODAY = new Date(2026, 7, 1); /* 1 ago 2026 */
+
+/* ---------- Helpers ---------- */
+const projectOf = (t) => PROJECTS.find(p => p.id === t.project);
+const openCount = (pid) => TASKS.filter(t => t.project === pid && t.col !== 'hecho').length;
+const colName = (id) => COLUMNS.find(c => c.id === id).name;
+
+function fmtDate(iso) {
+  return new Date(iso + 'T00:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }).replace(/\./g, '');
+}
+
+function dueInfo(due) {
+  if (!due) return null;
+  const d = new Date(due + 'T00:00:00');
+  const diff = Math.round((d - TODAY) / 864e5);
+  if (diff < 0)  return { kind: 'over',  text: diff === -1 ? 'Ayer' : 'Vencida' };
+  if (diff === 0) return { kind: 'today', text: 'Hoy' };
+  if (diff === 1) return { kind: 'normal', text: 'Mañana' };
+  return { kind: 'normal', text: fmtDate(due) };
+}
+
+function dueBadge(due, big) {
+  const info = dueInfo(due);
+  if (!info) return '';
+  const base = 'inline-flex items-center gap-1 ' + (big ? 'text-[13px]' : 'text-[11px]') + ' font-medium whitespace-nowrap';
+  const cal = svg(P.calendar, big ? 'w-4 h-4' : 'w-3.5 h-3.5');
+  if (info.kind === 'over')
+    return '<span class="' + base + ' px-1.5 py-0.5 rounded-md bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300">' + cal + info.text + '</span>';
+  if (info.kind === 'today')
+    return '<span class="' + base + ' px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">' + cal + info.text + '</span>';
+  return '<span class="' + base + ' text-faint">' + cal + info.text + '</span>';
+}
+
+function avatar(userId, cls) {
+  if (!userId) return '';
+  const u = USERS[userId];
+  return '<span class="' + (cls || 'w-6 h-6 text-[10px]') + ' rounded-full ' + AVATAR[u.color] + ' inline-flex items-center justify-center font-semibold shrink-0" title="' + u.name + '">' + u.initials + '</span>';
+}
+
+function tagChip(tagId, big) {
+  const g = TAGS[tagId];
+  return '<span class="px-2 py-0.5 rounded-full ' + (big ? 'text-[12px]' : 'text-[11px]') + ' font-medium ' + COLORS[g.color].chip + '">' + g.name + '</span>';
+}
+
+function priorityBadge(pr) {
+  const p = PRIORITIES[pr];
+  return '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium ' + p.badge + '">' + svg(p.icon, 'w-3 h-3') + p.label + '</span>';
+}
+
+/* ---------- Tarjeta ---------- */
+function cardHTML(t, i, showProject) {
+  const done = t.col === 'hecho';
+  const proj = projectOf(t);
+  const delay = Math.min(i, 10) * 40;
+  const counters = [];
+  if (t.c > 0) counters.push('<span class="inline-flex items-center gap-1">' + svg(P.chat, 'w-3.5 h-3.5') + t.c + '</span>');
+  if (t.a > 0) counters.push('<span class="inline-flex items-center gap-1">' + svg(P.clip, 'w-3.5 h-3.5') + t.a + '</span>');
+
+  return '' +
+  '<button type="button" data-task="' + t.id + '" draggable="true" style="animation-delay:' + delay + 'ms" ' +
+    'class="card w-full text-left rounded-2xl bg-surface border border-app shadow-soft p-3.5 transition-transform duration-150 hover:-translate-y-0.5 hover:shadow-md ' + (done ? 'opacity-60' : '') + '">' +
+    (showProject
+      ? '<div class="flex items-center gap-1.5 mb-2"><span class="w-2 h-2 rounded-full ' + COLORS[proj.color].dot + '"></span><span class="text-[11px] font-medium text-muted truncate">' + proj.name + '</span></div>'
+      : '') +
+    (t.tags.length ? '<div class="flex flex-wrap gap-1.5 mb-2">' + t.tags.map(tagChip).join('') + '</div>' : '') +
+    '<h3 class="text-[15px] font-medium leading-snug ' + (done ? 'line-through decoration-1' : '') + '">' + t.title + '</h3>' +
+    ((t.pr || t.due) ? '<div class="flex flex-wrap items-center gap-1.5 mt-2.5">' + (t.pr ? priorityBadge(t.pr) : '') + dueBadge(t.due) + '</div>' : '') +
+    '<div class="flex items-center justify-between mt-3 pt-2.5 border-t border-app">' +
+      '<span class="tnum flex items-center gap-3 text-xs text-faint">' + counters.join('') + '</span>' +
+      (t.as ? avatar(t.as) : '<span class="w-6 h-6 rounded-full border border-dashed border-app text-faint inline-flex items-center justify-center" title="Sin asignar">' + svg(P.user, 'w-3 h-3') + '</span>') +
+    '</div>' +
+  '</button>';
+}
+
+/* ---------- Tarjeta MÓVIL simplificada (<lg) ----------
+   Solo: título (17px/600, 2 líneas), proyecto (dot + nombre 13px), prioridad (badge 12px).
+   Sin etiquetas, fecha, avatar ni contadores: se ven al abrir el detalle. */
+function cardHTMLMobile(t, i) {
+  const done = t.col === 'hecho';
+  const proj = projectOf(t);
+  const delay = Math.min(i, 10) * 40;
+  return '' +
+  '<button type="button" data-task="' + t.id + '" style="animation-delay:' + delay + 'ms" ' +
+    'class="card w-full text-left rounded-2xl bg-surface border border-app shadow-soft px-4 py-3.5 min-h-[64px] flex flex-col justify-center gap-2 ' + (done ? 'opacity-60' : '') + '">' +
+    '<h3 class="text-[17px] font-semibold leading-snug line-clamp-2 ' + (done ? 'line-through decoration-1' : '') + '">' + t.title + '</h3>' +
+    '<div class="flex items-center gap-x-3 gap-y-1.5 flex-wrap">' +
+      '<span class="inline-flex items-center gap-1.5 min-w-0">' +
+        '<span class="w-2 h-2 rounded-full shrink-0 ' + COLORS[proj.color].dot + '"></span>' +
+        '<span class="text-[13px] text-muted truncate">' + proj.name + '</span>' +
+      '</span>' +
+      (t.pr
+        ? '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[12px] font-medium ' + PRIORITIES[t.pr].badge + '">' + svg(PRIORITIES[t.pr].icon, 'w-3.5 h-3.5') + PRIORITIES[t.pr].label + '</span>'
+        : '') +
+    '</div>' +
+  '</button>';
+}
+
+/* ---------- Tareas visibles (vista + filtros) ---------- */
+function visibleTasks() {
+  let list = state.view === 'todo' ? TASKS.slice() : TASKS.filter(t => t.project === state.view);
+  if (state.view === 'todo') {
+    const f = state.filters;
+    if (f.projects.size)   list = list.filter(t => f.projects.has(t.project));
+    if (f.people.size)     list = list.filter(t => f.people.has(t.as || 'none'));
+    if (f.priorities.size) list = list.filter(t => t.pr && f.priorities.has(t.pr));
+    if (f.tags.size)       list = list.filter(t => t.tags.some(g => f.tags.has(g)));
+  }
+  return list;
+}
+
+/* ---------- Tablero ---------- */
+const ACCENT_RGB = { sky: '14 165 233', amber: '245 158 11', emerald: '16 185 129' };
+
+function renderBoard() {
+  const tasks = visibleTasks();
+  const showProject = state.view === 'todo';
+  boardEl.innerHTML = COLUMNS.map(col => {
+    const list = tasks.filter(t => t.col === col.id);
+    return '' +
+    '<section data-col="' + col.id + '" style="--accent:' + (ACCENT_RGB[col.color] || '148 163 184') + '" class="flex flex-col" aria-label="Columna ' + col.name + '">' +
+      '<header class="flex items-center gap-2 px-1 pb-3">' +
+        '<span class="w-2.5 h-2.5 rounded-full ' + COLORS[col.color].dot + '"></span>' +
+        '<h2 class="font-display font-semibold text-sm">' + col.name + '</h2>' +
+        '<span class="tnum font-display text-xs text-faint" data-count>' + list.length + '</span>' +
+        '<button type="button" class="ml-auto w-7 h-7 rounded-lg text-faint hover:bg-surface2 hover:text-muted flex items-center justify-center" aria-label="Añadir tarjeta a ' + col.name + '" title="Decorativo">' + svg(P.plus) + '</button>' +
+      '</header>' +
+      '<div data-list class="flex-1 space-y-3 overflow-y-auto nice-scroll max-h-[calc(100vh-215px)] pr-1.5 pb-1">' +
+        (list.map((t, i) => cardHTML(t, i, showProject)).join('') ||
+          '<p data-empty class="rounded-2xl border border-dashed border-app px-4 py-6 text-center text-sm text-muted">Sin tareas</p>') +
+      '</div>' +
+    '</section>';
+  }).join('');
+}
+
+/* ---------- Segmented control móvil: Nuevo / En curso / Hecho con dot + contador ---------- */
+function renderSeg() {
+  const tasks = visibleTasks();
+  const el = $('#seg-control');
+  el.innerHTML = COLUMNS.map(c => {
+    const n = tasks.filter(t => t.col === c.id).length;
+    const active = state.seg === c.id;
+    return '<button type="button" role="tab" data-seg="' + c.id + '" aria-selected="' + active + '" ' +
+      'aria-label="' + c.name + ', ' + n + (n === 1 ? ' tarea' : ' tareas') + '" ' +
+      'class="flex-1 min-w-0 flex items-center justify-center gap-1.5 rounded-full px-2 h-11 text-[13px] font-medium whitespace-nowrap ' +
+      (active ? 'bg-surface shadow-soft' : 'text-muted') + '">' +
+      '<span class="w-2 h-2 rounded-full shrink-0 ' + COLORS[c.color].dot + '"></span>' +
+      '<span class="truncate">' + c.name + '</span>' +
+      '<span class="tnum text-[12px] ' + (active ? 'text-muted' : 'text-faint') + '">' + n + '</span>' +
+    '</button>';
+  }).join('');
+}
+
+/* ---------- Lista móvil: tarjetas simplificadas del estado seleccionado ---------- */
+function renderMobileList() {
+  const el = $('#mobile-list');
+  const col = COLUMNS.find(c => c.id === state.seg);
+  const tasks = visibleTasks().filter(t => t.col === state.seg);
+  el.innerHTML = tasks.map((t, i) => cardHTMLMobile(t, i)).join('') ||
+    '<p class="rounded-2xl border border-dashed border-app px-4 py-8 text-center text-[15px] text-muted">Sin tareas en «' + col.name + '»</p>';
+}
+
+/* Tablero en todas sus formas (desktop kanban + navegación móvil) */
+function renderBoards() {
+  if (!isBoardView(state.view)) return; /* en pantallas auxiliares no hay tablero */
+  renderBoard();
+  renderSeg();
+  renderMobileList();
+}
+
+/* ---------- Barra de filtros ---------- */
+function filterChip(group, value, label, color, withIcon) {
+  const active = state.filters[group].has(value);
+  const cls = active
+    ? COLORS[color].chip + ' ring-1 ring-current font-medium'
+    : 'bg-surface border border-app text-muted hover:bg-surface2';
+  return '<button type="button" data-fgroup="' + group + '" data-fvalue="' + value + '" aria-pressed="' + active + '" ' +
+    'class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs ' + cls + '">' +
+    (withIcon === 'dot' ? '<span class="w-2 h-2 rounded-full ' + COLORS[color].dot + '"></span>' : '') +
+    (withIcon === 'pr' ? svg(PRIORITIES[value].icon, 'w-3 h-3') : '') +
+    label + '</button>';
+}
+
+function renderFilters() {
+  if (state.view !== 'todo') { filtersEl.innerHTML = ''; filtersEl.classList.add('hidden'); return; }
+  filtersEl.classList.remove('hidden');
+  const f = state.filters;
+  const activeCount = f.projects.size + f.people.size + f.priorities.size + f.tags.size;
+
+  const groups = [
+    { label: 'Proyecto', html: PROJECTS.map(p => filterChip('projects', p.id, p.name, p.color, 'dot')).join('') },
+    { label: 'Persona', html:
+        filterChip('people', 'mar', 'Mar', 'violet', 'dot') +
+        filterChip('people', 'jordi', 'Jordi', 'teal', 'dot') +
+        filterChip('people', 'none', 'Sin asignar', 'slate', 'dot') },
+    { label: 'Prioridad', html: ['alta', 'media', 'baja'].map(pr =>
+        filterChip('priorities', pr, PRIORITIES[pr].label, pr === 'alta' ? 'rose' : pr === 'media' ? 'amber' : 'slate', 'pr')).join('') },
+    { label: 'Etiqueta', html: Object.keys(TAGS).map(id => filterChip('tags', id, TAGS[id].name, TAGS[id].color, 'dot')).join('') }
+  ];
+
+  /* Botón "Filtros" solo en móvil (<lg): embudo + texto + contador de activos.
+     El panel se colapsa con grid-rows 0fr→1fr (transición suave; prefers-reduced-motion
+     ya la anula vía la regla global) y con visibility:hidden queda fuera del tab order. */
+  const toggleBtn =
+    '<div class="lg:hidden mb-3">' +
+      '<button type="button" id="filters-toggle" aria-expanded="' + state.filtersOpen + '" aria-controls="filters-panel" ' +
+        'class="inline-flex items-center gap-2 rounded-full border bg-surface px-3.5 py-2 text-[13px] font-medium shadow-soft ' +
+        (activeCount
+          ? 'border-emerald-500/50 text-emerald-700 dark:text-emerald-400'
+          : 'border-app text-muted hover:bg-surface2') + '">' +
+        svg(P.funnel, 'w-4 h-4') +
+        '<span>Filtros' + (activeCount ? ' · ' + activeCount : '') + '</span>' +
+        svg(P.chevDown, 'w-3.5 h-3.5 transition-transform duration-200' + (state.filtersOpen ? ' rotate-180' : '')) +
+      '</button>' +
+    '</div>';
+
+  const panelCls = state.filtersOpen
+    ? 'grid-rows-[1fr] visible'
+    : 'grid-rows-[0fr] invisible lg:visible';
+
+  filtersEl.innerHTML =
+    toggleBtn +
+    '<div id="filters-panel" class="grid transition-[grid-template-rows] duration-300 ease-out lg:grid-rows-[1fr] ' + panelCls + '">' +
+      '<div class="min-h-0 overflow-hidden">' +
+        '<div class="rounded-2xl bg-surface border border-app p-3.5 flex flex-wrap items-center gap-x-4 gap-y-2.5">' +
+          groups.map(g =>
+            '<div class="flex items-center gap-1.5 flex-wrap">' +
+              '<span class="text-[11px] font-semibold tracking-wide uppercase text-faint mr-0.5">' + g.label + '</span>' + g.html +
+            '</div>').join('') +
+          (activeCount
+            ? '<button type="button" id="clear-filters" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-surface2 text-muted hover:text-[var(--text)]">' + svg(P.x, 'w-3 h-3') + 'Limpiar filtros (' + activeCount + ')</button>'
+            : '') +
+        '</div>' +
+      '</div>' +
+    '</div>';
+}
+
+/* ---------- Sidebar ---------- */
+function isBoardView(v) {
+  return v === 'todo' || PROJECTS.some(p => p.id === v);
+}
+
+function renderSidebar() {
+  const itemCls = (active) =>
+    'w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm ' +
+    (active ? 'bg-surface2 font-medium' : 'text-muted hover:bg-surface2');
+  const mainItem = (view, icon, label, count) =>
+    '<button type="button" data-view="' + view + '" class="' + itemCls(state.view === view) + '" ' + (state.view === view ? 'aria-current="page"' : '') + '>' +
+      '<span class="text-faint">' + svg(P[icon], 'w-4 h-4') + '</span>' +
+      '<span class="flex-1 text-left">' + label + '</span>' +
+      (count != null ? '<span class="tnum text-xs text-faint">' + count + '</span>' : '') +
+    '</button>';
+
+  /* Sección principal: Todo, Actividad y Ajustes */
+  $('#side-main').innerHTML =
+    mainItem('todo', 'layers', 'Todo', TASKS.filter(t => t.col !== 'hecho').length) +
+    mainItem('activity', 'clock', 'Actividad') +
+    mainItem('settings', 'settings', 'Ajustes');
+
+  sideNavEl.innerHTML = PROJECTS.map(p =>
+    '<button type="button" data-view="' + p.id + '" class="' + itemCls(state.view === p.id) + '" ' + (state.view === p.id ? 'aria-current="page"' : '') + '>' +
+      '<span class="w-2 h-2 rounded-full shrink-0 ' + COLORS[p.color].dot + '"></span>' +
+      '<span class="flex-1 text-left truncate">' + p.name + '</span>' +
+      '<span class="tnum text-xs text-faint">' + openCount(p.id) + '</span>' +
+    '</button>').join('');
+
+  const sel = $('#mobile-view');
+  if (isBoardView(state.view) && sel.value !== state.view) sel.value = state.view;
+}
+
+/* ---------- Cabecera de vista ---------- */
+function renderHeader() {
+  const titleEl = $('#view-title'), subEl = $('#view-sub'), statsEl = $('#view-stats');
+  const openAll = TASKS.filter(t => t.col !== 'hecho').length;
+  if (state.view === 'todo') {
+    titleEl.textContent = 'Todo';
+    subEl.textContent = 'Todos los proyectos en un solo tablero';
+    const open = visibleTasks().filter(t => t.col !== 'hecho').length;
+    statsEl.textContent = open + (open === 1 ? ' tarea abierta' : ' tareas abiertas');
+  } else if (state.view === 'projects') {
+    titleEl.textContent = 'Proyectos';
+    subEl.textContent = 'Elige un proyecto para abrir su tablero';
+    statsEl.textContent = PROJECTS.length + ' proyectos · ' + openAll + ' abiertas';
+  } else if (state.view === 'activity') {
+    titleEl.textContent = 'Actividad';
+    subEl.textContent = 'Todos los movimientos de vuestros tableros';
+    statsEl.textContent = buildFeed().length + ' eventos';
+  } else if (state.view === 'settings') {
+    titleEl.textContent = 'Ajustes';
+    subEl.textContent = 'Perfil, apariencia y datos de la maqueta';
+    statsEl.textContent = '';
+  } else {
+    const p = PROJECTS.find(x => x.id === state.view);
+    titleEl.textContent = p.emoji + ' ' + p.name;
+    subEl.textContent = 'Tablero del proyecto';
+    const open = visibleTasks().filter(t => t.col !== 'hecho').length;
+    statsEl.textContent = open + (open === 1 ? ' tarea abierta' : ' tareas abiertas');
+  }
+}
+
+/* ---------- Bottom-nav móvil: estado activo ---------- */
+function updateBottomNav() {
+  const active = {
+    'bn-todo': state.view === 'todo',
+    'bn-projects': state.view === 'projects' || PROJECTS.some(p => p.id === state.view),
+    'bn-activity': state.view === 'activity',
+    'bn-settings': state.view === 'settings'
+  };
+  Object.keys(active).forEach(id => {
+    const b = document.getElementById(id);
+    if (!b) return;
+    b.classList.toggle('text-emerald-700', active[id]);
+    b.classList.toggle('dark:text-emerald-400', active[id]);
+    b.classList.toggle('text-faint', !active[id]);
+    if (active[id]) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+  });
+}
+
+/* ---------- Cambio de vista ---------- */
+function setView(v) {
+  state.view = v;
+  const board = isBoardView(v);
+  /* Chrome móvil: el segmented control solo aparece en vistas de tablero */
+  $('#seg-wrap').classList.toggle('hidden', !board);
+  $('#mobile-list').classList.toggle('hidden', !board);
+  boardEl.classList.toggle('lg:grid', board);
+  $('#main').classList.toggle('pt-[120px]', board);
+  $('#main').classList.toggle('pt-[68px]', !board);
+  renderSidebar();
+  renderHeader();
+  renderFilters();
+  renderBoards();
+  renderScreen();
+  updateBottomNav();
+}
+
+/* ---------- Persistencia del tablero (localStorage) ---------- */
+const STORAGE_KEY = 'nido-board-v1';
+const MOVE_LOG = {};  /* taskId -> [{from,to,ts}] movimientos generados por la usuaria */
+const ORIG_COL = {};  /* columna original del dataset (para la narrativa del detalle genérico) */
+TASKS.forEach(t => { ORIG_COL[t.id] = t.col; });
+
+function saveBoard() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      order: TASKS.map(t => ({ id: t.id, col: t.col })),
+      moves: MOVE_LOG
+    }));
+  } catch (e) {}
+}
+
+function loadBoard() {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null'); } catch (e) {}
+  if (!saved || !Array.isArray(saved.order)) return;
+  const byId = {};
+  TASKS.forEach(t => { byId[t.id] = t; });
+  const reordered = [];
+  saved.order.forEach(o => {
+    const t = byId[o.id];
+    if (!t) return;
+    if (COLUMNS.some(c => c.id === o.col)) t.col = o.col;
+    reordered.push(t);
+    delete byId[o.id];
+  });
+  Object.keys(byId).forEach(id => reordered.push(byId[id])); /* tareas nuevas del dataset */
+  TASKS.length = 0;
+  reordered.forEach(t => TASKS.push(t));
+  if (saved.moves && typeof saved.moves === 'object') {
+    Object.keys(saved.moves).forEach(id => {
+      if (Array.isArray(saved.moves[id])) MOVE_LOG[id] = saved.moves[id];
+    });
+  }
+}
+loadBoard();
+
+/* ---------- Avisador aria-live ---------- */
+function announce(msg) {
+  const el = document.getElementById('a11y-announce');
+  if (!el) return;
+  el.textContent = '';
+  setTimeout(() => { el.textContent = msg; }, 30);
+}
+
+/* ---------- Re-render con FLIP (desactivado con prefers-reduced-motion) ---------- */
+const reducedMotionMQ = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+function renderAll() {
+  renderBoards();
+  renderSidebar();
+  renderHeader();
+  renderScreen();
+}
+
+function flipRender() {
+  if (reducedMotionMQ.matches) { renderAll(); return; }
+  const before = new Map();
+  boardEl.querySelectorAll('[data-task]').forEach(el => before.set(el.dataset.task, el.getBoundingClientRect()));
+  boardEl.classList.add('no-anim');
+  renderAll();
+  boardEl.querySelectorAll('[data-task]').forEach(el => {
+    const old = before.get(el.dataset.task);
+    if (!old) return;
+    const now = el.getBoundingClientRect();
+    const dx = old.left - now.left, dy = old.top - now.top;
+    if (!dx && !dy) return;
+    el.style.transition = 'none';
+    el.style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
+    requestAnimationFrame(() => {
+      el.style.transition = 'transform .28s ease';
+      el.style.transform = '';
+      el.addEventListener('transitionend', () => { el.style.transition = ''; }, { once: true });
+    });
+  });
+  setTimeout(() => boardEl.classList.remove('no-anim'), 350);
+}
+
+/* ---------- Mover tarjeta: única vía de negocio (DnD y modal) ----------
+   refCardId: insertar ANTES de esa tarjeta; null = al final de la columna. */
+function moveTask(taskId, toCol, refCardId, source) {
+  const t = TASKS.find(x => x.id === taskId);
+  if (!t || !COLUMNS.some(c => c.id === toCol)) return;
+  const fromCol = t.col;
+
+  TASKS.splice(TASKS.indexOf(t), 1);
+  let insertAt = TASKS.length;
+  if (refCardId) {
+    const ri = TASKS.findIndex(x => x.id === refCardId);
+    if (ri !== -1) insertAt = ri;
+  } else {
+    for (let i = TASKS.length - 1; i >= 0; i--) {
+      if (TASKS[i].col === toCol) { insertAt = i + 1; break; }
+    }
+  }
+  TASKS.splice(insertAt, 0, t);
+  t.col = toCol;
+
+  if (fromCol !== toCol) {
+    (MOVE_LOG[t.id] = MOVE_LOG[t.id] || []).push({ from: fromCol, to: toCol, ts: Date.now() });
+    announce('Tarjeta «' + t.title + '» movida a ' + colName(toCol));
+  } else {
+    announce('Tarjeta «' + t.title + '» reordenada en ' + colName(toCol));
+  }
+  saveBoard();
+  flipRender();
+}
+
+/* ---------- Drag & drop con ratón (HTML5 DnD) ---------- */
+let dragId = null;
+let placeholderEl = null;
+
+function cleanupDrag() {
+  dragId = null;
+  if (placeholderEl) { placeholderEl.remove(); placeholderEl = null; }
+  boardEl.querySelectorAll('.col-target').forEach(s => s.classList.remove('col-target'));
+  boardEl.querySelectorAll('.dragging').forEach(c => c.classList.remove('dragging'));
+  boardEl.querySelectorAll('[data-empty]').forEach(p => { p.style.display = ''; });
+}
+
+boardEl.addEventListener('dragstart', (e) => {
+  const card = e.target.closest('[data-task]');
+  if (!card) return;
+  dragId = card.dataset.task;
+  e.dataTransfer.setData('text/plain', dragId);
+  e.dataTransfer.effectAllowed = 'move';
+  placeholderEl = document.createElement('div');
+  placeholderEl.className = 'drop-placeholder';
+  placeholderEl.style.height = card.offsetHeight + 'px';
+  placeholderEl.setAttribute('aria-hidden', 'true');
+  setTimeout(() => card.classList.add('dragging'), 0); /* no ensuciar la imagen de arrastre */
+});
+
+boardEl.addEventListener('dragover', (e) => {
+  if (!dragId) return;
+  const section = e.target.closest('section[data-col]');
+  if (!section) return;
+  e.preventDefault(); /* necesario para permitir el drop */
+  e.dataTransfer.dropEffect = 'move';
+  boardEl.querySelectorAll('.col-target').forEach(s => { if (s !== section) s.classList.remove('col-target'); });
+  section.classList.add('col-target');
+  const list = section.querySelector('[data-list]');
+  if (!list || !placeholderEl) return;
+  /* Inserción: antes de la primera tarjeta cuyo centro vertical queda por debajo del cursor */
+  const cards = Array.from(list.querySelectorAll('[data-task]')).filter(c => c.dataset.task !== dragId);
+  let ref = null;
+  for (const c of cards) {
+    const r = c.getBoundingClientRect();
+    if (e.clientY < r.top + r.height / 2) { ref = c; break; }
+  }
+  const empty = list.querySelector('[data-empty]');
+  if (empty) empty.style.display = 'none';
+  if (ref) list.insertBefore(placeholderEl, ref);
+  else list.appendChild(placeholderEl);
+});
+
+boardEl.addEventListener('drop', (e) => {
+  if (!dragId) return;
+  e.preventDefault();
+  const section = e.target.closest('section[data-col]');
+  if (!section) { cleanupDrag(); return; }
+  /* La tarjeta que sigue al placeholder = referencia de inserción */
+  let refId = null;
+  if (placeholderEl && placeholderEl.parentElement) {
+    let n = placeholderEl.nextElementSibling;
+    while (n) {
+      if (n.dataset && n.dataset.task) { refId = n.dataset.task; break; }
+      n = n.nextElementSibling;
+    }
+  }
+  const id = dragId, toCol = section.dataset.col;
+  cleanupDrag();
+  moveTask(id, toCol, refId, 'dnd');
+});
+
+boardEl.addEventListener('dragend', cleanupDrag);
+</script>
+
+<script>
+/* ---------- Detalle genérico (tareas sin detalle completo) ---------- */
+function genericDetail(t) {
+  const proj = projectOf(t);
+  const creator = t.as || 'mar';
+  const act = [
+    { k: 'sys', icon: 'plus', text: 'Tarjeta creada por <b>' + USERS[creator].name + '</b>', time: 'hace 4 días' }
+  ];
+  if (ORIG_COL[t.id] !== 'nuevo')
+    act.push({ k: 'sys', icon: 'move', text: '<b>' + USERS[creator].name + '</b> movió la tarjeta de Nuevo a ' + colName(ORIG_COL[t.id]), time: 'hace 2 días' });
+  if (t.c > 0)
+    act.push({ k: 'com', by: t.as === 'mar' ? 'jordi' : 'mar', text: 'Apuntado, me pongo con ello en cuanto saque un rato.', time: 'ayer' });
+  return {
+    desc: 'Tarea del proyecto ' + proj.name + '. Esta maqueta abre un detalle genérico con los datos básicos de la tarjeta; la descripción completa y el histórico detallado están disponibles en las tareas de ejemplo principales (presupuesto del baño, presentación Q3 y hotel de Lisboa).',
+    files: t.a > 0 ? [{ name: 'documento-adjunto.pdf', size: '96 KB', by: creator, type: 'doc' }] : [],
+    activity: act
+  };
+}
+
+const FILE_ICON = {
+  doc:    { icon: P.fileDoc,    cls: 'bg-rose-100 text-rose-600 dark:bg-rose-500/15 dark:text-rose-300' },
+  sheet:  { icon: P.fileSheet,  cls: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-300' },
+  slides: { icon: P.fileSlides, cls: 'bg-violet-100 text-violet-600 dark:bg-violet-500/15 dark:text-violet-300' }
+};
+
+/* ---------- Modal ---------- */
+const modalRoot = $('#modal-root');
+let lastFocus = null;
+
+/* Comentario (pestaña Comentarios): avatar, nombre, texto, timestamp */
+function commentItem(e) {
+  const u = USERS[e.by];
+  return '' +
+  '<li class="flex gap-3">' +
+    avatar(e.by, 'w-8 h-8 text-[12px]') +
+    '<div class="flex-1 min-w-0">' +
+      '<p class="text-[14px]"><span class="font-semibold">' + u.name + '</span> <span class="text-[12px] text-faint">' + e.time + '</span></p>' +
+      '<div class="mt-1 rounded-xl rounded-tl-sm bg-surface2 px-3.5 py-2.5 text-[15px] leading-relaxed">' + e.text + '</div>' +
+    '</div>' +
+  '</li>';
+}
+
+/* Evento de actividad (pestaña Actividad): timeline de movimientos del sistema */
+function eventItem(e) {
+  return '' +
+  '<li class="flex gap-3 items-center">' +
+    '<span class="relative z-10 w-7 h-7 rounded-full bg-surface2 border border-app text-faint flex items-center justify-center shrink-0">' + svg(P[e.icon] || P.plus, 'w-3.5 h-3.5') + '</span>' +
+    '<p class="text-[14px] text-muted leading-relaxed">' + e.text + ' <span class="text-faint">· ' + e.time + '</span></p>' +
+  '</li>';
+}
+
+/* Tiempo relativo para los eventos generados en sesión */
+function relTime(ts) {
+  const s = Math.max(0, Math.round((Date.now() - ts) / 1000));
+  if (s < 45) return 'ahora';
+  const m = Math.round(s / 60);
+  if (m < 60) return 'hace ' + m + ' min';
+  const h = Math.round(m / 60);
+  if (h < 24) return h === 1 ? 'hace 1 h' : 'hace ' + h + ' h';
+  return new Date(ts).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }).replace(/\./g, '');
+}
+
+/* Separación del timeline mock: comentarios (k:'com') vs eventos (k:'sys').
+   Los eventos de adjuntar (clip) y los movimientos registrados van a Actividad. */
+function commentsFor(t) {
+  return (DETAILS[t.id] || genericDetail(t)).activity.filter(e => e.k === 'com');
+}
+
+function eventsFor(t) {
+  const base = (DETAILS[t.id] || genericDetail(t)).activity.filter(e => e.k === 'sys');
+  (MOVE_LOG[t.id] || []).forEach(mv => {
+    base.push({ k: 'sys', icon: 'move',
+      text: '<b>Mar</b> movió la tarjeta de ' + colName(mv.from) + ' a ' + colName(mv.to),
+      time: relTime(mv.ts) });
+  });
+  return base;
+}
+
+/* ---------- Pestañas del detalle (estilo Nextcloud Deck) ---------- */
+const TABS = [
+  { id: 'detalles',    label: 'Detalles',    icon: 'info'  },
+  { id: 'adjuntos',    label: 'Adjuntos',    icon: 'clip'  },
+  { id: 'comentarios', label: 'Comentarios', icon: 'chat'  },
+  { id: 'actividad',   label: 'Actividad',   icon: 'clock' }
+];
+let modalTab = 'detalles';
+
+function modalHTML(t) {
+  const d = DETAILS[t.id] || genericDetail(t);
+  const proj = projectOf(t);
+  const as = t.as ? USERS[t.as] : null;
+  const pr = t.pr ? PRIORITIES[t.pr] : null;
+  const due = dueInfo(t.due);
+  const comments = commentsFor(t);
+  const events = eventsFor(t);
+  const tabCount = { adjuntos: d.files.length, comentarios: comments.length };
+
+  const metaItem = (label, inner) =>
+    '<div><p class="text-[12px] font-semibold tracking-wide uppercase text-faint mb-1.5">' + label + '</p>' + inner + '</div>';
+
+  const moveButtons = COLUMNS.map(c => {
+    const current = t.col === c.id;
+    return '<button type="button" data-move-to="' + c.id + '" ' + (current ? 'disabled ' : '') +
+      'aria-pressed="' + current + '" aria-label="Mover a ' + c.name + (current ? ' (columna actual)' : '') + '" ' +
+      'class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[13px] font-medium ' +
+      (current ? COLORS[c.color].chip + ' ring-1 ring-current cursor-default' : 'bg-surface border border-app text-muted hover:bg-surface2') + '">' +
+      '<span class="w-2 h-2 rounded-full ' + COLORS[c.color].dot + '"></span>' + c.name + (current ? ' · actual' : '') +
+    '</button>';
+  }).join('');
+
+  const tabBtn = (tab) => {
+    const active = modalTab === tab.id;
+    const n = tabCount[tab.id];
+    return '<button type="button" role="tab" id="tab-' + tab.id + '" data-tab="' + tab.id + '" ' +
+      'aria-selected="' + active + '" aria-controls="panel-' + tab.id + '" tabindex="' + (active ? '0' : '-1') + '" ' +
+      'class="relative flex items-center gap-1 lg:gap-1.5 px-2 lg:px-3 py-2.5 -mb-px border-b-2 text-[12px] lg:text-[13px] font-medium whitespace-nowrap shrink-0 ' +
+      (active ? 'border-emerald-500 text-emerald-700 dark:text-emerald-400' : 'border-transparent text-muted hover:text-[var(--text)]') + '">' +
+      svg(P[tab.icon], 'w-3.5 h-3.5 lg:w-4 lg:h-4') + '<span>' + tab.label + '</span>' +
+      (n ? '<span class="tnum px-1 lg:px-1.5 py-px rounded-full text-[12px] bg-surface2 text-muted">' + n + '</span>' : '') +
+    '</button>';
+  };
+
+  const panel = (id, inner) =>
+    '<div role="tabpanel" id="panel-' + id + '" data-panel-tab="' + id + '" aria-labelledby="tab-' + id + '" tabindex="0"' +
+    (modalTab === id ? '' : ' hidden') + '>' + inner + '</div>';
+
+  return '' +
+  '<div data-task-id="' + t.id + '" class="fixed inset-0 z-50 flex items-stretch lg:items-center lg:justify-center" role="dialog" aria-modal="true" aria-labelledby="modal-title">' +
+    '<div class="absolute inset-0 bg-black/45 backdrop-blur-[2px]" data-close></div>' +
+    '<div data-panel class="relative w-full h-full lg:h-auto lg:max-h-[88vh] lg:max-w-2xl bg-surface lg:rounded-2xl border border-app shadow-2xl overflow-y-auto nice-scroll">' +
+
+      /* Cabecera fija: título + tab bar (en móvil, pantalla completa con tabs bajo el título) */
+      '<div class="sticky top-0 z-10 bg-surface/95 backdrop-blur border-b border-app">' +
+        '<div class="px-5 lg:px-7 pt-4 pb-3 flex items-start gap-3">' +
+          '<div class="flex-1 min-w-0">' +
+            '<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[12px] font-medium ' + COLORS[proj.color].chip + '">' +
+              '<span class="w-1.5 h-1.5 rounded-full ' + COLORS[proj.color].dot + '"></span>' + proj.name +
+            '</span>' +
+            '<h2 id="modal-title" class="font-display font-bold text-[20px] lg:text-[22px] tracking-tight leading-snug mt-2">' + t.title + '</h2>' +
+          '</div>' +
+          '<button type="button" data-close-x class="w-10 h-10 rounded-lg text-muted hover:bg-surface2 flex items-center justify-center shrink-0" aria-label="Cerrar detalle">' + svg(P.x, 'w-5 h-5') + '</button>' +
+        '</div>' +
+        '<div role="tablist" aria-label="Secciones del detalle" class="flex px-1 lg:px-4 overflow-x-auto no-scrollbar">' +
+          TABS.map(tabBtn).join('') +
+        '</div>' +
+      '</div>' +
+
+      '<div class="px-5 lg:px-7 py-5 pb-8">' +
+
+        panel('detalles',
+          '<div class="space-y-6">' +
+            '<div class="grid grid-cols-2 gap-x-4 gap-y-5">' +
+              metaItem('Proyecto',
+                '<span class="inline-flex items-center gap-1.5 text-[14px]"><span class="w-2 h-2 rounded-full shrink-0 ' + COLORS[proj.color].dot + '"></span>' + proj.name + '</span>') +
+              metaItem('Asignado', as
+                ? '<span class="inline-flex items-center gap-2 text-[14px]">' + avatar(t.as, 'w-6 h-6 text-[11px]') + as.name + '</span>'
+                : '<span class="inline-flex items-center gap-2 text-[14px] text-faint"><span class="w-6 h-6 rounded-full border border-dashed border-app inline-flex items-center justify-center">' + svg(P.user, 'w-3 h-3') + '</span>Sin asignar</span>') +
+              metaItem('Prioridad', pr
+                ? '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[12px] font-medium ' + pr.badge + '">' + svg(pr.icon, 'w-3.5 h-3.5') + pr.label + '</span>'
+                : '<span class="text-[14px] text-faint">Sin prioridad</span>') +
+              metaItem('Vencimiento', due ? dueBadge(t.due, true) : '<span class="text-[14px] text-faint">Sin fecha</span>') +
+              metaItem('Etiquetas', t.tags.length
+                ? '<span class="flex flex-wrap gap-1.5">' + t.tags.map(g => tagChip(g, true)).join('') + '</span>'
+                : '<span class="text-[14px] text-faint">Sin etiquetas</span>') +
+            '</div>' +
+            '<section><h3 class="font-display font-semibold text-[14px] mb-2">Descripción</h3>' +
+              '<p class="text-[15px] text-muted leading-relaxed">' + d.desc + '</p></section>' +
+            '<section><h3 class="font-display font-semibold text-[14px] mb-2">Mover a</h3>' +
+              '<div class="flex flex-wrap gap-2" role="group" aria-label="Mover la tarjeta a otra columna">' + moveButtons + '</div>' +
+            '</section>' +
+          '</div>') +
+
+        panel('adjuntos',
+          d.files.length
+            ? '<ul class="space-y-2.5">' + d.files.map(f => {
+                const fi = FILE_ICON[f.type] || FILE_ICON.doc;
+                return '<li class="flex items-center gap-3 rounded-xl border border-app px-3.5 py-3">' +
+                  '<span class="w-10 h-10 rounded-lg ' + fi.cls + ' flex items-center justify-center shrink-0">' + svg(fi.icon, 'w-[18px] h-[18px]') + '</span>' +
+                  '<span class="flex-1 min-w-0"><span class="block text-[15px] font-medium truncate">' + f.name + '</span>' +
+                  '<span class="block text-[13px] text-faint">' + f.size + ' · subido por ' + USERS[f.by].name + '</span></span>' +
+                '</li>';
+              }).join('') + '</ul>'
+            : '<p class="text-[14px] text-faint py-8 text-center">Sin adjuntos.</p>') +
+
+        panel('comentarios',
+          (comments.length
+            ? '<ul class="space-y-5">' + comments.map(commentItem).join('') + '</ul>'
+            : '<p class="text-[14px] text-faint py-8 text-center">Sin comentarios todavía.</p>') +
+          '<div class="flex gap-3 items-center mt-6">' +
+            avatar(CURRENT_USER, 'w-8 h-8 text-[12px]') +
+            '<div class="flex-1 flex items-center gap-2 rounded-xl border border-app bg-surface px-3.5 py-2.5">' +
+              '<span class="flex-1 text-[14px] text-faint truncate">Escribe un comentario…</span>' +
+              '<button type="button" class="px-3.5 py-2 rounded-lg bg-emerald-500 text-white text-[13px] font-semibold hover:bg-emerald-600" title="Decorativo">Comentar</button>' +
+            '</div>' +
+          '</div>') +
+
+        panel('actividad',
+          events.length
+            ? '<ul class="timeline space-y-4">' + events.map(eventItem).join('') + '</ul>'
+            : '<p class="text-[14px] text-faint py-8 text-center">Sin actividad registrada.</p>') +
+
+      '</div>' +
+    '</div>' +
+  '</div>';
+}
+
+/* Cambio de pestaña sin re-render completo (conserva scroll y foco) */
+function setModalTab(tabId) {
+  if (!TABS.some(t => t.id === tabId)) return;
+  modalTab = tabId;
+  modalRoot.querySelectorAll('[role="tab"]').forEach(b => {
+    const active = b.dataset.tab === tabId;
+    b.setAttribute('aria-selected', active ? 'true' : 'false');
+    b.tabIndex = active ? 0 : -1;
+    b.classList.toggle('border-emerald-500', active);
+    b.classList.toggle('text-emerald-700', active);
+    b.classList.toggle('dark:text-emerald-400', active);
+    b.classList.toggle('border-transparent', !active);
+    b.classList.toggle('text-muted', !active);
+  });
+  modalRoot.querySelectorAll('[data-panel-tab]').forEach(p => {
+    p.hidden = p.dataset.panelTab !== tabId;
+  });
+}
+
+function openModal(id, tab) {
+  const t = TASKS.find(x => x.id === id);
+  if (!t) return;
+  lastFocus = document.activeElement;
+  modalTab = (tab && TABS.some(x => x.id === tab)) ? tab : 'detalles';
+  modalRoot.innerHTML = modalHTML(t);
+  document.body.style.overflow = 'hidden';
+  document.addEventListener('keydown', onModalKey);
+  const closeBtn = modalRoot.querySelector('[data-close-x]');
+  if (closeBtn) closeBtn.focus();
+}
+
+function closeModal() {
+  if (!modalRoot.innerHTML) return;
+  modalRoot.innerHTML = '';
+  document.body.style.overflow = '';
+  document.removeEventListener('keydown', onModalKey);
+  if (lastFocus && lastFocus.focus) lastFocus.focus();
+}
+
+function onModalKey(e) {
+  if (e.key === 'Escape') { closeModal(); return; }
+  /* Navegación de pestañas con flechas (roving tabindex) */
+  if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+    const tab = e.target.closest && e.target.closest('[role="tab"][data-tab]');
+    if (!tab) return;
+    e.preventDefault();
+    const tabs = Array.from(modalRoot.querySelectorAll('[role="tab"][data-tab]'));
+    const i = tabs.indexOf(tab);
+    const next = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
+    setModalTab(next.dataset.tab);
+    next.focus();
+  }
+}
+
+/* ---------- Tema: modos auto / claro / oscuro ---------- */
+const darkMQ = window.matchMedia('(prefers-color-scheme: dark)');
+
+function themeMode() {
+  try {
+    const m = localStorage.getItem('nido-theme');
+    return (m === 'light' || m === 'dark') ? m : 'auto';
+  } catch (e) { return 'auto'; }
+}
+
+function applyTheme() {
+  const mode = themeMode();
+  const dark = mode === 'dark' ? true : mode === 'light' ? false : darkMQ.matches;
+  document.documentElement.classList.toggle('dark', dark);
+  $('#meta-theme').setAttribute('content', dark ? '#080D1A' : '#F4F6FA');
+  themeButtons();
+  syncSettingsTheme();
+}
+
+function setThemeMode(mode) {
+  try { localStorage.setItem('nido-theme', mode); } catch (e) {}
+  applyTheme();
+}
+
+/* En modo auto, seguir al sistema en vivo */
+darkMQ.addEventListener('change', () => { if (themeMode() === 'auto') applyTheme(); });
+
+function themeButtons() {
+  const dark = document.documentElement.classList.contains('dark');
+  const icon = dark ? svg(P.sun, 'w-[18px] h-[18px]') : svg(P.moon, 'w-[18px] h-[18px]');
+  const label = dark ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro';
+  const d = $('#theme-toggle-desktop'), m = $('#theme-toggle-mobile');
+  d.innerHTML = icon + '<span>' + (dark ? 'Tema claro' : 'Tema oscuro') + '</span>';
+  d.setAttribute('aria-label', label);
+  m.innerHTML = icon;
+  m.setAttribute('aria-label', label);
+}
+
+/* Marca la opción activa del selector de Apariencia (si Ajustes está abierto) */
+function syncSettingsTheme() {
+  const mode = themeMode();
+  document.querySelectorAll('[data-theme-mode]').forEach(b => {
+    const on = b.dataset.themeMode === mode;
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    b.classList.toggle('bg-surface', on);
+    b.classList.toggle('shadow-soft', on);
+    b.classList.toggle('font-medium', on);
+    b.classList.toggle('text-muted', !on);
+  });
+}
+
+/* Toggle rápido del header: fuerza claro/oscuro explícito */
+function toggleTheme() {
+  const dark = !document.documentElement.classList.contains('dark');
+  setThemeMode(dark ? 'dark' : 'light');
+}
+
+/* ================================================================
+   PANTALLAS AUXILIARES: Proyectos · Actividad · Ajustes
+   ================================================================ */
+
+/* ---------- Feed global de actividad ---------- */
+/* Parsea los tiempos relativos del dataset a minutos (hoy = 1 ago 2026) */
+function parseRelMinutes(time) {
+  if (time === 'ahora') return 0;
+  let m = time.match(/^hace (\d+) min/); if (m) return +m[1];
+  m = time.match(/^hace (\d+) h/);       if (m) return +m[1] * 60;
+  if (time === 'ayer') return 1440;
+  m = time.match(/^hace (\d+) días/);    if (m) return +m[1] * 1440;
+  return 999999; /* fechas absolutas: al final */
+}
+
+/* Texto del evento con el título de la tarea enlazado */
+function feedText(e, t) {
+  const title = '«' + t.title + '»';
+  let m = e.text.match(/^Tarjeta creada por (<b>.*?<\/b>)$/);
+  if (m) return m[1] + ' creó ' + title;
+  m = e.text.match(/^(<b>.*?<\/b>) movió la tarjeta de (.*?) a (.*?)$/);
+  if (m) return m[1] + ' movió ' + title + ' de ' + m[2] + ' a ' + m[3];
+  m = e.text.match(/^(<b>.*?<\/b>) adjuntó (.*?)$/);
+  if (m) return m[1] + ' adjuntó ' + m[2] + ' en ' + title;
+  m = e.text.match(/^(<b>.*?<\/b>) cambió la prioridad a (.*?)$/);
+  if (m) return m[1] + ' cambió la prioridad de ' + title + ' a ' + m[2];
+  m = e.text.match(/^(<b>.*?<\/b>) cambió el vencimiento al (.*?)$/);
+  if (m) return m[1] + ' cambió el vencimiento de ' + title + ' al ' + m[2];
+  return e.text + ' · ' + title;
+}
+
+/* Todos los eventos (sin comentarios) de todas las tareas, reciente primero.
+   Reutiliza eventsFor(): dataset mock + movimientos de la usuaria (MOVE_LOG). */
+function buildFeed() {
+  const items = [];
+  TASKS.forEach(t => {
+    eventsFor(t).forEach(e => items.push({ task: t, e: e, mins: parseRelMinutes(e.time) }));
+  });
+  items.sort((a, b) => a.mins - b.mins);
+  return items;
+}
+
+function dayBucketLabel(bucket) {
+  if (bucket === 0) return 'Hoy';
+  if (bucket === 1) return 'Ayer';
+  return 'Hace ' + bucket + ' días';
+}
+
+function activityScreenHTML() {
+  const items = buildFeed();
+  let html = '<div class="max-w-2xl mx-auto">';
+  let lastBucket = -1;
+  items.forEach((it, i) => {
+    const bucket = Math.floor(it.mins / 1440);
+    if (bucket !== lastBucket) {
+      lastBucket = bucket;
+      html += '<h2 class="flex items-center gap-3 mt-7 mb-3 first:mt-0">' +
+        '<span class="text-[12px] font-semibold tracking-wide uppercase text-faint shrink-0">' + dayBucketLabel(bucket) + '</span>' +
+        '<span class="flex-1 h-px" style="background-color:var(--border)"></span></h2>';
+    }
+    const p = projectOf(it.task);
+    html += '' +
+    '<button type="button" data-task="' + it.task.id + '" data-open-tab="actividad" style="animation-delay:' + Math.min(i, 10) * 30 + 'ms" ' +
+      'class="card w-full text-left flex items-center gap-3 rounded-2xl bg-surface border border-app shadow-soft px-4 py-3 mb-2.5" ' +
+      'aria-label="Abrir detalle de ' + it.task.title.replace(/"/g, '&quot;') + '">' +
+      '<span class="w-9 h-9 rounded-full bg-surface2 border border-app text-faint flex items-center justify-center shrink-0">' + svg(P[it.e.icon] || P.plus, 'w-4 h-4') + '</span>' +
+      '<span class="flex-1 min-w-0">' +
+        '<span class="block text-[14px] leading-snug">' + feedText(it.e, it.task) + '</span>' +
+        '<span class="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">' +
+          '<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-medium ' + COLORS[p.color].chip + '">' +
+            '<span class="w-1.5 h-1.5 rounded-full ' + COLORS[p.color].dot + '"></span>' + p.name +
+          '</span>' +
+          '<span class="text-[12px] text-faint">' + it.e.time + '</span>' +
+        '</span>' +
+      '</span>' +
+      '<span class="text-faint shrink-0">' + svg(P.chevRight, 'w-4 h-4') + '</span>' +
+    '</button>';
+  });
+  return html + '</div>';
+}
+
+/* ---------- Pantalla Proyectos ---------- */
+function projectsScreenHTML() {
+  const cards = PROJECTS.map((p, i) => {
+    const n = { nuevo: 0, curso: 0, hecho: 0 };
+    TASKS.filter(t => t.project === p.id).forEach(t => { n[t.col]++; });
+    const open = n.nuevo + n.curso;
+    const summary = COLUMNS.map(c => {
+      const cnt = n[c.id];
+      const word = c.id === 'nuevo' ? (cnt === 1 ? 'nueva' : 'nuevas')
+                 : c.id === 'curso' ? 'en curso'
+                 : (cnt === 1 ? 'hecha' : 'hechas');
+      return '<span class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full shrink-0 ' + COLORS[c.color].dot + '"></span><span class="tnum">' + cnt + '</span>&nbsp;' + word + '</span>';
+    }).join('<span class="text-faint" aria-hidden="true">·</span>');
+    return '' +
+    '<button type="button" data-open-project="' + p.id + '" style="animation-delay:' + i * 50 + 'ms" ' +
+      'class="card w-full text-left rounded-2xl bg-surface border border-app shadow-soft p-4 transition-transform duration-150 hover:-translate-y-0.5 hover:shadow-md" ' +
+      'aria-label="Abrir tablero de ' + p.name + '">' +
+      '<span class="flex items-center gap-3">' +
+        '<span class="w-2.5 h-2.5 rounded-full shrink-0 ' + COLORS[p.color].dot + '"></span>' +
+        '<span class="text-xl leading-none" aria-hidden="true">' + p.emoji + '</span>' +
+        '<span class="flex-1 min-w-0 font-display font-semibold text-[16px] truncate">' + p.name + '</span>' +
+        '<span class="tnum text-[13px] text-muted shrink-0">' + open + (open === 1 ? ' abierta' : ' abiertas') + '</span>' +
+        '<span class="text-faint shrink-0">' + svg(P.chevRight, 'w-4 h-4') + '</span>' +
+      '</span>' +
+      '<span class="mt-2.5 pl-[22px] flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-muted">' + summary + '</span>' +
+    '</button>';
+  }).join('');
+
+  return '<div class="max-w-2xl mx-auto space-y-3">' + cards +
+    '<button type="button" title="Decorativo en esta maqueta" ' +
+      'class="w-full flex items-center justify-center gap-2 rounded-2xl border border-dashed border-app px-4 py-4 text-[14px] font-medium text-muted hover:bg-surface2">' +
+      svg(P.plus, 'w-4 h-4') + 'Nuevo proyecto</button>' +
+  '</div>';
+}
+
+/* ---------- Pantalla Ajustes ---------- */
+function currentLang() {
+  try { return localStorage.getItem('nido-lang') === 'en' ? 'en' : 'es'; } catch (e) { return 'es'; }
+}
+
+function settingsScreenHTML() {
+  const mode = themeMode();
+  const lang = currentLang();
+  const card = (inner) => '<section class="rounded-2xl bg-surface border border-app shadow-soft p-5">' + inner + '</section>';
+  const heading = (icon, txt) =>
+    '<h2 class="flex items-center gap-2 font-display font-semibold text-[15px] mb-4">' +
+    '<span class="text-faint">' + svg(P[icon], 'w-4 h-4') + '</span>' + txt + '</h2>';
+
+  const themeOpt = (m, icon, label) => {
+    const on = mode === m;
+    return '<button type="button" data-theme-mode="' + m + '" aria-pressed="' + on + '" ' +
+      'class="flex flex-col items-center gap-1.5 rounded-xl py-3 text-[13px] ' + (on ? 'bg-surface shadow-soft font-medium' : 'text-muted') + '">' +
+      svg(P[icon], 'w-[18px] h-[18px]') + label + '</button>';
+  };
+
+  const langArrow = 'background-image:url(&quot;data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%2394A3B8\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3E%3Cpath d=\'m6 9 6 6 6-6\'/%3E%3C/svg%3E&quot;);background-position:right 10px center;background-size:16px';
+
+  return '<div class="max-w-2xl mx-auto space-y-4">' +
+
+    card(heading('user', 'Perfil') +
+      '<div class="flex items-center gap-3.5">' +
+        '<span class="w-12 h-12 rounded-full ' + AVATAR.violet + ' inline-flex items-center justify-center text-lg font-semibold shrink-0" aria-hidden="true">M</span>' +
+        '<div class="min-w-0"><p class="text-[16px] font-semibold leading-tight">Mar</p>' +
+        '<p class="text-[13px] text-faint leading-tight mt-0.5 truncate">mar@nido.app</p></div>' +
+      '</div>') +
+
+    card(heading('sun', 'Apariencia') +
+      '<div class="grid grid-cols-3 gap-1 rounded-xl bg-surface2 p-1" role="group" aria-label="Tema de la aplicación">' +
+        themeOpt('auto', 'monitor', 'Auto') +
+        themeOpt('light', 'sun', 'Claro') +
+        themeOpt('dark', 'moon', 'Oscuro') +
+      '</div>' +
+      '<p class="text-[13px] text-faint mt-3">Auto sigue la preferencia de tu sistema.</p>') +
+
+    card(heading('globe', 'Idioma') +
+      '<label class="sr-only" for="set-lang">Idioma</label>' +
+      '<select id="set-lang" class="w-full bg-surface2 border border-app rounded-xl pl-3.5 pr-9 py-2.5 text-[14px] font-medium appearance-none bg-no-repeat" style="' + langArrow + '">' +
+        '<option value="es"' + (lang === 'es' ? ' selected' : '') + '>Español</option>' +
+        '<option value="en"' + (lang === 'en' ? ' selected' : '') + '>English</option>' +
+      '</select>' +
+      '<p class="text-[13px] text-faint mt-3">La traducción completa de la interfaz estará disponible en la versión final.</p>') +
+
+    card(heading('download', 'Instalar app') +
+      '<button type="button" title="Decorativo en esta maqueta" ' +
+        'class="h-14 px-8 rounded-2xl bg-emerald-500 text-white text-[16px] font-semibold inline-flex items-center gap-2.5 hover:bg-emerald-600 shadow-soft">' +
+        svg(P.download, 'w-5 h-5') + 'Instalar Nido</button>' +
+      '<p class="text-[13px] text-faint mt-3">Añade Nido a tu pantalla de inicio para abrirlo como una app.</p>') +
+
+    card(heading('sparkles', 'Modo demo') +
+      '<div class="flex items-center justify-between gap-4">' +
+        '<p class="text-[13px] text-faint flex-1">Datos de ejemplo: los cambios solo se guardan en este dispositivo.</p>' +
+        '<button type="button" id="demo-switch" role="switch" aria-checked="true" title="Decorativo en esta maqueta" aria-label="Modo demo" ' +
+          'class="relative w-12 h-7 rounded-full bg-emerald-500 shrink-0 transition-colors">' +
+          '<span class="absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-white shadow transition-transform translate-x-5"></span>' +
+        '</button>' +
+      '</div>') +
+
+    card(heading('reset', 'Datos') +
+      '<p class="text-[13px] text-faint mb-3.5">Devuelve el tablero a su estado inicial y descarta los movimientos que hayas hecho.</p>' +
+      '<button type="button" id="reset-board" ' +
+        'class="inline-flex items-center gap-2 rounded-xl bg-surface2 border border-app px-4 py-2.5 text-[14px] font-medium text-muted hover:text-[var(--text)]">' +
+        svg(P.reset, 'w-4 h-4') + '<span>Restablecer tablero</span></button>') +
+
+    '<button type="button" title="Decorativo en esta maqueta" ' +
+      'class="w-full flex items-center justify-center gap-2 rounded-2xl bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300 px-4 py-3.5 text-[15px] font-semibold shadow-soft">' +
+      svg(P.logout, 'w-[18px] h-[18px]') + 'Cerrar sesión</button>' +
+
+  '</div>';
+}
+
+/* ---------- Render de la pantalla activa ---------- */
+function renderScreen() {
+  const el = $('#screen');
+  if (isBoardView(state.view)) { el.classList.add('hidden'); el.innerHTML = ''; return; }
+  el.classList.remove('hidden');
+  if (state.view === 'projects')      el.innerHTML = projectsScreenHTML();
+  else if (state.view === 'activity') el.innerHTML = activityScreenHTML();
+  else if (state.view === 'settings') el.innerHTML = settingsScreenHTML();
+}
+
+/* ---------- Eventos ---------- */
+sideNavEl.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-view]');
+  if (b) setView(b.dataset.view);
+});
+
+$('#side-main').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-view]');
+  if (b) setView(b.dataset.view);
+});
+
+$('#logo-desktop').addEventListener('click', () => setView('todo'));
+$('#logo-mobile').addEventListener('click', () => setView('todo'));
+$('#bn-todo').addEventListener('click', () => setView('todo'));
+$('#bn-projects').addEventListener('click', () => setView('projects'));
+$('#bn-activity').addEventListener('click', () => setView('activity'));
+$('#bn-settings').addEventListener('click', () => setView('settings'));
+$('#theme-toggle-desktop').addEventListener('click', toggleTheme);
+$('#theme-toggle-mobile').addEventListener('click', toggleTheme);
+
+/* ---------- Pantallas auxiliares: interacción ---------- */
+let resetTimer = null;
+
+$('#screen').addEventListener('click', (e) => {
+  /* Proyectos → tablero del proyecto */
+  const proj = e.target.closest('[data-open-project]');
+  if (proj) { setView(proj.dataset.openProject); return; }
+
+  /* Actividad → detalle de la tarea en su pestaña Actividad */
+  const item = e.target.closest('[data-task]');
+  if (item) { openModal(item.dataset.task, item.dataset.openTab || 'detalles'); return; }
+
+  /* Ajustes → Apariencia */
+  const tm = e.target.closest('[data-theme-mode]');
+  if (tm) { setThemeMode(tm.dataset.themeMode); return; }
+
+  /* Ajustes → Modo demo (solo visual) */
+  const sw = e.target.closest('#demo-switch');
+  if (sw) {
+    const on = sw.getAttribute('aria-checked') !== 'true';
+    sw.setAttribute('aria-checked', on ? 'true' : 'false');
+    sw.classList.toggle('bg-emerald-500', on);
+    sw.classList.toggle('bg-surface2', !on);
+    const knob = sw.querySelector('span');
+    if (knob) knob.classList.toggle('translate-x-5', on);
+    return;
+  }
+
+  /* Ajustes → Restablecer tablero: confirmación inline (2 pasos, sin confirm()) */
+  const reset = e.target.closest('#reset-board');
+  if (reset) {
+    if (reset.dataset.armed === '1') {
+      clearTimeout(resetTimer);
+      try { localStorage.removeItem(STORAGE_KEY); } catch (err) {}
+      reset.querySelector('span').textContent = 'Tablero restablecido, recargando…';
+      setTimeout(() => location.reload(), 350);
+      return;
+    }
+    reset.dataset.armed = '1';
+    reset.classList.remove('bg-surface2', 'border-app', 'text-muted');
+    reset.classList.add('bg-rose-100', 'text-rose-700', 'dark:bg-rose-500/15', 'dark:text-rose-300', 'border', 'border-transparent');
+    reset.querySelector('span').textContent = '¿Seguro? Pulsa para confirmar';
+    announce('Confirma el restablecimiento pulsando de nuevo el botón');
+    resetTimer = setTimeout(() => {
+      delete reset.dataset.armed;
+      reset.classList.add('bg-surface2', 'border-app', 'text-muted');
+      reset.classList.remove('bg-rose-100', 'text-rose-700', 'dark:bg-rose-500/15', 'dark:text-rose-300', 'border-transparent');
+      reset.querySelector('span').textContent = 'Restablecer tablero';
+    }, 4000);
+  }
+});
+
+$('#screen').addEventListener('change', (e) => {
+  /* Ajustes → Idioma: cambia el atributo lang y persiste */
+  if (e.target.id === 'set-lang') {
+    const lang = e.target.value === 'en' ? 'en' : 'es';
+    document.documentElement.lang = lang;
+    try { localStorage.setItem('nido-lang', lang); } catch (err) {}
+    announce(lang === 'en' ? 'Idioma cambiado a inglés' : 'Idioma cambiado a español');
+  }
+});
+
+$('#mobile-view').addEventListener('change', (e) => setView(e.target.value));
+
+boardEl.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-task]');
+  if (b) openModal(b.dataset.task);
+});
+
+$('#mobile-list').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-task]');
+  if (b) openModal(b.dataset.task);
+});
+
+/* Segmented control móvil: cambio de estado (con flechas de teclado) */
+function setSeg(seg) {
+  if (!COLUMNS.some(c => c.id === seg) || state.seg === seg) return;
+  state.seg = seg;
+  renderSeg();
+  renderMobileList();
+}
+
+$('#seg-control').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-seg]');
+  if (b) setSeg(b.dataset.seg);
+});
+
+$('#seg-control').addEventListener('keydown', (e) => {
+  if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+  const b = e.target.closest('[data-seg]');
+  if (!b) return;
+  e.preventDefault();
+  const tabs = Array.from($('#seg-control').querySelectorAll('[data-seg]'));
+  const i = tabs.indexOf(b);
+  const next = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
+  setSeg(next.dataset.seg);
+  const nb = $('#seg-control').querySelector('[data-seg="' + next.dataset.seg + '"]');
+  if (nb) nb.focus();
+});
+
+filtersEl.addEventListener('click', (e) => {
+  /* Toggle del panel (solo visible en <lg): actualización directa del DOM para no perder el foco */
+  const toggle = e.target.closest('#filters-toggle');
+  if (toggle) {
+    state.filtersOpen = !state.filtersOpen;
+    toggle.setAttribute('aria-expanded', state.filtersOpen ? 'true' : 'false');
+    const panel = $('#filters-panel');
+    if (panel) {
+      panel.classList.toggle('grid-rows-[0fr]', !state.filtersOpen);
+      panel.classList.toggle('grid-rows-[1fr]', state.filtersOpen);
+      panel.classList.toggle('invisible', !state.filtersOpen);
+      panel.classList.toggle('lg:visible', !state.filtersOpen);
+      panel.classList.toggle('visible', state.filtersOpen);
+    }
+    const chev = toggle.querySelector('svg:last-of-type');
+    if (chev) chev.classList.toggle('rotate-180', state.filtersOpen);
+    return;
+  }
+  const clear = e.target.closest('#clear-filters');
+  if (clear) {
+    Object.values(state.filters).forEach(s => s.clear());
+    renderFilters(); renderHeader(); renderBoards();
+    return;
+  }
+  const chip = e.target.closest('[data-fgroup]');
+  if (chip) {
+    const set = state.filters[chip.dataset.fgroup];
+    const v = chip.dataset.fvalue;
+    if (set.has(v)) set.delete(v); else set.add(v);
+    renderFilters(); renderHeader(); renderBoards();
+  }
+});
+
+modalRoot.addEventListener('click', (e) => {
+  if (e.target.closest('[data-close]') || e.target.closest('[data-close-x]')) { closeModal(); return; }
+  const tab = e.target.closest('[role="tab"][data-tab]');
+  if (tab) { setModalTab(tab.dataset.tab); return; }
+  const mv = e.target.closest('[data-move-to]');
+  if (mv && !mv.disabled) {
+    const dialog = modalRoot.querySelector('[data-task-id]');
+    if (!dialog) return;
+    const taskId = dialog.dataset.taskId;
+    moveTask(taskId, mv.dataset.moveTo, null, 'modal'); /* el tablero se actualiza en vivo detrás del modal */
+    /* Re-render del modal para refrescar botones y Actividad, conservando el scroll */
+    const panel = modalRoot.querySelector('[data-panel]');
+    const st = panel ? panel.scrollTop : 0;
+    const t = TASKS.find(x => x.id === taskId);
+    if (t) {
+      modalRoot.innerHTML = modalHTML(t);
+      const np = modalRoot.querySelector('[data-panel]');
+      if (np) np.scrollTop = st;
+    }
+  }
+});
+
+/* ---------- Init ---------- */
+(function init() {
+  const sel = $('#mobile-view');
+  sel.innerHTML =
+    '<option value="todo">📋 Todo</option>' +
+    PROJECTS.map(p => '<option value="' + p.id + '">' + p.emoji + ' ' + p.name + '</option>').join('');
+  document.documentElement.lang = currentLang();
+  themeButtons();
+  setView('todo');
+})();
+</script>
+</body>
+</html>

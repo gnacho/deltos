@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Nido — Tareas en pareja</title>
+    <meta
+      name="description"
+      content="Nido: PWA para gestionar tareas personales y laborales en pareja."
+    />
+    <meta name="theme-color" id="theme-color-meta" content="#F4F6FA" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <script>
+      /* Anti-FOUC: aplica el tema guardado antes de pintar */
+      (function () {
+        var dark = false;
+        try {
+          var saved = localStorage.getItem('nido-theme'); /* 'light' | 'dark' | 'auto' | null */
+          dark =
+            saved === 'dark'
+              ? true
+              : saved === 'light'
+                ? false
+                : window.matchMedia('(prefers-color-scheme: dark)').matches; /* auto */
+        } catch (e) {}
+        if (dark) document.documentElement.classList.add('dark');
+        var m = document.getElementById('theme-color-meta');
+        if (m) m.setAttribute('content', dark ? '#080D1A' : '#F4F6FA');
+      })();
+    </script>
+    <script>
+      /* theme-color dinámico, sincronizado con el tema efectivo */
+      (function () {
+        var meta = document.getElementById('theme-color-meta');
+        var update = function () {
+          var isDark = document.documentElement.classList.contains('dark');
+          if (meta) meta.setAttribute('content', isDark ? '#080D1A' : '#F4F6FA');
+        };
+        new MutationObserver(update).observe(document.documentElement, {
+          attributes: true,
+          attributeFilter: ['class'],
+        });
+      })();
+    </script>
+    <script>
+      /* Error global visible (barra roja al pie) — útil en móvil sin F12 */
+      window.addEventListener('error', function (e) {
+        var bar = document.getElementById('global-error');
+        if (!bar) {
+          bar = document.createElement('div');
+          bar.id = 'global-error';
+          bar.style.cssText =
+            'position:fixed;left:0;right:0;bottom:0;z-index:9999;background:#dc2626;color:#fff;font:12px/1.4 monospace;padding:8px 12px;white-space:pre-wrap;max-height:40vh;overflow:auto';
+          (document.body || document.documentElement).appendChild(bar);
+        }
+        bar.textContent = e.message + '\n' + (e.error && e.error.stack ? e.error.stack : '');
+      });
+      window.addEventListener('unhandledrejection', function (e) {
+        var bar = document.getElementById('global-error');
+        if (!bar) {
+          bar = document.createElement('div');
+          bar.id = 'global-error';
+          bar.style.cssText =
+            'position:fixed;left:0;right:0;bottom:0;z-index:9999;background:#dc2626;color:#fff;font:12px/1.4 monospace;padding:8px 12px;white-space:pre-wrap;max-height:40vh;overflow:auto';
+          (document.body || document.documentElement).appendChild(bar);
+        }
+        var r = e.reason;
+        bar.textContent = (r && r.stack) || (r && r.message) || String(r);
+      });
+    </script>
+  </head>
+  <body class="font-sans antialiased min-h-screen">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
