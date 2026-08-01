@@ -138,6 +138,49 @@ fi
 fetch_to() { $FETCH "$1" > "$2"; }
 for tool in sha256sum tar xz; do command -v "$tool" >/dev/null 2>&1 || fatal 21 "missing tool: $tool"; done
 
+# ------------------------------------------------- disk / memory pre-flight --
+AVAIL_MB=$(df -Pm / 2>/dev/null | awk 'NR==2 {print $4}' || true)
+if [ -n "${AVAIL_MB:-}" ]; then
+    [ "$AVAIL_MB" -lt 300 ] && fatal 24 "not enough disk space: ${AVAIL_MB} MB free (minimum 300 MB)"
+    [ "$AVAIL_MB" -lt 600 ] && warn "low disk space: ${AVAIL_MB} MB free (recommended: 600+ MB)"
+    ok "disk space: ${AVAIL_MB} MB free"
+fi
+MEM_MB=$(awk '/^MemAvailable:/ {print int($2/1024)}' /proc/meminfo 2>/dev/null || true)
+if [ -n "${MEM_MB:-}" ] && [ "$MEM_MB" -lt 400 ]; then
+    warn "low memory: ${MEM_MB} MB available — Node 22 + Deltos is happier with 400+ MB"
+fi
+
+# ------------------------------------------------------ port pre-flight -----
+port_in_use() {
+    if command -v ss >/dev/null 2>&1; then
+        ss -tln 2>/dev/null | awk '{print $4}' | grep -qE "[:.]${1}\$"
+    elif command -v netstat >/dev/null 2>&1; then
+        netstat -tln 2>/dev/null | awk '{print $4}' | grep -qE "[:.]${1}\$"
+    else
+        return 1  # can't check: assume free
+    fi
+}
+pick_port() {
+    _p=$1; _end=$((_p + 20))
+    while [ "$_p" -le "$_end" ]; do
+        if ! port_in_use "$_p"; then printf '%s' "$_p"; return 0; fi
+        _p=$((_p + 1))
+    done
+    return 1
+}
+
+# Fresh install only: an upgrade keeps the port from the existing env file.
+PORT="$DEFAULT_PORT"
+if [ ! -f "$ENV_FILE" ]; then
+    if port_in_use "$DEFAULT_PORT"; then
+        PORT=$(pick_port "$((DEFAULT_PORT + 1))") \
+            || fatal 25 "port $DEFAULT_PORT is busy and no free port found in $((DEFAULT_PORT + 1))-$((DEFAULT_PORT + 21)) — set one manually in $ENV_FILE after install"
+        warn "port $DEFAULT_PORT is already in use — Deltos will listen on $PORT instead"
+    else
+        ok "port $DEFAULT_PORT is free"
+    fi
+fi
+
 # --------------------------------------------------------- resolve version --
 if [ -z "$VERSION" ]; then
     info "resolving latest stable version"
@@ -160,7 +203,7 @@ UPGRADING=0
 
 # ---------------------------------------------------------- download+verify --
 TMP=$(mktemp -d) || fatal 34 "mktemp failed"
-cleanup() { rm -rf "$TMP"; }
+cleanup() { rm -rf "$TMP"; return 0; }
 trap cleanup EXIT INT TERM
 
 info "downloading $ASSET"
@@ -214,9 +257,9 @@ ok "release v$VERSION_NORM at $RELEASE_DIR (current -> it)"
 # Initial config ONLY on fresh install (upgrades never touch credentials)
 if [ ! -f "$ENV_FILE" ]; then
     ADMIN_PASS=$(head -c 18 /dev/urandom | base64 | tr -d '/+=' | head -c 16)
-    if [ "$DRY_RUN" -eq 1 ]; then info "[dry-run] would generate $ENV_FILE (0600, random admin password)"; else
+    if [ "$DRY_RUN" -eq 1 ]; then info "[dry-run] would generate $ENV_FILE (0600, random admin password, PORT=$PORT)"; else
         $SUDO tee "$ENV_FILE" >/dev/null <<EOF
-PORT=$DEFAULT_PORT
+PORT=$PORT
 AUTH_USER=admin
 AUTH_PASS=$ADMIN_PASS
 DATA_DIR=$STATE_DIR
@@ -228,6 +271,8 @@ EOF
     FRESH_CREDENTIALS=1
 else
     FRESH_CREDENTIALS=0
+    PORT=$(sed -n 's/^PORT=//p' "$ENV_FILE" | head -1)
+    PORT="${PORT:-$DEFAULT_PORT}"
     info "existing config kept ($ENV_FILE)"
 fi
 
@@ -276,9 +321,9 @@ if [ "$DRY_RUN" -eq 0 ]; then
     fi
     ok "service $SERVICE_NAME active"
     if command -v curl >/dev/null 2>&1; then
-        curl -fsS --max-time 5 "http://127.0.0.1:$DEFAULT_PORT/health" >/dev/null 2>&1 \
-            && ok "HTTP health check OK on :$DEFAULT_PORT" \
-            || warn "service is up but http://127.0.0.1:$DEFAULT_PORT didn't answer yet (give it a few seconds)"
+        curl -fsS --max-time 5 "http://127.0.0.1:$PORT/health" >/dev/null 2>&1 \
+            && ok "HTTP health check OK on :$PORT" \
+            || warn "service is up but http://127.0.0.1:$PORT didn't answer yet (give it a few seconds)"
     fi
 fi
 
@@ -288,7 +333,7 @@ printf 'Version:  %s%s\n' "$VERSION" "$( [ "$UPGRADING" -eq 1 ] && echo ' (upgra
 printf 'App:      %s -> %s\n' "$OPT_DIR/current" "$RELEASE_DIR"
 printf 'Node:     %s\n' "$NODE_BIN"
 printf 'Data:     %s\n' "$STATE_DIR"
-printf 'Access:   http://<this-machine-ip>:%s\n' "$DEFAULT_PORT"
+printf 'Access:   http://<this-machine-ip>:%s\n' "$PORT"
 if [ "${FRESH_CREDENTIALS:-0}" -eq 1 ] && [ "$DRY_RUN" -eq 0 ]; then
     printf '\nInitial credentials (shown ONCE — change them after logging in):\n'
     printf '  user:     admin\n  password: %s\n' "$ADMIN_PASS"
@@ -299,8 +344,8 @@ printf '  sh install.sh              # update to the latest stable version\n'
 printf '  sh install.sh --uninstall\n'
 printf '\nNotes:\n'
 printf '  - No firewall port was opened. If you need one:\n'
-printf '      firewall-cmd --permanent --add-port=%s/tcp && firewall-cmd --reload\n' "$DEFAULT_PORT"
-printf '      ufw allow %s/tcp\n' "$DEFAULT_PORT"
+printf '      firewall-cmd --permanent --add-port=%s/tcp && firewall-cmd --reload\n' "$PORT"
+printf '      ufw allow %s/tcp\n' "$PORT"
 printf '  - Behind an HTTPS reverse proxy, add COOKIE_SECURE=true to %s\n' "$ENV_FILE"
 printf '  - Rollback: ln -sfn %s/releases/<previous> %s/current && systemctl restart %s\n' "$OPT_DIR" "$OPT_DIR" "$SERVICE_NAME"
 printf '%s================================================%s\n\n' "$C_G" "$C_0"
