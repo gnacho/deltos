@@ -98,6 +98,10 @@
     "dueDate": "Due date",
     "labels": "Labels",
     "noLabels": "No labels",
+    "newLabel": "New label",
+    "labelNamePlaceholder": "Label name",
+    "labelExists": "A label with that name already exists",
+    "labelError": "Could not create the label",
     "description": "Description",
     "descriptionPlaceholder": "Add a description…",
     "titleLabel": "Title",
@@ -125,7 +129,13 @@
     "tooBig": "The file exceeds the 10 MB limit",
     "uploadError": "Could not upload the file",
     "uploadedBy": "uploaded by {{name}}",
-    "download": "Download {{name}}"
+    "download": "Download {{name}}",
+    "view": "View {{name}}",
+    "viewer": "Image viewer",
+    "closeViewer": "Close viewer",
+    "prevPhoto": "Previous image",
+    "nextPhoto": "Next image",
+    "counter": "{{current}} of {{total}}"
   },
   "comments": {
     "empty": "No comments yet.",

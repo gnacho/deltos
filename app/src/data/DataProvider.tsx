@@ -8,7 +8,7 @@ import {
   type CreateTaskInput,
   type DataApi,
 } from './data-context';
-import type { Bootstrap, Project, Task, TaskDetail, TaskPatch } from './types';
+import type { Bootstrap, Label, Project, Task, TaskDetail, TaskPatch } from './types';
 
 /**
  * Capa de datos desacoplada (contrato síncrono):
@@ -200,6 +200,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [fetchBootstrap],
   );
 
+  const createLabel = useCallback(
+    async (input: { name: string; color: string }): Promise<Label> => {
+      const res = await apiPost<{ label: Label }>('/api/labels', input);
+      await fetchBootstrap();
+      return res.label;
+    },
+    [fetchBootstrap],
+  );
+
   const refreshTaskDetail = useCallback(
     (id: string) => {
       detailCache.current.delete(id);
@@ -241,6 +250,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       addComment,
       uploadAttachment,
       createProject,
+      createLabel,
     };
     // version es el disparador de recomputo (cachés en refs)
     // eslint-disable-next-line react-hooks/exhaustive-deps

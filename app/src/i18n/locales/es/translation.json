@@ -98,6 +98,10 @@
     "dueDate": "Vencimiento",
     "labels": "Etiquetas",
     "noLabels": "Sin etiquetas",
+    "newLabel": "Nueva etiqueta",
+    "labelNamePlaceholder": "Nombre de la etiqueta",
+    "labelExists": "Ya existe una etiqueta con ese nombre",
+    "labelError": "No se ha podido crear la etiqueta",
     "description": "Descripción",
     "descriptionPlaceholder": "Añade una descripción…",
     "titleLabel": "Título",
@@ -125,7 +129,13 @@
     "tooBig": "El archivo supera el límite de 10 MB",
     "uploadError": "No se ha podido subir el archivo",
     "uploadedBy": "subido por {{name}}",
-    "download": "Descargar {{name}}"
+    "download": "Descargar {{name}}",
+    "view": "Ver {{name}}",
+    "viewer": "Visor de imágenes",
+    "closeViewer": "Cerrar visor",
+    "prevPhoto": "Imagen anterior",
+    "nextPhoto": "Imagen siguiente",
+    "counter": "{{current}} de {{total}}"
   },
   "comments": {
     "empty": "Sin comentarios todavía.",

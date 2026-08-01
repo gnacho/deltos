@@ -12,8 +12,14 @@ import type { Attachment, TaskDetail } from '@/data/types';
 import { useData } from '@/data/data-context';
 import { useSession } from '@/auth/session-context';
 import { fmtSize } from '@/lib/format';
+import { ImageLightbox } from '@/components/task/ImageLightbox';
 
 const MAX_BYTES = 10 * 1024 * 1024;
+
+function isImageAttachment(a: Attachment) {
+  const ext = a.filename.split('.').pop()?.toLowerCase() ?? '';
+  return a.mime.startsWith('image/') || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext);
+}
 
 function iconFor(mime: string, filename: string) {
   const ext = filename.split('.').pop()?.toLowerCase() ?? '';
@@ -50,6 +56,17 @@ export function AttachmentsTab({ detail }: { detail: TaskDetail }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [viewer, setViewer] = useState<number | null>(null);
+
+  const images = detail.attachments.filter(isImageAttachment).map((a) => ({
+    src: `/api/attachments/${encodeURIComponent(a.id)}`,
+    alt: a.filename,
+  }));
+
+  const openViewer = (a: Attachment) => {
+    const i = images.findIndex((img) => img.src.endsWith(encodeURIComponent(a.id)));
+    if (i >= 0) setViewer(i);
+  };
 
   const onFile = async (file: File | undefined) => {
     if (!file) return;
@@ -75,17 +92,14 @@ export function AttachmentsTab({ detail }: { detail: TaskDetail }) {
         <ul className="space-y-2.5">
           {detail.attachments.map((a: Attachment) => {
             const { Icon, cls } = iconFor(a.mime, a.filename);
-            return (
-              <li
-                key={a.id}
-                className="flex items-center gap-3 rounded-xl border border-app px-3.5 py-3"
-              >
+            const main = (
+              <>
                 <span
                   className={`w-10 h-10 rounded-lg ${cls} flex items-center justify-center shrink-0`}
                 >
                   <Icon className="w-[18px] h-[18px]" aria-hidden="true" />
                 </span>
-                <span className="flex-1 min-w-0">
+                <span className="flex-1 min-w-0 text-left">
                   <span className="block text-[15px] font-medium truncate">{a.filename}</span>
                   <span className="block text-[13px] text-faint">
                     {fmtSize(a.size, i18n.language)}
@@ -94,6 +108,25 @@ export function AttachmentsTab({ detail }: { detail: TaskDetail }) {
                       : ''}
                   </span>
                 </span>
+              </>
+            );
+            return (
+              <li
+                key={a.id}
+                className="flex items-center gap-3 rounded-xl border border-app px-3.5 py-3"
+              >
+                {isImageAttachment(a) ? (
+                  <button
+                    type="button"
+                    onClick={() => openViewer(a)}
+                    aria-label={t('attachments.view', { name: a.filename })}
+                    className="flex flex-1 min-w-0 items-center gap-3"
+                  >
+                    {main}
+                  </button>
+                ) : (
+                  main
+                )}
                 <a
                   href={`/api/attachments/${encodeURIComponent(a.id)}`}
                   download={a.filename}
@@ -138,6 +171,8 @@ export function AttachmentsTab({ detail }: { detail: TaskDetail }) {
           </p>
         )}
       </div>
+
+      <ImageLightbox images={images} index={viewer} onIndexChange={setViewer} />
     </div>
   );
 }

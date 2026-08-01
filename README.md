@@ -1,48 +1,51 @@
 # Nido
 
-PWA de gestión de tareas para pareja: tablero kanban compartido (Nuevo / En curso / Hecho)
-con sincronización en vivo entre sesiones (SSE), comentarios, adjuntos, feed de actividad,
-filtros, modo claro/oscuro, i18n (es/en) e instalable como app.
+> [Versión en español](README.es.md)
 
-- **Backend** (`server/`): Node 22 + Hono + better-sqlite3 (WAL). Sirve la API, los
-  estáticos del frontend y el stream SSE en el mismo puerto (sin CORS).
-- **Frontend** (`app/`): React 19 + Vite + Tailwind, compilado a `app/dist/`.
+Task-management PWA for couples: a shared kanban board (New / In progress / Done)
+with live sync between sessions (SSE), comments, attachments with an in-app image
+viewer, activity feed, filters, light/dark mode, i18n (es/en) and installable as an app.
 
-## Desarrollo
+- **Backend** (`server/`): Node 22 + Hono + better-sqlite3 (WAL). Serves the API, the
+  frontend statics and the SSE stream on the same port (no CORS).
+- **Frontend** (`app/`): React 19 + Vite + Tailwind, built to `app/dist/`.
 
-Requisito: Node ≥ 22.
+## Development
+
+Requirement: Node ≥ 22.
 
 ```bash
-# Backend (puerto 3000 por defecto; ver server/.env.example)
+# Backend (port 3000 by default; see server/.env.example)
 cd server
 npm ci
-cp .env.example .env   # ajusta AUTH_USER / AUTH_PASS
-npm run dev            # o npm start
+cp .env.example .env   # adjust AUTH_USER / AUTH_PASS
+npm run dev            # or npm start
 
-# Frontend (otro terminal, con proxy al backend en dev)
+# Frontend (another terminal, proxied to the backend in dev)
 cd app
 npm ci
 npm run dev
 
-# Build de producción del frontend (lo sirve el propio backend)
+# Production frontend build (served by the backend itself)
 npm run build
 ```
 
-Con `npm run build` hecho, basta el backend: sirve la SPA desde `app/dist` con fallback SPA.
+With `npm run build` done, the backend alone is enough: it serves the SPA from
+`app/dist` with SPA fallback.
 
-## Credenciales
+## Credentials
 
-- **Producción**: el primer arranque crea el admin con `AUTH_USER` / `AUTH_PASS`
-  (idempotente; si `AUTH_PASS` falta **no** se crea admin y se registra un aviso).
-  En el `.env.example`: `admin` / `cambia-esta-password`.
-- **Demo**: botón «Entrar como demo» en el login (sin contraseña). BD demo separada
-  (`app_demo.db`), sembrada con 3 usuarios, 4 proyectos, 6 etiquetas y 15 tareas.
-  Se puede desactivar en Ajustes (solo admin).
+- **Production**: first boot creates the admin from `AUTH_USER` / `AUTH_PASS`
+  (idempotent; if `AUTH_PASS` is missing, **no** admin is created and a warning is
+  logged). In `.env.example`: `admin` / `cambia-esta-password`.
+- **Demo**: "Sign in as demo" button on the login screen (no password). Separate demo
+  database (`app_demo.db`), seeded with 3 users, 4 projects, 6 labels and 15 tasks.
+  Can be disabled in Settings (admin only).
 
 ## Tests
 
 ```bash
-cd server && npm test          # vitest: 30 tests de API/auth/adjuntos
+cd server && npm test          # vitest: 30 API/auth/attachment tests
 ```
 
 ## Docker
@@ -50,24 +53,25 @@ cd server && npm test          # vitest: 30 tests de API/auth/adjuntos
 ```bash
 docker build -t nido .
 docker run -d --name nido -p 3000:3000 \
-  -e AUTH_USER=admin -e AUTH_PASS='pon-una-password-segura' \
+  -e AUTH_USER=admin -e AUTH_PASS='use-a-strong-password' \
   -v nido-data:/app/data \
   nido
 ```
 
-- Imagen `node:22-slim` multi-etapa: `npm ci --omit=dev` del server + `server/` + `app/dist/`.
-- Variables (ver `server/src/config.js`): `PORT` (3000), `DATA_DIR` (`/app/data`),
-  `STATIC_DIR` (`/app/app/dist`), `AUTH_USER`/`AUTH_PASS` (defaults del Dockerfile:
-  `admin` / `cambiar-1234` — **cámbialos**), `COOKIE_SECURE` (`true` solo tras HTTPS),
-  `SESSION_SECRET` (opcional; si falta se autogenera y persiste en la BD),
+- Multi-stage `node:22-slim` image: `npm ci --omit=dev` for the server + `server/` + `app/dist/`.
+- Variables (see `server/src/config.js`): `PORT` (3000), `DATA_DIR` (`/app/data`),
+  `STATIC_DIR` (`/app/app/dist`), `AUTH_USER`/`AUTH_PASS` (Dockerfile defaults:
+  `admin` / `cambiar-1234` — **change them**), `COOKIE_SECURE` (`true` only behind HTTPS),
+  `SESSION_SECRET` (optional; if missing it is auto-generated and persisted in the DB),
   `MAX_SSE_CLIENTS` (20), `MAX_UPLOAD_MB` (10).
-- El `.env` **no** se copia a la imagen: todo viene de defaults + entorno del contenedor.
-- Persistencia: monta un volumen en `/app/data` (SQLite + uploads).
+- The `.env` file is **not** copied into the image: everything comes from defaults +
+  container environment.
+- Persistence: mount a volume at `/app/data` (SQLite + uploads).
 
-## Despliegue (systemd)
+## Deployment (systemd)
 
-Para despliegue en VPS con systemd + reverse proxy (Caddy/nginx con TLS y
-`COOKIE_SECURE=true`), remite al skill **infraestructura**. Unidad mínima de ejemplo:
+For VPS deployment with systemd + reverse proxy (Caddy/nginx with TLS and
+`COOKIE_SECURE=true`). Minimal example unit:
 
 ```ini
 [Unit]
@@ -79,7 +83,7 @@ WorkingDirectory=/opt/nido/server
 Environment=PORT=3000
 Environment=DATA_DIR=/var/lib/nido
 Environment=AUTH_USER=admin
-Environment=AUTH_PASS=cambia-esto
+Environment=AUTH_PASS=change-this
 ExecStart=/usr/bin/node src/index.js
 Restart=always
 User=nido
@@ -90,6 +94,10 @@ WantedBy=multi-user.target
 
 ## E2E
 
-Verificación E2E con Playwright (login/logout, SSE entre dos sesiones, flujo completo de
-tareas con DnD y adjuntos, ajustes, capturas móvil/desktop en claro y oscuro):
-7/7 tests en verde, 0 errores de consola inesperados. Capturas en `e2e-screenshots/`.
+Playwright E2E verification (login/logout, SSE between two sessions, full task flow
+with DnD and attachments, settings, mobile/desktop screenshots in light and dark mode):
+7/7 tests green, 0 unexpected console errors. Screenshots in `e2e-screenshots/`.
+
+## License
+
+[AGPL-3.0](LICENSE)

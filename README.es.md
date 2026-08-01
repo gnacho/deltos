@@ -1,5 +1,7 @@
 # Nido
 
+> [English version](README.md)
+
 PWA de gestión de tareas para pareja: tablero kanban compartido (Nuevo / En curso / Hecho)
 con sincronización en vivo entre sesiones (SSE), comentarios, adjuntos, feed de actividad,
 filtros, modo claro/oscuro, i18n (es/en) e instalable como app.
@@ -93,3 +95,7 @@ WantedBy=multi-user.target
 Verificación E2E con Playwright (login/logout, SSE entre dos sesiones, flujo completo de
 tareas con DnD y adjuntos, ajustes, capturas móvil/desktop en claro y oscuro):
 7/7 tests en verde, 0 errores de consola inesperados. Capturas en `e2e-screenshots/`.
+
+## Licencia
+
+[AGPL-3.0](LICENSE)
