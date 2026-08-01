@@ -1,5 +1,6 @@
 // config.js — configuración por variables de entorno, validada con zod.
 // Falla rápido al arrancar si la configuración es inválida (ver index.js).
+import { fileURLToPath } from 'node:url'
 import { z } from 'zod'
 import fs from 'node:fs'
 
@@ -16,7 +17,7 @@ if (fs.existsSync(envPath)) {
 const envSchema = z.object({
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   DATA_DIR: z.string().min(1).default(new URL('../data', import.meta.url).pathname),
-  STATIC_DIR: z.string().min(1).default(new URL('../../app/dist', import.meta.url).pathname),
+  STATIC_DIR: z.string().min(1).default(fileURLToPath(new URL('../../app/dist', import.meta.url))),
   // Secret HMAC de sesión (≥32 chars). Si falta, se autogenera y persiste en kv.
   SESSION_SECRET: z.string().min(32).optional(),
   // Bootstrap del primer admin (solo primer arranque, idempotente)

@@ -7,7 +7,7 @@ describe('auth', () => {
   it('login correcto devuelve cookie y /api/auth/me funciona', async () => {
     const { app } = await makeInstance()
     const cookie = await loginAdmin(app)
-    expect(cookie).toMatch(/^session=.+\..+/)
+    expect(cookie).toMatch(/^nido_session=.+\..+/)
 
     const me = await app.request('/api/auth/me', { headers: { cookie } })
     expect(me.status).toBe(200)
@@ -126,11 +126,21 @@ describe('auth', () => {
     expect(body.user.language).toBe('es')
   })
 
-  it('registro público crea usuario con rol user y rechaza duplicados', async () => {
+  it('registro solo admin: 401 sin sesión, crea con rol user y rechaza duplicados', async () => {
     const { app } = await makeInstance()
-    const res = await app.request('/api/auth/register', {
+
+    // Sin sesión: 401 (antes era registro público)
+    const anon = await app.request('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'lucia', password: 'secreta1' }),
+    })
+    expect(anon.status).toBe(401)
+
+    const cookie = await loginAdmin(app)
+    const res = await app.request('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', cookie },
       body: JSON.stringify({ username: 'lucia', password: 'secreta1' }),
     })
     expect(res.status).toBe(201)
@@ -138,14 +148,14 @@ describe('auth', () => {
 
     const dup = await app.request('/api/auth/register', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', cookie },
       body: JSON.stringify({ username: 'lucia', password: 'secreta1' }),
     })
     expect(dup.status).toBe(409)
 
     const short = await app.request('/api/auth/register', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', cookie },
       body: JSON.stringify({ username: 'otro', password: '123' }),
     })
     expect(short.status).toBe(400)

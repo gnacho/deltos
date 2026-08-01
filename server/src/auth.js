@@ -6,7 +6,7 @@ import { serialize, parse } from 'cookie'
 import { kvGet, kvSet } from './db.js'
 
 export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000 // 30 días
-export const COOKIE_NAME = 'session'
+export const COOKIE_NAME = 'nido_session'
 const LOCK_MS = 5 * 60 * 1000 // 5 min de bloqueo tras 5 intentos fallidos
 
 // Secret HMAC: env SESSION_SECRET o autogenerado persistido en kv
@@ -92,7 +92,6 @@ export function resolveSession({ prod, demo, secret }, cookieHeader) {
 // Rutas públicas bajo /api (todo lo demás requiere sesión)
 const PUBLIC_PATHS = new Set([
   '/api/auth/login',
-  '/api/auth/register',
   '/api/auth/demo',
   '/api/auth/logout',
 ])

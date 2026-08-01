@@ -3,6 +3,7 @@ import type { FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   User,
+  Users,
   Sun,
   Moon,
   Monitor,
@@ -12,6 +13,8 @@ import {
   KeyRound,
   LogOut,
   Check,
+  UserPlus,
+  Info,
 } from 'lucide-react';
 import { z } from 'zod';
 import { apiFetch, apiPost, apiPut, dispatchUnauthorized, ApiError } from '@/data/api-client';
@@ -22,6 +25,7 @@ import type { ThemeMode } from '@/theme/theme-context';
 import { applyUserLanguage } from '@/i18n';
 import { Avatar } from '@/components/Avatar';
 import { useInstallPrompt } from '@/hooks/useInstallPrompt';
+import pkg from '../../package.json';
 
 function Card({ children }: { children: React.ReactNode }) {
   return (
@@ -134,9 +138,32 @@ function ProfileCard() {
 }
 
 /* ---------------- Apariencia ---------------- */
+/** Mini-preview de tema con los tokens reales (scope .light/.dark): prohibido hex duplicados. */
+function ThemePreview({ variant }: { variant: 'light' | 'dark' }) {
+  const { t } = useTranslation();
+  return (
+    <div className={`rounded-xl border border-app p-1.5 ${variant}`} style={{ backgroundColor: 'var(--bg)' }}>
+      <div className="flex h-14 flex-col justify-between rounded-lg border border-app p-2" style={{ backgroundColor: 'var(--surface)' }}>
+        <div className="flex items-center justify-between">
+          <span className="flex h-4 w-4 items-center justify-center rounded bg-emerald-500/15 text-emerald-500">
+            <Check className="w-2.5 h-2.5" aria-hidden="true" />
+          </span>
+          <span className="text-[8px] font-medium uppercase tracking-wider" style={{ color: 'var(--text-faint)' }}>
+            {t(variant === 'light' ? 'settings.themeLight' : 'settings.themeDark')}
+          </span>
+        </div>
+        <div className="space-y-1">
+          <div className="h-1.5 w-3/4 rounded-full" style={{ backgroundColor: 'var(--surface-2)' }} />
+          <div className="h-1.5 w-1/2 rounded-full bg-emerald-500/60" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AppearanceCard() {
   const { t } = useTranslation();
-  const { mode, setMode } = useTheme();
+  const { mode, setMode, density, setDensity, reduceMotion, setReduceMotion } = useTheme();
   const opts: { m: ThemeMode; icon: typeof Sun; label: string }[] = [
     { m: 'auto', icon: Monitor, label: t('settings.themeAuto') },
     { m: 'light', icon: Sun, label: t('settings.themeLight') },
@@ -147,7 +174,7 @@ function AppearanceCard() {
       <Heading icon={Sun}>{t('settings.appearance')}</Heading>
       <div
         className="grid grid-cols-3 gap-1 rounded-xl bg-surface2 p-1"
-        role="group"
+        role="radiogroup"
         aria-label={t('settings.appearance')}
       >
         {opts.map(({ m, icon: Icon, label }) => {
@@ -156,7 +183,8 @@ function AppearanceCard() {
             <button
               key={m}
               type="button"
-              aria-pressed={on}
+              role="radio"
+              aria-checked={on}
               onClick={() => setMode(m)}
               className={`flex flex-col items-center gap-1.5 rounded-xl py-3 text-[13px] ${
                 on ? 'bg-surface shadow-soft font-medium' : 'text-muted'
@@ -169,6 +197,52 @@ function AppearanceCard() {
         })}
       </div>
       <p className="text-[13px] text-faint mt-3">{t('settings.themeHint')}</p>
+
+      {/* Previews con tokens reales */}
+      <div className="mt-4 grid grid-cols-2 gap-3">
+        <ThemePreview variant="light" />
+        <ThemePreview variant="dark" />
+      </div>
+
+      {/* Densidad */}
+      <div className="mt-4">
+        <p className="text-[13px] font-medium mb-1.5">{t('settings.density.title')}</p>
+        <div className="grid grid-cols-2 gap-1 rounded-xl bg-surface2 p-1" role="radiogroup" aria-label={t('settings.density.title')}>
+          {(['comfortable', 'compact'] as const).map((d) => (
+            <button
+              key={d}
+              type="button"
+              role="radio"
+              aria-checked={density === d}
+              onClick={() => setDensity(d)}
+              className={`rounded-xl py-2 text-[13px] ${density === d ? 'bg-surface shadow-soft font-medium' : 'text-muted'}`}
+            >
+              {t(`settings.density.${d}`)}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Reducir animaciones */}
+      <div className="mt-4 flex items-center justify-between gap-4">
+        <p className="text-[13px]">{t('settings.reduceMotion')}</p>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={reduceMotion}
+          aria-label={t('settings.reduceMotion')}
+          onClick={() => setReduceMotion(!reduceMotion)}
+          className={`relative w-12 h-7 rounded-full shrink-0 transition-colors ${
+            reduceMotion ? 'bg-emerald-500' : 'bg-surface2 border border-app'
+          }`}
+        >
+          <span
+            className={`absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-white shadow transition-transform ${
+              reduceMotion ? 'translate-x-5' : ''
+            }`}
+          />
+        </button>
+      </div>
     </Card>
   );
 }
@@ -193,36 +267,21 @@ function LanguageCard() {
     }
   };
 
-  const opts: { value: Language; label: string }[] = [
-    { value: 'auto', label: t('settings.langAuto') },
-    { value: 'es', label: 'Español' },
-    { value: 'en', label: 'English' },
-  ];
-
   return (
     <Card>
       <Heading icon={Globe}>{t('settings.language')}</Heading>
-      <div
-        className="grid grid-cols-3 gap-1 rounded-xl bg-surface2 p-1"
-        role="group"
-        aria-label={t('settings.language')}
+      <p className="text-[13px] text-faint mb-3">{t('settings.langHint')}</p>
+      <label className="sr-only" htmlFor="lang-select">{t('settings.language')}</label>
+      <select
+        id="lang-select"
+        value={user.language ?? 'auto'}
+        onChange={(e) => void change(e.target.value as Language)}
+        className={inputCls}
       >
-        {opts.map(({ value, label }) => {
-          const on = (user.language ?? 'auto') === value;
-          return (
-            <button
-              key={value}
-              type="button"
-              aria-pressed={on}
-              onClick={() => void change(value)}
-              className={`rounded-xl py-3 text-[13px] ${on ? 'bg-surface shadow-soft font-medium' : 'text-muted'}`}
-            >
-              {label}
-            </button>
-          );
-        })}
-      </div>
-      <p className="text-[13px] text-faint mt-3">{t('settings.langHint')}</p>
+        <option value="auto">{t('settings.langAuto')}</option>
+        <option value="es">Español</option>
+        <option value="en">English</option>
+      </select>
       {error && (
         <p role="alert" className="text-[13px] font-medium text-rose-600 dark:text-rose-400 mt-2">
           {error}
@@ -232,33 +291,32 @@ function LanguageCard() {
   );
 }
 
-/* ---------------- Instalar ---------------- */
+/* ---------------- Instalar (solo si el navegador lo soporta) ---------------- */
 function InstallCard() {
   const { t } = useTranslation();
   const { state, install } = useInstallPrompt();
+  if (state === 'hidden') return null;
   return (
     <Card>
       <Heading icon={Download}>{t('settings.install')}</Heading>
-      <button
-        type="button"
-        onClick={() => void install()}
-        disabled={state !== 'available'}
-        className="h-14 px-8 rounded-2xl bg-emerald-500 text-white text-[16px] font-semibold inline-flex items-center gap-2.5 hover:bg-emerald-600 shadow-soft disabled:opacity-50"
-      >
-        {state === 'installed' ? (
-          <Check className="w-5 h-5" aria-hidden="true" />
-        ) : (
+      {state === 'available' && (
+        <button
+          type="button"
+          onClick={() => void install()}
+          className="h-14 px-8 rounded-2xl bg-emerald-500 text-white text-[16px] font-semibold inline-flex items-center gap-2.5 hover:bg-emerald-600 shadow-soft"
+        >
           <Download className="w-5 h-5" aria-hidden="true" />
-        )}
-        {t('settings.installButton')}
-      </button>
-      <p className="text-[13px] text-faint mt-3">
-        {state === 'installed'
-          ? t('settings.installDone')
-          : state === 'unavailable'
-            ? t('settings.installUnavailable')
-            : t('settings.installHint')}
-      </p>
+          {t('settings.installButton')}
+        </button>
+      )}
+      {state === 'installed' && (
+        <p className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-[13px] font-medium text-emerald-600 dark:text-emerald-400">
+          <Check className="w-4 h-4" aria-hidden="true" />
+          {t('settings.installDone')}
+        </p>
+      )}
+      {state === 'ios' && <p className="text-[13px] text-faint">{t('settings.installIosHelp')}</p>}
+      {state === 'available' && <p className="text-[13px] text-faint mt-3">{t('settings.installHint')}</p>}
     </Card>
   );
 }
@@ -266,7 +324,6 @@ function InstallCard() {
 /* ---------------- Modo demo (solo admin de producción) ---------------- */
 function DemoCard() {
   const { t } = useTranslation();
-  const { demo } = useSession();
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -324,7 +381,6 @@ function DemoCard() {
           />
         </button>
       </div>
-      {demo && <p className="text-[12px] text-faint mt-2">{t('settings.demoSessionHint')}</p>}
       {error && (
         <p role="alert" className="text-[13px] font-medium text-rose-600 dark:text-rose-400 mt-2">
           {error}
@@ -341,7 +397,7 @@ const pwSchema = z.object({
   confirm: z.string(),
 });
 
-function PasswordCard() {
+function PasswordForm() {
   const { t } = useTranslation();
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
@@ -406,51 +462,169 @@ function PasswordCard() {
   );
 
   return (
-    <Card>
-      <Heading icon={KeyRound}>{t('settings.password')}</Heading>
-      <form onSubmit={submit} noValidate className="space-y-4">
-        {field(
-          'pw-current',
-          t('settings.pwCurrent'),
-          current,
-          setCurrent,
-          errors.current,
-          'current-password',
-        )}
-        {field('pw-next', t('settings.pwNext'), next, setNext, errors.next, 'new-password')}
-        {field(
-          'pw-confirm',
-          t('settings.pwConfirm'),
-          confirm,
-          setConfirm,
-          errors.confirm,
-          'new-password',
-        )}
-        {ok && (
-          <p
-            role="status"
-            className="text-[13px] font-medium text-emerald-600 dark:text-emerald-400 inline-flex items-center gap-1.5"
-          >
-            <Check className="w-4 h-4" aria-hidden="true" />
-            {t('settings.pwChanged')}
-          </p>
-        )}
-        <button
-          type="submit"
-          disabled={busy}
-          className="px-5 h-11 rounded-xl bg-emerald-500 text-white text-[14px] font-semibold hover:bg-emerald-600 disabled:opacity-60"
+    <form onSubmit={submit} noValidate className="space-y-4">
+      {field('pw-current', t('settings.pwCurrent'), current, setCurrent, errors.current, 'current-password')}
+      {field('pw-next', t('settings.pwNext'), next, setNext, errors.next, 'new-password')}
+      {field('pw-confirm', t('settings.pwConfirm'), confirm, setConfirm, errors.confirm, 'new-password')}
+      {ok && (
+        <p
+          role="status"
+          className="text-[13px] font-medium text-emerald-600 dark:text-emerald-400 inline-flex items-center gap-1.5"
         >
-          {busy ? t('settings.pwSubmitting') : t('settings.pwSubmit')}
+          <Check className="w-4 h-4" aria-hidden="true" />
+          {t('settings.pwChanged')}
+        </p>
+      )}
+      <button
+        type="submit"
+        disabled={busy}
+        className="px-5 h-11 rounded-xl bg-emerald-500 text-white text-[14px] font-semibold hover:bg-emerald-600 disabled:opacity-60"
+      >
+        {busy ? t('settings.pwSubmitting') : t('settings.pwSubmit')}
+      </button>
+    </form>
+  );
+}
+
+/* ---------------- Usuarios (solo admin) ---------------- */
+interface AdminUser {
+  id: string;
+  username: string;
+  language: string;
+  role: 'user' | 'admin';
+  color?: string | null;
+}
+
+function UsersCard() {
+  const { t } = useTranslation();
+  const { user: me } = useSession();
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [language, setLanguage] = useState('es');
+  const [role, setRole] = useState<'user' | 'admin'>('user');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+
+  useEffect(() => {
+    apiFetch<{ users?: AdminUser[] }>('/api/users')
+      .then((d) => setUsers(d.users ?? []))
+      .catch(() => setUsers([]));
+  }, []);
+
+  const create = async (e: FormEvent) => {
+    e.preventDefault();
+    if (busy || !username || !password) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await apiPost<{ user: AdminUser }>('/api/users', { username, password, language, role });
+      setUsers((us) => [...us, res.user]);
+      setUsername('');
+      setPassword('');
+      setLanguage('es');
+      setRole('user');
+      setShowCreate(false);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t('settings.users.createError'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card>
+      <Heading icon={Users}>{t('settings.users.title')}</Heading>
+      <p className="text-[13px] text-faint mb-4">{t('settings.users.subtitle')}</p>
+      <ul className="space-y-2 mb-4">
+        {users.map((u) => (
+          <li key={u.id} className="flex items-center gap-3 rounded-xl border border-app bg-surface2 px-3.5 py-2.5">
+            <Avatar name={u.username} color={u.color ?? null} size="md" />
+            <div className="min-w-0 flex-1">
+              <p className="text-[14px] font-medium leading-tight truncate">
+                {u.username}
+                {u.id === me.id && <span className="ml-1.5 text-[12px] font-normal text-faint">({t('settings.users.you')})</span>}
+              </p>
+              <p className="text-[12px] text-faint leading-tight">
+                {u.role === 'admin' ? t('settings.users.roleAdmin') : t('settings.users.roleUser')}
+              </p>
+            </div>
+          </li>
+        ))}
+      </ul>
+
+      {!showCreate ? (
+        <button
+          type="button"
+          onClick={() => setShowCreate(true)}
+          className="inline-flex h-11 items-center gap-2 rounded-xl border border-app bg-surface2 px-5 text-[14px] font-semibold hover:bg-surface"
+        >
+          <UserPlus className="w-4 h-4" aria-hidden="true" />
+          {t('settings.users.create')}
         </button>
-      </form>
+      ) : (
+        <form onSubmit={create} className="space-y-4 border-t border-app pt-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label htmlFor="nu-username" className={labelCls}>{t('settings.users.username')}</label>
+              <input id="nu-username" autoComplete="off" value={username} onChange={(e) => setUsername(e.target.value)} className={inputCls} />
+            </div>
+            <div>
+              <label htmlFor="nu-password" className={labelCls}>{t('settings.users.password')}</label>
+              <input id="nu-password" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} className={inputCls} />
+            </div>
+            <div>
+              <label htmlFor="nu-lang" className={labelCls}>{t('settings.users.language')}</label>
+              <select id="nu-lang" value={language} onChange={(e) => setLanguage(e.target.value)} className={inputCls}>
+                <option value="es">Español</option>
+                <option value="en">English</option>
+              </select>
+            </div>
+            <div>
+              <label htmlFor="nu-role" className={labelCls}>{t('settings.users.role')}</label>
+              <select id="nu-role" value={role} onChange={(e) => setRole(e.target.value as 'user' | 'admin')} className={inputCls}>
+                <option value="user">{t('settings.users.roleUser')}</option>
+                <option value="admin">{t('settings.users.roleAdmin')}</option>
+              </select>
+            </div>
+          </div>
+          {error && (
+            <p role="alert" className="text-[13px] font-medium text-rose-600 dark:text-rose-400">
+              {error}
+            </p>
+          )}
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              disabled={busy || !username || !password}
+              className="inline-flex h-11 items-center gap-2 rounded-xl bg-emerald-500 px-5 text-[14px] font-semibold text-white hover:bg-emerald-600 disabled:opacity-60"
+            >
+              <UserPlus className="w-4 h-4" aria-hidden="true" />
+              {busy ? t('settings.users.creating') : t('settings.users.create')}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowCreate(false);
+                setError(null);
+              }}
+              className="h-11 rounded-xl border border-app px-5 text-[14px] text-muted hover:bg-surface2"
+            >
+              {t('common.cancel')}
+            </button>
+          </div>
+        </form>
+      )}
     </Card>
   );
 }
 
-/* ---------------- Página ---------------- */
-export default function SettingsPage() {
+/* ---------------- Mi sesión (patrón easyzfs: 2 botones) ---------------- */
+function SessionCard() {
   const { t } = useTranslation();
-  const { user, demo } = useSession();
+  const { demo } = useSession();
+  const [showPwd, setShowPwd] = useState(false);
 
   const logout = async () => {
     try {
@@ -461,6 +635,56 @@ export default function SettingsPage() {
     /* Contrato: el logout despacha el MISMO evento unauthorized */
     dispatchUnauthorized();
   };
+
+  return (
+    <Card>
+      <Heading icon={LogOut}>{t('settings.session')}</Heading>
+      <div className="flex flex-wrap gap-2.5">
+        {!demo && (
+          <button
+            type="button"
+            aria-expanded={showPwd}
+            onClick={() => setShowPwd((v) => !v)}
+            className="inline-flex h-11 items-center gap-2 rounded-xl border border-app bg-surface2 px-5 text-[14px] font-semibold hover:bg-surface"
+          >
+            <KeyRound className="w-4 h-4" aria-hidden="true" />
+            {t('settings.changePassword')}
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => void logout()}
+          className="inline-flex h-11 items-center gap-2 rounded-xl bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300 px-5 text-[14px] font-semibold hover:bg-rose-200/70 dark:hover:bg-rose-500/25"
+        >
+          <LogOut className="w-4 h-4" aria-hidden="true" />
+          {demo ? t('demo.exit') : t('settings.logout')}
+        </button>
+      </div>
+      {showPwd && !demo && (
+        <div className="mt-4 border-t border-app pt-4">
+          <PasswordForm />
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/* ---------------- Acerca de ---------------- */
+function AboutCard() {
+  const { t } = useTranslation();
+  return (
+    <Card>
+      <Heading icon={Info}>{t('settings.about.title')}</Heading>
+      <p className="text-[14px] font-medium">{t('settings.about.version', { version: pkg.version })}</p>
+      <p className="text-[13px] text-faint mt-1">{t('settings.about.desc')}</p>
+    </Card>
+  );
+}
+
+/* ---------------- Página ---------------- */
+export default function SettingsPage() {
+  const { t } = useTranslation();
+  const { user, demo } = useSession();
 
   return (
     <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 pt-5 lg:pt-7">
@@ -477,18 +701,11 @@ export default function SettingsPage() {
         <ProfileCard />
         <AppearanceCard />
         <LanguageCard />
-        <InstallCard />
+        {user.role === 'admin' && !demo && <UsersCard />}
         {user.role === 'admin' && !demo && <DemoCard />}
-        <PasswordCard />
-
-        <button
-          type="button"
-          onClick={() => void logout()}
-          className="w-full flex items-center justify-center gap-2 rounded-2xl bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300 px-4 py-3.5 text-[15px] font-semibold shadow-soft hover:bg-rose-200/70 dark:hover:bg-rose-500/25"
-        >
-          <LogOut className="w-[18px] h-[18px]" aria-hidden="true" />
-          {t('settings.logout')}
-        </button>
+        <SessionCard />
+        <InstallCard />
+        <AboutCard />
       </div>
     </div>
   );

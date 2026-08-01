@@ -5,14 +5,17 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 }
 
-export type InstallState = 'available' | 'unavailable' | 'installed';
+export type InstallState = 'available' | 'unavailable' | 'installed' | 'ios' | 'hidden';
 
 /** Captura beforeinstallprompt para el botón grande "Instalar Nido". */
 export function useInstallPrompt(): { state: InstallState; install: () => Promise<void> } {
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null);
   const [installed, setInstalled] = useState(
-    () => window.matchMedia('(display-mode: standalone)').matches,
+    () =>
+      window.matchMedia('(display-mode: standalone)').matches ||
+      (navigator as { standalone?: boolean }).standalone === true,
   );
+  const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
 
   useEffect(() => {
     const onPrompt = (e: Event) => {
@@ -38,8 +41,14 @@ export function useInstallPrompt(): { state: InstallState; install: () => Promis
     if (choice.outcome === 'accepted') setDeferred(null);
   };
 
-  return {
-    state: installed ? 'installed' : deferred ? 'available' : 'unavailable',
-    install,
-  };
+  // Sin evento y no-iOS: el navegador no lo soporta → 'hidden' (la tarjeta no se muestra).
+  const state: InstallState = installed
+    ? 'installed'
+    : deferred
+      ? 'available'
+      : isIos
+        ? 'ios'
+        : 'hidden';
+
+  return { state, install };
 }

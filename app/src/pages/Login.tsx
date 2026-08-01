@@ -3,6 +3,25 @@ import type { FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Sparkles, Sun, Moon } from 'lucide-react';
 import { apiFetch, apiPost, dispatchAuthed, ApiError } from '@/data/api-client';
+
+/**
+ * Fuerza el prompt "guardar contraseña" del navegador tras un login OK en SPA
+ * (sin esto, al no haber recarga de página, el gestor no la ofrece).
+ */
+async function storeCredentials(username: string, password: string) {
+  try {
+    const PC = (
+      window as unknown as {
+        PasswordCredential?: new (d: { id: string; password: string; name?: string }) => Credential;
+      }
+    ).PasswordCredential;
+    if ('credentials' in navigator && PC) {
+      await navigator.credentials.store(new PC({ id: username, password, name: username }));
+    }
+  } catch {
+    /* el usuario rechazó o el navegador no lo soporta: ignorar */
+  }
+}
 import type { MeResponse } from '@/data/types';
 import { LogoMark } from '@/components/Logo';
 import { useTheme } from '@/theme/theme-context';
@@ -48,6 +67,7 @@ export default function Login() {
         { username: username.trim(), password },
         { noAuthEvent: true },
       );
+      await storeCredentials(username.trim(), password);
       dispatchAuthed();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t('login.errorGeneric'));

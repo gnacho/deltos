@@ -256,6 +256,36 @@
     "role": {
       "admin": "Administrator",
       "user": "User"
+    },
+    "density": {
+      "title": "Density",
+      "comfortable": "Comfortable",
+      "compact": "Compact"
+    },
+    "reduceMotion": "Reduce animations",
+    "session": "My session",
+    "changePassword": "Change my password",
+    "installIosHelp": "On iOS: Share → \"Add to Home Screen\".",
+    "users": {
+      "title": "Users",
+      "subtitle": "Manage app users. Administrators only.",
+      "username": "Username",
+      "password": "Password",
+      "language": "Language",
+      "role": "Role",
+      "roleUser": "User",
+      "roleAdmin": "Admin",
+      "you": "you",
+      "create": "Create user",
+      "creating": "Creating…",
+      "createError": "Could not create user",
+      "created": "User created",
+      "empty": "No users"
+    },
+    "about": {
+      "title": "About",
+      "desc": "Couple task manager. 100% local, no cloud.",
+      "version": "Nido v{{version}}"
     }
   },
   "connection": {

@@ -256,6 +256,36 @@
     "role": {
       "admin": "Administrador",
       "user": "Usuario"
+    },
+    "density": {
+      "title": "Densidad",
+      "comfortable": "Cómoda",
+      "compact": "Compacta"
+    },
+    "reduceMotion": "Reducir animaciones",
+    "session": "Mi sesión",
+    "changePassword": "Cambiar mi contraseña",
+    "installIosHelp": "En iOS: Compartir → «Añadir a pantalla de inicio».",
+    "users": {
+      "title": "Usuarios",
+      "subtitle": "Gestiona los usuarios de la aplicación. Solo administradores.",
+      "username": "Usuario",
+      "password": "Contraseña",
+      "language": "Idioma",
+      "role": "Rol",
+      "roleUser": "Usuario",
+      "roleAdmin": "Admin",
+      "you": "tú",
+      "create": "Crear usuario",
+      "creating": "Creando…",
+      "createError": "No se pudo crear el usuario",
+      "created": "Usuario creado",
+      "empty": "No hay usuarios"
+    },
+    "about": {
+      "title": "Acerca de",
+      "desc": "Tareas en pareja. 100% local, sin nube.",
+      "version": "Nido v{{version}}"
     }
   },
   "connection": {

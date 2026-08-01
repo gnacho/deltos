@@ -86,7 +86,10 @@ export function createApp(ctx) {
   const cookieOpts = { secure: config.cookieSecure }
 
   // --- Autenticación ---
+  // Alta de usuarios: solo admin (registro público eliminado, regla base común)
   app.post('/api/auth/register', async (c) => {
+    const denied = auth.requireAdmin(c)
+    if (denied) return denied
     const { data, error } = await parseJson(c, registerSchema)
     if (error) return c.json({ error }, 400)
     const user = await auth.registerUser(prod, data.username, data.password, {
