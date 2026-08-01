@@ -35,7 +35,9 @@
     "goTodo": "Ir a la vista Todo",
     "currentAccount": "Cuenta actual",
     "projectsSection": "PROYECTOS",
-    "boardSelect": "Proyecto"
+    "boardSelect": "Proyecto",
+    "collapse": "Plegar menú",
+    "expand": "Desplegar menú"
   },
   "columns": {
     "nuevo": "Nuevo",
@@ -272,5 +274,9 @@
   },
   "a11y": {
     "announce": "Avisos de movimientos de tarjetas"
+  },
+  "demo": {
+    "banner": "Modo demo — los cambios no se aplican al sistema",
+    "exit": "Salir del demo"
   }
 }

@@ -35,7 +35,9 @@
     "goTodo": "Go to the All view",
     "currentAccount": "Current account",
     "projectsSection": "PROJECTS",
-    "boardSelect": "Project"
+    "boardSelect": "Project",
+    "collapse": "Collapse menu",
+    "expand": "Expand menu"
   },
   "columns": {
     "nuevo": "New",
@@ -272,5 +274,9 @@
   },
   "a11y": {
     "announce": "Card movement announcements"
+  },
+  "demo": {
+    "banner": "Demo mode — changes are not applied to the system",
+    "exit": "Exit demo"
   }
 }
