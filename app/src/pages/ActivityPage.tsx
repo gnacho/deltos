@@ -12,7 +12,8 @@ import {
   Type,
 } from 'lucide-react';
 import { apiFetch } from '@/data/api-client';
-import type { ActivityEventType, ActivityFeedItem, ActivityPage } from '@/data/types';
+import { apiErrorText } from '@/lib/errors';
+import type { ActivityEventType, ActivityFeed, ActivityFeedItem } from '@/data/types';
 import { useData } from '@/data/data-context';
 import { useTaskModal } from '@/components/modal-context';
 import { EventText } from '@/components/task/EventText';
@@ -37,31 +38,32 @@ function dayKey(ts: number): string {
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 }
 
-/** Vista Actividad: feed global paginado ("Cargar más"), agrupado por día. */
+/** Vista Actividad: feed global con paginación keyset ("Cargar más" usa nextCursor), agrupado por día. */
 export default function ActivityPage() {
   const { t } = useTranslation();
   const data = useData();
   const { openTask } = useTaskModal();
 
   const [items, setItems] = useState<ActivityFeedItem[]>([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(
-    async (p: number, append: boolean) => {
+    async (cursor: string | null, append: boolean) => {
       if (append) setLoadingMore(true);
       else setLoading(true);
       setError(null);
       try {
-        const res = await apiFetch<ActivityPage>(`/api/activity?page=${p}&limit=${PAGE_SIZE}`);
+        const qs = cursor ? `&cursor=${encodeURIComponent(cursor)}` : '';
+        const res = await apiFetch<ActivityFeed>(`/api/activity?limit=${PAGE_SIZE}${qs}`);
         setItems((prev) => (append ? [...prev, ...res.items] : res.items));
-        setTotal(res.total);
-        setPage(res.page);
+        setNextCursor(res.nextCursor);
+        setHasMore(res.hasMore);
       } catch (err) {
-        setError(err instanceof Error ? err.message : t('activityPage.error'));
+        setError(apiErrorText(err, t('activityPage.error')));
       } finally {
         setLoading(false);
         setLoadingMore(false);
@@ -71,10 +73,8 @@ export default function ActivityPage() {
   );
 
   useEffect(() => {
-    void load(1, false);
+    void load(null, false);
   }, [load]);
-
-  const hasMore = items.length < total;
 
   /* Agrupar por día manteniendo el orden (reciente primero) */
   const groups: { key: string; label: string; items: ActivityFeedItem[] }[] = [];
@@ -105,7 +105,6 @@ export default function ActivityPage() {
           </h1>
           <p className="text-sm text-muted mt-0.5">{t('activityPage.subtitle')}</p>
         </div>
-        <p className="tnum text-sm text-muted">{t('activityPage.events', { count: total })}</p>
       </div>
 
       <div className="max-w-2xl mx-auto">
@@ -121,8 +120,8 @@ export default function ActivityPage() {
             <p className="text-sm text-muted mb-4">{error}</p>
             <button
               type="button"
-              onClick={() => void load(1, false)}
-              className="px-5 py-2.5 rounded-xl bg-emerald-500 text-white text-[14px] font-semibold hover:bg-emerald-600"
+              onClick={() => void load(null, false)}
+              className="px-5 py-2.5 rounded-xl bg-brand text-brandfg text-[14px] font-semibold hover:brightness-110"
             >
               {t('common.retry')}
             </button>
@@ -190,10 +189,10 @@ export default function ActivityPage() {
               </section>
             ))}
 
-            {hasMore && (
+            {hasMore && nextCursor && (
               <button
                 type="button"
-                onClick={() => void load(page + 1, true)}
+                onClick={() => void load(nextCursor, true)}
                 disabled={loadingMore}
                 className="w-full mt-2 flex items-center justify-center gap-2 rounded-2xl border border-dashed border-app px-4 py-3.5 text-[14px] font-medium text-muted hover:bg-surface2 disabled:opacity-60"
               >

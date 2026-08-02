@@ -72,7 +72,7 @@ export default function AuthGate({ children }: { children: ReactNode }) {
     return (
       <div className="min-h-screen flex items-center justify-center" role="status">
         <div className="flex flex-col items-center gap-3">
-          <span className="w-10 h-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center shadow-soft">
+          <span className="w-10 h-10 rounded-xl bg-brand text-brandfg flex items-center justify-center shadow-soft">
             <svg
               className="w-5 h-5 animate-pulse"
               viewBox="0 0 24 24"

@@ -2,9 +2,13 @@
 // Auth: la sesión viaja por cookie HttpOnly SameSite=Lax mismo-origen (como el
 // resto de mutaciones de la app; no hay cabecera CSRF separada en Deltos).
 // El endpoint push es una capability URL SECRETA: nunca se loguea.
+// Convenciones api-stack: zValidator + envelope de errores vía httpError().
 import crypto from 'node:crypto'
 import { z } from 'zod'
+import { zValidator } from '@hono/zod-validator'
 import { isPushConfigured, pushPublicKey } from './push.js'
+import { httpError, validationHook } from './errors.js'
+import { ERROR_CODES } from './error-codes.js'
 
 const subscribeSchema = z.object({
   endpoint: z.string().url().max(1000),
@@ -24,20 +28,18 @@ export function registerPushRoutes(app) {
   // se sirve con sesión. En demo y sin claves configuradas la UI lo detecta.
   app.get('/api/push/vapid-public-key', (c) => {
     if (c.get('demo')) return c.json({ demo: true })
-    if (!isPushConfigured()) return c.json({ error: 'push no configurado en el servidor' }, 503)
+    if (!isPushConfigured()) httpError(503, ERROR_CODES.PUSH_NOT_CONFIGURED)
     return c.json({ publicKey: pushPublicKey() })
   })
 
   // Upsert por endpoint: re-suscripción o cambio de usuario en el mismo
   // navegador = UPDATE (el endpoint es único por dispositivo/navegador).
-  app.post('/api/push/subscribe', async (c) => {
-    if (c.get('demo')) return c.json({ demo: true, error: 'sin push real en modo demo' }, 501)
-    if (!isPushConfigured()) return c.json({ error: 'push no configurado en el servidor' }, 503)
-    const body = await c.req.json().catch(() => null)
-    const parsed = subscribeSchema.safeParse(body)
-    if (!parsed.success) return c.json({ error: 'suscripción inválida' }, 400)
+  app.post('/api/push/subscribe', zValidator('json', subscribeSchema, validationHook), (c) => {
+    if (c.get('demo')) httpError(501, ERROR_CODES.PUSH_DEMO_UNAVAILABLE)
+    if (!isPushConfigured()) httpError(503, ERROR_CODES.PUSH_NOT_CONFIGURED)
     const db = c.get('db')
     const user = c.get('user')
+    const data = c.req.valid('json')
     const now = Date.now()
     db.prepare(
       `INSERT INTO push_subscriptions (id, user_id, endpoint, p256dh, auth, user_agent, created_at, updated_at)
@@ -51,9 +53,9 @@ export function registerPushRoutes(app) {
     ).run(
       crypto.randomUUID(),
       user.id,
-      parsed.data.endpoint,
-      parsed.data.keys.p256dh,
-      parsed.data.keys.auth,
+      data.endpoint,
+      data.keys.p256dh,
+      data.keys.auth,
       c.req.header('user-agent') || null,
       now,
       now
@@ -62,14 +64,12 @@ export function registerPushRoutes(app) {
   })
 
   // Borra SOLO si la suscripción pertenece al usuario de la sesión.
-  app.delete('/api/push/unsubscribe', async (c) => {
-    if (c.get('demo')) return c.json({ demo: true }, 200)
-    const body = await c.req.json().catch(() => null)
-    const parsed = unsubscribeSchema.safeParse(body)
-    if (!parsed.success) return c.json({ error: 'petición inválida' }, 400)
+  app.delete('/api/push/unsubscribe', zValidator('json', unsubscribeSchema, validationHook), (c) => {
+    if (c.get('demo')) return c.json({ demo: true }, 200) // demo: no hay nada que borrar
     const db = c.get('db')
+    const data = c.req.valid('json')
     db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ? AND user_id = ?')
-      .run(parsed.data.endpoint, c.get('user').id)
-    return c.json({ ok: true })
+      .run(data.endpoint, c.get('user').id)
+    return c.body(null, 204)
   })
 }

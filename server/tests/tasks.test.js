@@ -160,7 +160,7 @@ describe('tasks', () => {
     const a = await createTask(app, cookie, project.id, 'A')
     await createTask(app, cookie, project.id, 'B')
     const res = await app.request(`/api/tasks/${a.id}`, jsonReq(cookie, 'DELETE', ''))
-    expect(res.status).toBe(200)
+    expect(res.status).toBe(204)
     expect(await positions(app, cookie, 'nuevo')).toEqual([{ title: 'B', position: 0 }])
     const gone = await app.request(`/api/tasks/${a.id}`, { headers: { cookie } })
     expect(gone.status).toBe(404)
@@ -193,32 +193,39 @@ describe('tasks', () => {
     expect(boot.tasks[0].counts.attachments).toBe(0)
   })
 
-  it('feed global /api/activity pagina y enriquece con tarea/proyecto/usuario', async () => {
+  it('feed global /api/activity pagina keyset y enriquece con tarea/proyecto/usuario', async () => {
     const { app, cookie, project } = await setup()
     const t = await createTask(app, cookie, project.id, 'Feed')
     await app.request(
       `/api/tasks/${t.id}/move`,
       jsonReq(cookie, 'POST', '', { column: 'hecho', position: 0 })
     )
-    const res = await app.request('/api/activity?page=1&limit=1', { headers: { cookie } })
+    const res = await app.request('/api/activity?limit=1', { headers: { cookie } })
     const body = await res.json()
-    expect(body.total).toBe(2)
     expect(body.items).toHaveLength(1)
+    expect(body.hasMore).toBe(true)
+    expect(body.nextCursor).toBeTruthy()
     expect(body.items[0].type).toBe('moved')
     expect(body.items[0].task_title).toBe('Feed')
     expect(body.items[0].project_name).toBe('Casa')
     expect(body.items[0].username).toBe('admin')
 
-    const page2 = await (await app.request('/api/activity?page=2&limit=1', { headers: { cookie } })).json()
+    const page2 = await (
+      await app.request(`/api/activity?limit=1&cursor=${encodeURIComponent(body.nextCursor)}`, { headers: { cookie } })
+    ).json()
+    expect(page2.items).toHaveLength(1)
     expect(page2.items[0].type).toBe('created')
+    expect(page2.hasMore).toBe(false)
+    expect(page2.nextCursor).toBeNull()
   })
 
-  it('validación: título vacío y fecha mal formada → 400', async () => {
+  it('validación: título vacío y fecha mal formada → 422', async () => {
     const { app, cookie, project } = await setup()
     const bad1 = await app.request('/api/tasks', jsonReq(cookie, 'POST', '/api/tasks', { project_id: project.id, title: '' }))
-    expect(bad1.status).toBe(400)
+    expect(bad1.status).toBe(422)
+    expect((await bad1.json()).error.code).toBe('VALIDATION_FAILED')
     const t = await createTask(app, cookie, project.id, 'Fecha')
     const bad2 = await app.request(`/api/tasks/${t.id}`, jsonReq(cookie, 'PATCH', '', { due_date: '31-12-2026' }))
-    expect(bad2.status).toBe(400)
+    expect(bad2.status).toBe(422)
   })
 })

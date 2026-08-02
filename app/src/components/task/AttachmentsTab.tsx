@@ -9,6 +9,7 @@ import {
   Paperclip,
 } from 'lucide-react';
 import type { Attachment, TaskDetail } from '@/data/types';
+import { apiErrorText } from '@/lib/errors';
 import { useData } from '@/data/data-context';
 import { useSession } from '@/auth/session-context';
 import { fmtSize } from '@/lib/format';
@@ -79,7 +80,7 @@ export function AttachmentsTab({ detail }: { detail: TaskDetail }) {
     try {
       await data.uploadAttachment(detail.task.id, file);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('attachments.uploadError'));
+      setError(apiErrorText(err, t('attachments.uploadError')));
     } finally {
       setUploading(false);
       if (inputRef.current) inputRef.current.value = '';

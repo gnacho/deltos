@@ -15,7 +15,10 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <script>
-      /* Anti-FOUC: aplica el tema guardado antes de pintar */
+      /* Anti-FOUC: aplica tema + acento + densidad guardados antes de pintar.
+         ESPEJO de src/theme/accents.ts y src/theme/ThemeProvider.tsx:
+         mismas claves localStorage, misma tabla de acentos. Si cambias una,
+         cambia la otra o habrá flash al cargar. */
       (function () {
         var dark = false;
         try {
@@ -30,8 +33,33 @@
         if (dark) document.documentElement.classList.add('dark');
         var m = document.getElementById('theme-color-meta');
         if (m) m.setAttribute('content', dark ? '#080D1A' : '#F4F6FA');
-        if (localStorage.getItem('deltos-density') === 'compact') document.documentElement.style.fontSize = '13.5px';
-        if (localStorage.getItem('deltos-reduce-motion') === '1') document.documentElement.classList.add('reduce-motion');
+        /* Acento: [color, soft] por tema — copia exacta de ACCENTS (accents.ts) */
+        try {
+          var ACC = {
+            emerald: { l: ['#047857', '#d1fae5'], d: ['#34d399', '#122a20'] },
+            sky: { l: ['#0369a1', '#e0f2fe'], d: ['#38bdf8', '#10222e'] },
+            violet: { l: ['#6d28d9', '#ede9fe'], d: ['#a78bfa', '#1e1a2e'] },
+            amber: { l: ['#b45309', '#fef3c7'], d: ['#fbbf24', '#2b2210'] },
+          };
+          var tri = function (hex) {
+            var n = parseInt(hex.slice(1), 16);
+            return ((n >> 16) & 255) + ' ' + ((n >> 8) & 255) + ' ' + (n & 255);
+          };
+          var a = ACC[localStorage.getItem('deltos-accent')] || ACC.emerald;
+          var v = dark ? a.d : a.l;
+          var st = document.documentElement.style;
+          st.setProperty('--accent-rgb', tri(v[0]));
+          st.setProperty('--accent-soft-rgb', tri(v[1]));
+          st.setProperty('--accent-fg-rgb', dark ? '12 20 37' : '255 255 255');
+        } catch (e) {}
+        try {
+          if (localStorage.getItem('deltos-density') === 'compact') {
+            document.documentElement.style.fontSize = '13.5px';
+            document.documentElement.dataset.density = 'compact';
+          }
+          if (localStorage.getItem('deltos-reduce-motion') === '1')
+            document.documentElement.classList.add('reduce-motion');
+        } catch (e) {}
       })();
     </script>
     <script>

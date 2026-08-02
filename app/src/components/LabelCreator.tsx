@@ -6,6 +6,7 @@ import type { Label } from '@/data/types';
 import { useData } from '@/data/data-context';
 import { colorOf, PROJECT_COLORS } from '@/lib/colors';
 import { ApiError } from '@/data/api-client';
+import { apiErrorText } from '@/lib/errors';
 
 /** Chip "+" que se expande a un mini-formulario inline para crear una etiqueta. */
 export function LabelCreator({ onCreated }: { onCreated?: (label: Label) => void }) {
@@ -35,7 +36,11 @@ export function LabelCreator({ onCreated }: { onCreated?: (label: Label) => void
       onCreated?.(label);
       reset();
     } catch (err) {
-      setError(err instanceof ApiError && err.status === 409 ? t('task.labelExists') : t('task.labelError'));
+      setError(
+        err instanceof ApiError && err.code === 'LABEL_NAME_TAKEN'
+          ? t('task.labelExists')
+          : apiErrorText(err, t('task.labelError')),
+      );
     } finally {
       setSaving(false);
     }
@@ -70,13 +75,13 @@ export function LabelCreator({ onCreated }: { onCreated?: (label: Label) => void
           autoFocus
           onChange={(e) => setName(e.target.value)}
           placeholder={t('task.labelNamePlaceholder')}
-          className="flex-1 min-w-0 bg-surface border border-app rounded-lg px-2.5 py-1.5 text-[13px] outline-none focus:border-emerald-500"
+          className="flex-1 min-w-0 bg-surface border border-app rounded-lg px-2.5 py-1.5 text-[13px] outline-none focus:border-brand"
         />
         <button
           type="submit"
           disabled={saving || !name.trim()}
           aria-label={t('common.create')}
-          className="shrink-0 w-8 h-8 rounded-lg bg-emerald-500 text-white flex items-center justify-center hover:bg-emerald-600 disabled:opacity-50"
+          className="shrink-0 w-8 h-8 rounded-lg bg-brand text-brandfg flex items-center justify-center hover:brightness-110 disabled:opacity-50"
         >
           <Check className="w-4 h-4" aria-hidden="true" />
         </button>

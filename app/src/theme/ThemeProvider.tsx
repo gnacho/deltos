@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { ThemeContext, type Density, type ThemeApi, type ThemeMode } from './theme-context';
+import { ACCENT_KEY, applyAccent, readAccent, type AccentId } from './accents';
 
 const STORAGE_KEY = 'deltos-theme';
 const DENSITY_KEY = 'deltos-density';
@@ -15,7 +16,11 @@ function readDensity(): Density {
 }
 
 function applyDensity(d: Density) {
-  document.documentElement.style.fontSize = d === 'compact' ? '13.5px' : '16px';
+  const root = document.documentElement;
+  root.style.fontSize = d === 'compact' ? '13.5px' : '';
+  // Palanca para reglas CSS puntuales (ver index.css, [data-density='compact'])
+  if (d === 'compact') root.dataset.density = 'compact';
+  else delete root.dataset.density;
 }
 
 /** Anti-FOUC: aplicar preferencias antes del primer render (main.tsx). */
@@ -48,6 +53,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [mode, setModeState] = useState<ThemeMode>(readMode);
   const [dark, setDark] = useState<boolean>(() => effectiveDark(readMode()));
   const [density, setDensityState] = useState<Density>(readDensity);
+  const [accent, setAccentState] = useState<AccentId>(readAccent);
   const [reduceMotion, setReduceMotionState] = useState<boolean>(() => {
     try {
       return localStorage.getItem(REDUCE_MOTION_KEY) === '1';
@@ -65,6 +71,20 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     apply(mode);
   }, [mode, apply]);
+
+  /* Acento: re-aplicar al cambiar de acento O de tema efectivo */
+  useEffect(() => {
+    applyAccent(accent, dark);
+  }, [accent, dark]);
+
+  const setAccent = useCallback((a: AccentId) => {
+    try {
+      localStorage.setItem(ACCENT_KEY, a);
+    } catch {
+      /* sin localStorage */
+    }
+    setAccentState(a);
+  }, []);
 
   /* En modo auto, seguir al sistema en vivo */
   useEffect(() => {
@@ -117,8 +137,19 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<ThemeApi>(
-    () => ({ mode, dark, setMode, toggle, density, setDensity, reduceMotion, setReduceMotion }),
-    [mode, dark, setMode, toggle, density, setDensity, reduceMotion, setReduceMotion],
+    () => ({
+      mode,
+      dark,
+      setMode,
+      toggle,
+      accent,
+      setAccent,
+      density,
+      setDensity,
+      reduceMotion,
+      setReduceMotion,
+    }),
+    [mode, dark, setMode, toggle, accent, setAccent, density, setDensity, reduceMotion, setReduceMotion],
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

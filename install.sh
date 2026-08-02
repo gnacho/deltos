@@ -2,7 +2,7 @@
 # =============================================================================
 # Deltos — one-liner installer (Linux server)
 #
-#   Kanban PWA for shared tasks and boards (Node 22 + SQLite, frontend built).
+#   Kanban PWA for shared tasks and boards (Node 24 + SQLite, frontend built).
 #   Installs the versioned Node runtime + the app release (node_modules
 #   pre-built) as a sandboxed systemd service.
 #
@@ -30,7 +30,7 @@ APP_NAME="deltos"
 GH_REPO="gnacho/deltos"
 DESCRIPTION="Kanban PWA for shared tasks and boards"
 DEFAULT_PORT="3000"
-NODE_VERSION="22.23.2"
+NODE_VERSION="24.18.1"
 OPT_DIR="/opt/$APP_NAME"
 STATE_DIR="/var/lib/$APP_NAME"
 CONF_DIR="/etc/$APP_NAME"
@@ -147,7 +147,7 @@ if [ -n "${AVAIL_MB:-}" ]; then
 fi
 MEM_MB=$(awk '/^MemAvailable:/ {print int($2/1024)}' /proc/meminfo 2>/dev/null || true)
 if [ -n "${MEM_MB:-}" ] && [ "$MEM_MB" -lt 400 ]; then
-    warn "low memory: ${MEM_MB} MB available — Node 22 + Deltos is happier with 400+ MB"
+    warn "low memory: ${MEM_MB} MB available — Node 24 + Deltos is happier with 400+ MB"
 fi
 
 # ------------------------------------------------------ port pre-flight -----

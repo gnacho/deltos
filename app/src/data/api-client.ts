@@ -2,24 +2,64 @@
  * Cliente HTTP centralizado (base común). UN solo punto de salida HTTP.
  * Nada de fetch() disperso por componentes.
  *
+ * Contrato del backend (CONVENTIONS.md):
+ * - TODO 4xx/5xx llega como envelope {error:{code,message,details?}}.
+ *   `code` es estable y machine-readable: la UI traduce por código
+ *   (ver lib/errors.ts y el namespace `errors` de los locales); `message`
+ *   (español) es solo fallback.
+ * - Validación zod → 422 VALIDATION_FAILED con details.issues crudos.
+ * - DELETE → 204 SIN cuerpo (no se intenta parsear JSON).
+ * - POST que crea → 201.
  * - Auth por cookie HttpOnly (credentials: 'same-origin').
- * - 401 → despacha `deltos-unauthorized` UNA vez (anti-cascada). AuthGate reacciona
- *   y muestra Login. NUNCA location.assign('/login').
- * - Login/check inicial/logout pasan `noAuthEvent` para no auto-disparar el evento.
- * - Errores tipados del backend ({error} → ApiError con .status/.body).
+ * - 401 → despacha `deltos-unauthorized` UNA vez (anti-cascada). AuthGate
+ *   reacciona y muestra Login. NUNCA location.assign('/login').
+ * - Login/check inicial/logout pasan `noAuthEvent` para no auto-disparar.
  */
 
 const APP_SLUG = 'deltos';
 
+/** Envelope de error del backend (todo 4xx/5xx). */
+export interface ApiErrorEnvelope {
+  error?: {
+    code?: string;
+    message?: string;
+    details?: unknown;
+  };
+}
+
+/** Issue crudo de zod tal y como llega en details.issues de un 422. */
+export interface ValidationIssue {
+  path?: (string | number)[];
+  code?: string;
+  message?: string;
+}
+
 export class ApiError extends Error {
   readonly status: number;
+  /** Código estable del catálogo (p. ej. 'TASK_NOT_FOUND'); null si no vino. */
+  readonly code: string | null;
+  /** details del envelope (en 422: {issues: ValidationIssue[]}). */
+  readonly details?: unknown;
   readonly body?: unknown;
 
-  constructor(message: string, status: number, body?: unknown) {
+  constructor(
+    message: string,
+    status: number,
+    opts?: { code?: string | null; details?: unknown; body?: unknown },
+  ) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
-    this.body = body;
+    this.code = opts?.code ?? null;
+    this.details = opts?.details;
+    this.body = opts?.body;
+  }
+
+  /** Issues de zod si el error es un 422 VALIDATION_FAILED. */
+  validationIssues(): ValidationIssue[] {
+    if (this.code !== 'VALIDATION_FAILED') return [];
+    const issues = (this.details as { issues?: unknown } | undefined)?.issues;
+    return Array.isArray(issues) ? (issues as ValidationIssue[]) : [];
   }
 }
 
@@ -47,7 +87,17 @@ export function dispatchAuthed(): void {
 
 function handleUnauthorized(): never {
   dispatchUnauthorized();
-  throw new ApiError('Sesión expirada', 401);
+  throw new ApiError('Sesión expirada', 401, { code: 'AUTH_REQUIRED' });
+}
+
+/** Desenvuelve el envelope {error:{code,message,details}} → ApiError. */
+function toApiError(body: unknown, status: number): ApiError {
+  const env = (body as ApiErrorEnvelope | null)?.error;
+  return new ApiError(env?.message ?? `Error HTTP ${status}`, status, {
+    code: env?.code ?? null,
+    details: env?.details,
+    body,
+  });
 }
 
 export interface ApiOptions extends RequestInit {
@@ -63,29 +113,27 @@ export async function apiFetch<T>(path: string, init?: ApiOptions): Promise<T> {
     headers: { Accept: 'application/json', ...rest.headers },
   });
 
+  // 204 No Content (DELETE y cía.): jamás intentar parsear cuerpo.
+  if (res.status === 204) return undefined as T;
+
   if (res.status === 401) {
     if (noAuthEvent) {
-      const body = (await res.json().catch(() => null)) as { error?: string } | null;
-      throw new ApiError(body?.error ?? 'No autorizado', 401, body);
+      const body = (await res.json().catch(() => null)) as unknown;
+      throw toApiError(body, 401);
     }
     handleUnauthorized();
   }
 
   const contentType = res.headers.get('content-type') ?? '';
   if (!contentType.includes('application/json')) {
-    // P. ej. un proxy devolviendo HTML de error: no parsear a ciegas.
+    if (!res.ok) throw new ApiError(`Error HTTP ${res.status}`, res.status);
+    // P. ej. un proxy devolviendo HTML: no parsear a ciegas.
     throw new ApiError(`Respuesta no JSON (${res.status})`, res.status);
   }
 
   const body = (await res.json()) as unknown;
 
-  if (!res.ok) {
-    const message =
-      typeof body === 'object' && body !== null && 'error' in body
-        ? String((body as { error: unknown }).error)
-        : `Error HTTP ${res.status}`;
-    throw new ApiError(message, res.status, body);
-  }
+  if (!res.ok) throw toApiError(body, res.status);
 
   return body as T;
 }

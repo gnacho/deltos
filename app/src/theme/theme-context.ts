@@ -1,4 +1,5 @@
 import { createContext, useContext } from 'react';
+import type { AccentId } from './accents';
 
 export type ThemeMode = 'auto' | 'light' | 'dark';
 
@@ -11,6 +12,9 @@ export interface ThemeApi {
   setMode: (mode: ThemeMode) => void;
   /** Toggle rápido del header: fuerza claro/oscuro explícito. */
   toggle: () => void;
+  /** Color de acento (par [color, soft] por tema, ver theme/accents.ts). */
+  accent: AccentId;
+  setAccent: (a: AccentId) => void;
   density: Density;
   setDensity: (d: Density) => void;
   reduceMotion: boolean;

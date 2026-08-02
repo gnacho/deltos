@@ -144,7 +144,7 @@ export function TaskModal({
                   onClick={() => setTab(id)}
                   className={`relative flex items-center gap-1 lg:gap-1.5 px-2 lg:px-3 py-2.5 -mb-px border-b-2 text-[12px] lg:text-[13px] font-medium whitespace-nowrap shrink-0 ${
                     active
-                      ? 'border-emerald-500 text-emerald-700 dark:text-emerald-400'
+                      ? 'border-brand text-brand'
                       : 'border-transparent text-muted hover:text-[var(--text)]'
                   }`}
                 >

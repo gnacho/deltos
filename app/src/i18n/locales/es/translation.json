@@ -212,8 +212,6 @@
   },
   "activityPage": {
     "subtitle": "Todos los movimientos de vuestros tableros",
-    "events_one": "{{count}} evento",
-    "events_other": "{{count}} eventos",
     "empty": "Todavía no hay actividad.",
     "loadMore": "Cargar más",
     "loadingMore": "Cargando…",
@@ -301,14 +299,17 @@
       "title": "Acerca de",
       "desc": "Tareas en pareja. 100% local, sin nube.",
       "version": "Deltos v{{version}}",
-      "source": "Código fuente",
       "checkUpdates": "Comprobar actualizaciones",
       "checking": "Comprobando…",
       "upToDate": "Estás al día — v{{version}} es la última versión",
       "updateAvailable": "Nueva versión disponible: v{{version}}",
       "viewRelease": "Ver novedades",
       "updateError": "No se pudo comprobar. Inténtalo de nuevo.",
-      "updateNow": "Actualizar y recargar"
+      "updateNow": "Actualizar y recargar",
+      "stack": "Node 24 · Hono · SQLite · React 19",
+      "stackLabel": "Stack",
+      "repoLabel": "Código",
+      "repoHint": "github.com/gnacho/deltos"
     },
     "notifications": "Notificaciones",
     "notifHint": "Avisos cuando la otra persona cree, mueva, comente o te asigne tarjetas, aunque tengas la app cerrada.",
@@ -321,7 +322,15 @@
     "notifNotConfigured": "El servidor no tiene claves push configuradas.",
     "notifDemo": "No disponible en modo demo.",
     "notifIos": "En iPhone/iPad las alertas solo funcionan con la app instalada: Compartir → Añadir a pantalla de inicio.",
-    "notifError": "No se pudieron activar las alertas. Inténtalo de nuevo."
+    "notifError": "No se pudieron activar las alertas. Inténtalo de nuevo.",
+    "accent": {
+      "title": "Color de acento",
+      "hint": "Se aplica a botones, pestañas y navegación.",
+      "emerald": "Esmeralda",
+      "sky": "Cielo",
+      "violet": "Violeta",
+      "amber": "Ámbar"
+    }
   },
   "connection": {
     "live": "En vivo",
@@ -343,5 +352,40 @@
   "demo": {
     "banner": "Modo demo — los cambios no se aplican al sistema",
     "exit": "Salir del demo"
+  },
+  "errors": {
+    "BAD_REQUEST": "La petición es incorrecta",
+    "VALIDATION_FAILED": "Los datos enviados no son válidos. Revisa los campos marcados.",
+    "INVALID_CURSOR": "El cursor de paginación es inválido",
+    "NOT_FOUND": "Recurso no encontrado",
+    "PAYLOAD_TOO_LARGE": "La petición es demasiado grande",
+    "UNIQUE_VIOLATION": "Ya existe un recurso con esos datos",
+    "RATE_LIMITED": "Demasiadas peticiones, inténtalo más tarde",
+    "INTERNAL_ERROR": "Error interno del servidor",
+    "AUTH_REQUIRED": "Sesión no válida, vuelve a entrar",
+    "AUTH_INVALID_CREDENTIALS": "Usuario o contraseña incorrectos",
+    "AUTH_RATE_LIMITED": "Demasiados intentos, espera 5 minutos",
+    "AUTH_FORBIDDEN": "Se requiere rol de administrador",
+    "AUTH_WRONG_CURRENT_PASSWORD": "La contraseña actual es incorrecta",
+    "AUTH_DEMO_DISABLED": "El modo demo está desactivado",
+    "DEMO_UNAVAILABLE": "Modo demo no disponible",
+    "USER_NOT_FOUND": "Usuario no encontrado",
+    "USER_ALREADY_EXISTS": "Ya existe un usuario con ese nombre",
+    "USER_LAST_ADMIN": "Debe quedar al menos un administrador",
+    "USER_SELF_ROLE": "No puedes cambiar tu propio rol",
+    "USER_SELF_DELETE": "No puedes eliminarte a ti mismo",
+    "PROJECT_NOT_FOUND": "Proyecto no encontrado",
+    "LABEL_NOT_FOUND": "Etiqueta no encontrada",
+    "LABEL_NAME_TAKEN": "Ya existe una etiqueta con ese nombre",
+    "TASK_NOT_FOUND": "Tarea no encontrada",
+    "ASSIGNEE_NOT_FOUND": "Usuario asignado no encontrado",
+    "ATTACHMENT_NOT_FOUND": "Adjunto no encontrado",
+    "ATTACHMENT_FILE_MISSING": "El fichero no está disponible en disco",
+    "UPLOAD_FILE_REQUIRED": "Falta el fichero a subir",
+    "UPLOAD_TOO_LARGE": "El fichero supera el límite de subida",
+    "SETTINGS_PROD_ONLY": "Este ajuste solo se puede cambiar desde la sesión de producción",
+    "SSE_TOO_MANY_CLIENTS": "Demasiados clientes conectados",
+    "PUSH_NOT_CONFIGURED": "El servidor no tiene claves push configuradas",
+    "PUSH_DEMO_UNAVAILABLE": "Las notificaciones push no están disponibles en modo demo"
   }
 }

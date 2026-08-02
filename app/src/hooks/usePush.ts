@@ -3,7 +3,9 @@
 // iOS necesita la PWA instalada; sin secure context (LAN HTTP) el push está
 // dormido y se activará solo cuando la app se sirva por HTTPS.
 import { useCallback, useEffect, useState } from 'react';
-import { apiFetch, apiPost } from '@/data/api-client';
+import { useTranslation } from 'react-i18next';
+import { ApiError, apiFetch, apiPost } from '@/data/api-client';
+import { apiErrorText } from '@/lib/errors';
 
 export type SoportePush =
   | 'ok' // se puede suscribir aquí y ahora
@@ -96,6 +98,13 @@ export function usePush(): {
           }
           return;
         }
+        if (!('publicKey' in resp)) {
+          if (!cancelado) {
+            setSoporte('no-configurado');
+            setEstado((e) => ({ ...e, cargando: false }));
+          }
+          return;
+        }
         const reg = await navigator.serviceWorker.ready;
         const sub = await reg.pushManager.getSubscription();
         // Re-sincronización: si el navegador tiene suscripción, asegurar que el
@@ -120,6 +129,8 @@ export function usePush(): {
     };
   }, []);
 
+  const { t } = useTranslation();
+
   // LLAMAR SOLO DESDE UN GESTO DEL USUARIO (onClick).
   const activar = useCallback(async (): Promise<boolean> => {
     if (soporte !== 'ok') return false;
@@ -136,18 +147,28 @@ export function usePush(): {
         userVisibleOnly: true, // contrato: todo push visible
         applicationServerKey: urlBase64ToUint8Array(publicKey) as BufferSource,
       });
-      await apiPost('/api/push/subscribe', sub);
+      try {
+        await apiPost('/api/push/subscribe', sub);
+      } catch (err) {
+        // 501 PUSH_DEMO_UNAVAILABLE (sesión demo): aviso traducido por código
+        if (err instanceof ApiError && err.code === 'PUSH_DEMO_UNAVAILABLE') {
+          setSoporte('demo');
+          setEstado({ permiso, suscrito: false, cargando: false, error: null });
+          return false;
+        }
+        throw err;
+      }
       setEstado({ permiso, suscrito: true, cargando: false, error: null });
       return true;
     } catch (err) {
       setEstado((e) => ({
         ...e,
         cargando: false,
-        error: err instanceof Error ? err.message : 'error',
+        error: apiErrorText(err, t('settings.notifError')),
       }));
       return false;
     }
-  }, [soporte]);
+  }, [soporte, t]);
 
   const desactivar = useCallback(async (): Promise<void> => {
     setEstado((e) => ({ ...e, cargando: true, error: null }));
@@ -167,10 +188,10 @@ export function usePush(): {
       setEstado((e) => ({
         ...e,
         cargando: false,
-        error: err instanceof Error ? err.message : 'error',
+        error: apiErrorText(err, t('settings.notifError')),
       }));
     }
-  }, []);
+  }, [t]);
 
   return { soporte, estado, activar, desactivar };
 }

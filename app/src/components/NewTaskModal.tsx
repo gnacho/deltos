@@ -8,6 +8,7 @@ import { useData } from '@/data/data-context';
 import type { NewTaskDefaults } from '@/components/modal-context';
 import { COLUMNS, PRIORITIES, PRIORITY_BADGE } from '@/lib/constants';
 import { colorOf } from '@/lib/colors';
+import { apiErrorText } from '@/lib/errors';
 import { Avatar } from '@/components/Avatar';
 import { ArrowUp, ArrowRight, ArrowDown } from 'lucide-react';
 
@@ -86,7 +87,7 @@ export function NewTaskModal({
       });
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('newTask.error'));
+      setError(apiErrorText(err, t('newTask.error')));
       setCreating(false);
     }
   };
@@ -141,7 +142,7 @@ export function NewTaskModal({
               maxLength={200}
               onChange={(e) => setTitle(e.target.value)}
               placeholder={t('newTask.titlePlaceholder')}
-              className="w-full bg-surface2 border border-app rounded-xl px-3.5 py-2.5 text-[15px] font-medium outline-none focus:border-emerald-500"
+              className="w-full bg-surface2 border border-app rounded-xl px-3.5 py-2.5 text-[15px] font-medium outline-none focus:border-brand"
             />
           </div>
 
@@ -156,7 +157,7 @@ export function NewTaskModal({
               id="nt-project"
               value={projectId}
               onChange={(e) => setProjectId(e.target.value)}
-              className="w-full bg-surface2 border border-app rounded-xl px-3.5 py-2.5 text-[15px] outline-none focus:border-emerald-500"
+              className="w-full bg-surface2 border border-app rounded-xl px-3.5 py-2.5 text-[15px] outline-none focus:border-brand"
             >
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -238,7 +239,7 @@ export function NewTaskModal({
                 type="date"
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
-                className="w-full bg-surface2 border border-app rounded-xl px-3 py-2 text-[14px] outline-none focus:border-emerald-500"
+                className="w-full bg-surface2 border border-app rounded-xl px-3 py-2 text-[14px] outline-none focus:border-brand"
               />
             </div>
           </div>
@@ -318,7 +319,7 @@ export function NewTaskModal({
           <button
             type="submit"
             disabled={creating || projects.length === 0}
-            className="w-full h-12 rounded-xl bg-emerald-500 text-white text-[15px] font-semibold hover:bg-emerald-600 disabled:opacity-60 shadow-soft"
+            className="w-full h-12 rounded-xl bg-brand text-brandfg text-[15px] font-semibold hover:brightness-110 disabled:opacity-60 shadow-soft"
           >
             {creating ? t('newTask.creating') : t('newTask.create')}
           </button>

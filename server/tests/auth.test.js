@@ -27,7 +27,7 @@ describe('auth', () => {
     })
     expect(res.status).toBe(401)
     const body = await res.json()
-    expect(body.error).toContain('credenciales')
+    expect(body.error.code).toBe('AUTH_INVALID_CREDENTIALS')
   })
 
   it('sin sesión las rutas /api devuelven 401', async () => {
@@ -51,7 +51,7 @@ describe('auth', () => {
     const blocked = await attempt('admin123')
     expect(blocked.status).toBe(429)
     const body = await blocked.json()
-    expect(body.error).toContain('demasiados intentos')
+    expect(body.error.code).toBe('AUTH_RATE_LIMITED')
   })
 
   it('rota la sesión al hacer login de nuevo (la anterior muere)', async () => {
@@ -91,13 +91,14 @@ describe('auth', () => {
       jsonReq(cookie, 'PUT', '/api/auth/password', { current: 'no-es', next: 'nueva123' })
     )
     expect(wrong.status).toBe(400)
-    expect((await wrong.json()).error).toContain('actual')
+    expect((await wrong.json()).error.code).toBe('AUTH_WRONG_CURRENT_PASSWORD')
 
     const short = await app.request(
       '/api/auth/password',
       jsonReq(cookie, 'PUT', '/api/auth/password', { current: 'admin123', next: '123' })
     )
-    expect(short.status).toBe(400)
+    expect(short.status).toBe(422)
+    expect((await short.json()).error.code).toBe('VALIDATION_FAILED')
 
     const ok = await app.request(
       '/api/auth/password',
@@ -158,7 +159,7 @@ describe('auth', () => {
       headers: { 'Content-Type': 'application/json', cookie },
       body: JSON.stringify({ username: 'otro', password: '123' }),
     })
-    expect(short.status).toBe(400)
+    expect(short.status).toBe(422)
   })
 
   it('admin puede crear usuarios por /api/users; un user normal no', async () => {

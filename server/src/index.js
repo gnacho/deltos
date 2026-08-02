@@ -11,16 +11,18 @@ import { createHub } from './sse.js'
 import { seedDemo } from './demo.js'
 import { createApp } from './app.js'
 import { configurePush, flushNotificationQueue } from './push.js'
+import { logger } from './logger.js'
+
+const log = logger.child({ component: 'server' })
 
 // Config validada con zod: si es inválida, no arranca la app rota
 let config
 try {
   config = loadConfig()
 } catch (err) {
-  console.error('[config] variables de entorno inválidas:')
-  for (const issue of err.issues || []) {
-    console.error(`  - ${issue.path.join('.')}: ${issue.message}`)
-  }
+  log.error('config_invalid', {
+    issues: (err.issues || []).map((i) => ({ path: i.path.join('.'), message: i.message })),
+  })
   process.exit(1)
 }
 
@@ -64,8 +66,12 @@ const app = createApp({
 })
 
 const server = serve({ fetch: app.fetch, port: config.PORT }, (info) => {
-  console.log(`[deltos] escuchando en http://localhost:${info.port}`)
-  console.log(`[deltos] datos en ${config.DATA_DIR} · estáticos en ${config.STATIC_DIR}`)
+  log.info('server_listening', {
+    port: info.port,
+    data_dir: config.DATA_DIR,
+    static_dir: config.STATIC_DIR,
+    node: process.version,
+  })
 })
 
 // Checkpoint WAL TRUNCATE cada hora (sin esto el WAL crece indefinidamente)
@@ -74,16 +80,18 @@ const maintenance = setInterval(() => {
   try {
     hourlyMaintenance(prod, 'prod')
     hourlyMaintenance(demo, 'demo')
-    flushNotificationQueue(prod).catch((err) => console.error('[push] error en flush de cola:', err))
+    flushNotificationQueue(prod).catch((err) =>
+      log.error('push_queue_flush_failed', { error: err })
+    )
   } catch (err) {
-    console.error('[db] error en mantenimiento horario:', err)
+    log.error('hourly_maintenance_failed', { error: err })
   }
 }, 60 * 60 * 1000)
 maintenance.unref()
 
 // Graceful shutdown: notifica a clientes SSE, cierra server y BD
 function shutdown(signal) {
-  console.log(`[deltos] ${signal} recibido, cerrando...`)
+  log.info('server_shutdown', { signal })
   clearInterval(maintenance)
   hub.shutdown()
   server.close(() => {

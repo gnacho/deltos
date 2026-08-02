@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Sparkles, Sun, Moon } from 'lucide-react';
-import { apiFetch, apiPost, dispatchAuthed, ApiError } from '@/data/api-client';
+import { apiFetch, apiPost, dispatchAuthed } from '@/data/api-client';
+import { apiErrorText } from '@/lib/errors';
 
 /**
  * Fuerza el prompt "guardar contraseña" del navegador tras un login OK en SPA
@@ -70,7 +71,7 @@ export default function Login() {
       await storeCredentials(username.trim(), password);
       dispatchAuthed();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t('login.errorGeneric'));
+      setError(apiErrorText(err, t('login.errorGeneric')));
       setBusy(null);
     }
   };
@@ -82,7 +83,7 @@ export default function Login() {
       await apiPost<MeResponse>('/api/auth/demo', undefined, { noAuthEvent: true });
       dispatchAuthed();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t('login.errorGeneric'));
+      setError(apiErrorText(err, t('login.errorGeneric')));
       setBusy(null);
     }
   };
@@ -128,7 +129,7 @@ export default function Login() {
               autoFocus
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className="w-full bg-surface2 border border-app rounded-xl px-3.5 py-2.5 text-[15px] outline-none focus:border-emerald-500"
+              className="w-full bg-surface2 border border-app rounded-xl px-3.5 py-2.5 text-[15px] outline-none focus:border-brand"
             />
           </div>
           <div>
@@ -142,7 +143,7 @@ export default function Login() {
               autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-surface2 border border-app rounded-xl px-3.5 py-2.5 text-[15px] outline-none focus:border-emerald-500"
+              className="w-full bg-surface2 border border-app rounded-xl px-3.5 py-2.5 text-[15px] outline-none focus:border-brand"
             />
           </div>
 
@@ -155,7 +156,7 @@ export default function Login() {
           <button
             type="submit"
             disabled={busy !== null}
-            className="w-full h-12 rounded-xl bg-emerald-500 text-white text-[15px] font-semibold hover:bg-emerald-600 disabled:opacity-60 shadow-soft"
+            className="w-full h-12 rounded-xl bg-brand text-brandfg text-[15px] font-semibold hover:brightness-110 disabled:opacity-60 shadow-soft"
           >
             {busy === 'login' ? t('login.submitting') : t('login.submit')}
           </button>

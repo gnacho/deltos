@@ -74,15 +74,16 @@ describe('endpoints /api/push', () => {
     expect(filas[0].user_id).toBe(adminId)
 
     res = await inst.app.request('/api/push/unsubscribe', jsonReq(cookie, 'DELETE', '/api/push/unsubscribe', { endpoint: SUB.endpoint }))
-    expect(res.status).toBe(200)
+    expect(res.status).toBe(204)
     expect(inst.prod.prepare('SELECT * FROM push_subscriptions').all()).toHaveLength(0)
   })
 
-  it('subscribe valida el payload (400 sin keys)', async () => {
+  it('subscribe valida el payload (422 sin keys)', async () => {
     configura()
     const cookie = await loginAdmin(inst.app)
     const res = await inst.app.request('/api/push/subscribe', jsonReq(cookie, 'POST', '/api/push/subscribe', { endpoint: SUB.endpoint }))
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(422)
+    expect((await res.json()).error.code).toBe('VALIDATION_FAILED')
   })
 
   it('en modo demo: clave devuelve {demo:true} y subscribe no persiste', async () => {

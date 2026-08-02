@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { useData } from '@/data/data-context';
 import { COLUMNS } from '@/lib/constants';
 import { colorOf, PROJECT_COLORS } from '@/lib/colors';
+import { apiErrorText } from '@/lib/errors';
 
 const nameSchema = z.string().trim().min(1).max(80);
 
@@ -44,7 +45,7 @@ export default function ProjectsPage() {
       setColor('sky');
       navigate(`/p/${project.id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('projects.form.error'));
+      setError(apiErrorText(err, t('projects.form.error')));
       setCreating(false);
     }
   };
@@ -154,7 +155,7 @@ export default function ProjectsPage() {
                   autoFocus
                   onChange={(e) => setName(e.target.value)}
                   placeholder={t('projects.form.namePlaceholder')}
-                  className="w-full bg-surface2 border border-app rounded-xl px-3.5 py-2.5 text-[15px] outline-none focus:border-emerald-500"
+                  className="w-full bg-surface2 border border-app rounded-xl px-3.5 py-2.5 text-[15px] outline-none focus:border-brand"
                 />
               </div>
               <div>
@@ -171,7 +172,7 @@ export default function ProjectsPage() {
                   maxLength={8}
                   onChange={(e) => setEmoji(e.target.value)}
                   placeholder={t('projects.form.emojiPlaceholder')}
-                  className="w-full bg-surface2 border border-app rounded-xl px-3 py-2.5 text-[15px] text-center outline-none focus:border-emerald-500"
+                  className="w-full bg-surface2 border border-app rounded-xl px-3 py-2.5 text-[15px] text-center outline-none focus:border-brand"
                 />
               </div>
             </div>
@@ -227,7 +228,7 @@ export default function ProjectsPage() {
               <button
                 type="submit"
                 disabled={creating}
-                className="flex-1 h-11 rounded-xl bg-emerald-500 text-white text-[14px] font-semibold hover:bg-emerald-600 disabled:opacity-60"
+                className="flex-1 h-11 rounded-xl bg-brand text-brandfg text-[14px] font-semibold hover:brightness-110 disabled:opacity-60"
               >
                 {creating ? t('projects.form.creating') : t('projects.form.create')}
               </button>

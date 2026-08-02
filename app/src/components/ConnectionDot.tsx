@@ -17,7 +17,7 @@ export function ConnectionDot({ withLabel = true }: { withLabel?: boolean }) {
           <span className="absolute inline-flex w-full h-full rounded-full bg-amber-400 opacity-75 animate-ping" />
         )}
         <span
-          className={`relative inline-flex w-2 h-2 rounded-full ${live ? 'bg-emerald-500' : 'bg-amber-400'}`}
+          className={`relative inline-flex w-2 h-2 rounded-full ${live ? 'bg-ok' : 'bg-amber-400'}`}
         />
       </span>
       {withLabel && (live ? t('connection.live') : t('connection.reconnecting'))}

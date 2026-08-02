@@ -13,12 +13,28 @@ import type { Bootstrap, Label, Project, Task, TaskDetail, TaskPatch } from './t
 /**
  * Capa de datos desacoplada (contrato síncrono):
  * - bootstrapRef: UNA llamada /api/bootstrap con todo el tablero.
- * - SSE /api/events → refetch del bootstrap y de los detalles cacheados.
+ * - SSE /api/events: eventos NOMBRADOS `<dominio>.changed` (task.changed,
+ *   project.changed, …) con id monótono → refetch (debounce) del bootstrap y
+ *   de los detalles cacheados. `sync.resync` (reconexión con eventos
+ *   perdidos) → refetch total inmediato. El heartbeat es un comentario
+ *   `: ping` (no es evento: no se escucha; el estado conectado/reconectando
+ *   se deriva de onopen/onerror de EventSource).
  * - Detalles de tarea: caché en ref + pending anti-duplicados; el getter es
  *   síncrono (devuelve el último conocido) y bump() re-renderiza al completar.
  * - value = useMemo([version, connectionStatus]) con closures NUEVAS: los
  *   useMemo de los consumidores recomputan al cambiar los datos.
  */
+
+/** Eventos de dominio del hub SSE (server/src/sse.js). */
+const SSE_CHANGED_EVENTS = [
+  'task.changed',
+  'project.changed',
+  'label.changed',
+  'comment.changed',
+  'attachment.changed',
+  'user.changed',
+  'settings.changed',
+] as const;
 export function DataProvider({ children }: { children: ReactNode }) {
   const [version, setVersion] = useState(0);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('reconnecting');
@@ -103,14 +119,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
         failures = 0;
         setConnectionStatus('connected');
       };
-      es.onmessage = (ev) => {
-        try {
-          const msg = JSON.parse(ev.data as string) as { type?: string };
-          if (msg.type === 'changed') scheduleRefresh();
-        } catch {
-          /* heartbeat u otro mensaje: ignorar */
-        }
-      };
+      /* Cambios de dominio: refetch con debounce (ráfagas de una mutación). */
+      for (const ev of SSE_CHANGED_EVENTS) es.addEventListener(ev, scheduleRefresh);
+      /* Reconexión con eventos perdidos: refetch total (bootstrap + detalle
+         abierto), inmediato — los eventos no llevan datos, solo avisan. */
+      es.addEventListener('sync.resync', refreshAll);
       es.onerror = () => {
         setConnectionStatus('reconnecting');
         failures += 1;
@@ -130,7 +143,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       if (sseTimer.current !== null) window.clearTimeout(sseTimer.current);
       es?.close();
     };
-  }, [fetchBootstrap, scheduleRefresh]);
+  }, [fetchBootstrap, scheduleRefresh, refreshAll]);
 
   /* --- Mutaciones: API + refresco de cachés --- */
 

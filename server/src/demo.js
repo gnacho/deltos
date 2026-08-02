@@ -5,6 +5,9 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import bcrypt from 'bcryptjs'
+import { logger } from './logger.js'
+
+const log = logger.child({ component: 'demo' })
 
 const DAY = 24 * 60 * 60 * 1000
 const HOUR = 60 * 60 * 1000
@@ -186,6 +189,7 @@ export function seedDemo(db, uploadsDir) {
   })
 
   tx()
-  console.log('[demo] BD demo sembrada (dataset determinista del mockup: 3 usuarios, 4 proyectos, 6 etiquetas, 15 tareas)')
+  // Dataset determinista del mockup: 3 usuarios, 4 proyectos, 6 etiquetas, 15 tareas
+  log.info('demo_seeded', { users: 3, projects: 4, labels: 6, tasks: 15 })
   return true
 }

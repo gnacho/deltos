@@ -197,7 +197,7 @@ export default function Layout() {
 
   const bnCls = (active: boolean) =>
     `flex flex-col items-center justify-center gap-1 ${
-      active ? 'text-emerald-700 dark:text-emerald-400' : 'text-faint'
+      active ? 'text-brand' : 'text-faint'
     }`;
 
   const isProjectsSection = location.pathname.startsWith('/projects') || boardView === 'project';

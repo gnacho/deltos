@@ -19,7 +19,8 @@ export default {
         'text-muted-c': 'rgb(var(--text-muted-rgb) / <alpha-value>)',
         brand: {
           DEFAULT: 'rgb(var(--accent-rgb) / <alpha-value>)',
-          soft: 'rgb(var(--accent-rgb) / 0.12)',
+          soft: 'rgb(var(--accent-soft-rgb) / <alpha-value>)',
+          fg: 'rgb(var(--accent-fg-rgb) / <alpha-value>)',
         },
         ok: 'rgb(var(--ok-rgb) / <alpha-value>)',
         warn: 'rgb(var(--warn-rgb) / <alpha-value>)',

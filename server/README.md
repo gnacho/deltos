@@ -1,7 +1,7 @@
 # Deltos — server
 
 Backend de **Deltos**, PWA de gestión de tareas para una pareja (multiusuario).
-Node 22+ ESM · Hono 4 + @hono/node-server · better-sqlite3 (SQL directo, WAL) · bcryptjs · cookie · zod.
+Node 24 LTS (>=22) ESM · Hono 4 + @hono/node-server · better-sqlite3 (SQL directo, WAL) · bcryptjs · cookie · zod.
 
 ## Arranque
 
@@ -10,7 +10,7 @@ cp .env.example .env      # ajusta AUTH_USER / AUTH_PASS
 npm install
 npm start                 # http://localhost:3000
 npm run dev               # con --watch
-npm test                  # vitest (30 tests)
+npm test                  # vitest (72 tests)
 ```
 
 - **Producción arranca VACÍA**: solo se crea el admin bootstrap de `.env` (`AUTH_USER`/`AUTH_PASS`, bcrypt, idempotente).
@@ -53,8 +53,8 @@ Cookie `session = id.hmac` (HMAC-SHA256), httpOnly, SameSite=Lax, 30 días, flag
 | POST | `/api/tasks/:id/comments` | `{body}` — los comentarios NO van a activity_events |
 | POST | `/api/tasks/:id/attachments` | multipart `file`, ≤10 MB → `DATA_DIR/uploads/<uuid>` + evento `attachment` |
 | GET | `/api/attachments/:id` | Descarga con content-type y content-disposition |
-| GET | `/api/activity?page=&limit=` | Feed global (task, proyecto, username), default 30, máx 100 |
-| GET | `/api/events` | SSE: `hello`, heartbeat `ping` 25 s, `data: {"type":"changed","entity":...}` tras cada mutación · `X-Accel-Buffering: no` · máx 20 clientes (429) |
+| GET | `/api/activity?cursor=&limit=` | Feed global keyset (task, proyecto, username) → `{items, nextCursor, hasMore}`, default 30, máx 100 |
+| GET | `/api/events` | SSE: eventos `<dominio>.changed` con `id` monótono, `Last-Event-ID` → `sync.resync`, heartbeat `: ping` 20 s · `X-Accel-Buffering: no` · máx 20 clientes (429) |
 | GET | `/health` | `{status, uptime, memory, db}` |
 
 ### Admin
@@ -72,5 +72,7 @@ Cookie `session = id.hmac` (HMAC-SHA256), httpOnly, SameSite=Lax, 30 días, flag
 - **WAL + checkpoint TRUNCATE cada hora** + limpieza de sesiones caducadas.
 - **Headers**: CSP `default-src 'self'`, X-Frame-Options DENY, nosniff, Referrer-Policy, Permissions-Policy; HSTS solo si `COOKIE_SECURE=true`.
 - **Graceful shutdown** (SIGTERM/SIGINT): avisa a clientes SSE, cierra server y BD.
-- JSON en snake_case (igual que el esquema). Errores `{error}` en español.
+- **Logs**: NDJSON a stdout (logger propio, `src/logger.js`), wide event por request (`src/wide-event.js`), nivel por `LOG_LEVEL` (default `info`). Operación: `../docs/logging.md`.
+- **Runtime de referencia: Node 24 LTS** (Dockerfile `node:24-slim`, install.sh pin 24.18.1); `engines >=22` como suelo.
+- JSON en snake_case (igual que el esquema). **Errores: envelope `{error:{code,message,details?}}`** (catálogo en `src/error-codes.js`; convenciones completas en `../CONVENTIONS.md`).
 - Columnas del tablero: `nuevo` | `encurso` | `hecho`. `position` global por columna.

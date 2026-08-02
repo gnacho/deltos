@@ -96,7 +96,7 @@ docker run -d --name deltos -p 3000:3000 \
   deltos
 ```
 
-Multi-stage `node:22-slim` image: `npm ci --omit=dev` for the server +
+Multi-stage `node:24-slim` image: `npm ci --omit=dev` for the server +
 `server/` + `app/dist/`. Mount a volume at `/app/data` (SQLite + uploads).
 The `.env` file is not copied into the image: everything comes from
 defaults + container environment.
@@ -142,7 +142,7 @@ Restart after changes: `sudo systemctl restart deltos`.
 
 ## Development
 
-Stack: **Node 22 + Hono + better-sqlite3 (backend) · React 19 + Vite +
+Stack: **Node 24 + Hono + better-sqlite3 (backend) · React 19 + Vite +
 Tailwind (frontend)**.
 
 ```bash

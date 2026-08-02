@@ -1,6 +1,6 @@
 {
   "name": "deltos-server",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Backend de Deltos — PWA de gestión de tareas para pareja (Hono + better-sqlite3)",
   "type": "module",
   "engines": {
@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@hono/node-server": "2.0.12",
+    "@hono/zod-validator": "^0.9.0",
     "bcryptjs": "3.0.3",
     "better-sqlite3": "13.0.2",
     "cookie": "1.1.1",
@@ -21,6 +22,6 @@
     "zod": "4.4.3"
   },
   "devDependencies": {
-    "vitest": "3.2.7"
+    "vitest": "^4.1.10"
   }
 }

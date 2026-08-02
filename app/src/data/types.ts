@@ -120,11 +120,11 @@ export interface ActivityFeedItem {
   user_color: string | null;
 }
 
-export interface ActivityPage {
+/** GET /api/activity: paginación keyset (?cursor=), sin page/total. */
+export interface ActivityFeed {
   items: ActivityFeedItem[];
-  page: number;
-  limit: number;
-  total: number;
+  nextCursor: string | null;
+  hasMore: boolean;
 }
 
 export interface MeResponse {

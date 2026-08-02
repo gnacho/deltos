@@ -1,8 +1,11 @@
-// app.js — fábrica de la app Hono: headers de seguridad, auth, rutas, SSE,
-// estáticos y SPA fallback. Exportada para tests (sin listen).
+// app.js — fábrica de la app Hono: wide event, headers de seguridad, auth,
+// rutas, SSE, estáticos y SPA fallback. Exportada para tests (sin listen).
+// Convenciones API (CONVENTIONS.md, skill api-stack): zValidator en cada ruta,
+// envelope de errores único vía app.onError, 201+Location, 204 en DELETE.
 import { Hono } from 'hono'
 import { serveStatic } from '@hono/node-server/serve-static'
 import { streamSSE } from 'hono/streaming'
+import { zValidator } from '@hono/zod-validator'
 import fs from 'node:fs'
 import path from 'node:path'
 import { z } from 'zod'
@@ -11,6 +14,9 @@ import { kvGet } from './db.js'
 import { registerDomainRoutes } from './routes-domain.js'
 import { registerPushRoutes } from './routes-push.js'
 import { registerHealth } from './health.js'
+import { wideEvent } from './wide-event.js'
+import { httpError, onError, validationHook } from './errors.js'
+import { ERROR_CODES } from './error-codes.js'
 
 const registerSchema = z.object({
   username: z.string().min(1).max(50),
@@ -38,21 +44,14 @@ const passwordSchema = z.object({
   next: z.string().min(6, 'la nueva contraseña debe tener al menos 6 caracteres').max(100),
 })
 
-async function parseJson(c, schema) {
-  const body = await c.req.json().catch(() => null)
-  if (body === null || typeof body !== 'object') return { error: 'cuerpo JSON inválido' }
-  const parsed = schema.safeParse(body)
-  if (!parsed.success) {
-    const first = parsed.error.issues[0]
-    return { error: first ? `${first.path.join('.')}: ${first.message}` : 'formato inválido' }
-  }
-  return { data: parsed.data }
-}
-
 // ctx: { prod, demo, secret, config: { cookieSecure, maxSseClients, maxUploadBytes, staticDir }, hub, uploadsDir }
 export function createApp(ctx) {
   const { prod, demo, secret, config, hub } = ctx
   const app = new Hono()
+
+  // --- Wide event: lo más arriba posible. UN evento JSON por request al
+  // final (skill log-ops). Excluye /health, /api/events (SSE) y estáticos OK.
+  app.use('*', wideEvent())
 
   // --- Headers de seguridad (la SPA se sirve del mismo origen: CSP cerrada) ---
   app.use('*', async (c, next) => {
@@ -75,7 +74,7 @@ export function createApp(ctx) {
   app.use('/api/*', async (c, next) => {
     const len = parseInt(c.req.header('content-length') || '0', 10)
     if (len > config.maxUploadBytes + 1024 * 1024) {
-      return c.json({ error: 'petición demasiado grande' }, 413)
+      httpError(413, ERROR_CODES.PAYLOAD_TOO_LARGE)
     }
     c.set('maxUploadBytes', config.maxUploadBytes)
     await next()
@@ -88,30 +87,28 @@ export function createApp(ctx) {
 
   // --- Autenticación ---
   // Alta de usuarios: solo admin (registro público eliminado, regla base común)
-  app.post('/api/auth/register', async (c) => {
-    const denied = auth.requireAdmin(c)
-    if (denied) return denied
-    const { data, error } = await parseJson(c, registerSchema)
-    if (error) return c.json({ error }, 400)
+  app.post('/api/auth/register', zValidator('json', registerSchema, validationHook), async (c) => {
+    auth.requireAdmin(c)
+    const data = c.req.valid('json')
     const user = await auth.registerUser(prod, data.username, data.password, {
       color: data.color,
       language: data.language,
     })
-    if (!user) return c.json({ error: 'usuario ya existe' }, 409)
+    if (!user) httpError(409, ERROR_CODES.USER_ALREADY_EXISTS)
     hub.broadcast('users')
+    c.header('Location', `/api/users/${user.id}`)
     return c.json({ ok: true, user }, 201)
   })
 
-  app.post('/api/auth/login', async (c) => {
+  app.post('/api/auth/login', zValidator('json', loginSchema, validationHook), async (c) => {
     if (auth.loginRateLimited(prod, c)) {
-      return c.json({ error: 'demasiados intentos, espera 5 minutos' }, 429)
+      httpError(429, ERROR_CODES.AUTH_RATE_LIMITED)
     }
-    const { data, error } = await parseJson(c, loginSchema)
-    if (error) return c.json({ error }, 400)
+    const data = c.req.valid('json')
     const user = await auth.verifyLogin(prod, data.username, data.password)
     if (!user) {
       auth.registerLoginFail(prod, c)
-      return c.json({ error: 'credenciales incorrectas' }, 401)
+      httpError(401, ERROR_CODES.AUTH_INVALID_CREDENTIALS)
     }
     auth.loginOk(prod, c)
     // Rotación de sesión tras login exitoso (previene session fixation)
@@ -125,12 +122,12 @@ export function createApp(ctx) {
   // Modo demo: un clic, sin contraseña. 403 si está desactivado en Ajustes.
   app.post('/api/auth/demo', (c) => {
     if (kvGet(prod, 'demo_enabled', '1') !== '1') {
-      return c.json({ error: 'el modo demo está desactivado' }, 403)
+      httpError(403, ERROR_CODES.AUTH_DEMO_DISABLED)
     }
     const user = demo
       .prepare('SELECT id, username, email, phone, color, language, role, created_at FROM users WHERE username = ?')
       .get('demo')
-    if (!user) return c.json({ error: 'modo demo no disponible' }, 503)
+    if (!user) httpError(503, ERROR_CODES.DEMO_UNAVAILABLE)
     const previous = auth.resolveSession({ prod, demo, secret }, c.req.header('cookie'))
     if (previous) auth.destroySession(previous.db, previous.sessionId)
     const sessionId = auth.createSession(demo, user.id, c.req.header('user-agent'))
@@ -150,38 +147,42 @@ export function createApp(ctx) {
     return c.json({ user: c.get('user'), demo: c.get('demo') })
   })
 
-  app.put('/api/auth/profile', async (c) => {
-    const { data, error } = await parseJson(c, profileSchema)
-    if (error) return c.json({ error }, 400)
+  app.put('/api/auth/profile', zValidator('json', profileSchema, validationHook), (c) => {
+    const data = c.req.valid('json')
     const updated = auth.updateUser(c.get('db'), c.get('user').id, data)
-    if (!updated) return c.json({ error: 'no se pudo actualizar' }, 400)
+    if (!updated) httpError(400, ERROR_CODES.BAD_REQUEST)
     hub.broadcast('users')
     return c.json({ ok: true, user: updated })
   })
 
   // Cambio de contraseña: verifica la actual con bcrypt antes de re-hashear
-  app.put('/api/auth/password', async (c) => {
-    const { data, error } = await parseJson(c, passwordSchema)
-    if (error) return c.json({ error }, 400)
+  app.put('/api/auth/password', zValidator('json', passwordSchema, validationHook), async (c) => {
+    const data = c.req.valid('json')
     const result = await auth.changePassword(c.get('db'), c.get('user').id, data.current, data.next)
-    if (result === 'wrong-current') return c.json({ error: 'la contraseña actual es incorrecta' }, 400)
-    if (result !== 'ok') return c.json({ error: 'no se pudo cambiar la contraseña' }, 500)
+    if (result === 'wrong-current') httpError(400, ERROR_CODES.AUTH_WRONG_CURRENT_PASSWORD)
+    if (result !== 'ok') httpError(500, ERROR_CODES.INTERNAL_ERROR)
     return c.json({ ok: true })
   })
 
-  // --- SSE: un evento 'changed' tras cada mutación; heartbeat 25 s; máx N clientes ---
+  // --- SSE (contrato api-stack): eventos nombrados <dominio>.changed con id
+  // monótono, resync vía Last-Event-ID, heartbeat ': ping' cada 20 s (crítico
+  // tras Nginx Proxy Manager) y máx N clientes. Excluido del wide event.
   app.get('/api/events', (c) => {
     if (hub.size() >= hub.maxClients) {
-      return c.json({ error: 'demasiados clientes SSE' }, 429)
+      httpError(429, ERROR_CODES.SSE_TOO_MANY_CLIENTS)
     }
     c.header('X-Accel-Buffering', 'no') // imprescindible detrás de nginx
     c.header('Cache-Control', 'no-cache')
     return streamSSE(c, async (stream) => {
       hub.add(stream)
-      await stream.writeSSE({ event: 'hello', data: JSON.stringify({ ok: true }) })
+      await hub.hello(stream)
+      // Resync: si el navegador reconecta con Last-Event-ID y perdió eventos,
+      // UN 'sync.resync' le dice que refetchee todo vía REST.
+      await hub.resync(stream, c.req.header('last-event-id'))
       const heartbeat = setInterval(() => {
-        stream.writeSSE({ event: 'ping', data: '{}' }).catch(() => {})
-      }, 25000)
+        // Comentario SSE ': ping' (no es un evento: no mueve lastEventId).
+        stream.write(': ping\n\n').catch(() => {})
+      }, 20000)
       // Mantiene el stream abierto hasta que el cliente desconecta
       await new Promise((resolve) => {
         stream.onAbort(() => {
@@ -204,7 +205,7 @@ export function createApp(ctx) {
   app.get('*', (c) => {
     const p = c.req.path
     if (p.startsWith('/api/') || p.startsWith('/assets/')) {
-      return c.json({ error: 'no encontrado' }, 404)
+      httpError(404, ERROR_CODES.NOT_FOUND)
     }
     // index.html se lee EN CADA PETICIÓN (deploy por rsync sin restart)
     try {
@@ -218,10 +219,8 @@ export function createApp(ctx) {
     }
   })
 
-  app.onError((err, c) => {
-    console.error('[app] error no controlado:', err)
-    return c.json({ error: 'error interno' }, 500)
-  })
+  // Envelope de errores único (skill api-stack): TODO 4xx/5xx sale por aquí.
+  app.onError(onError)
 
   return app
 }

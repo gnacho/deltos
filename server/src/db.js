@@ -3,6 +3,9 @@
 import Database from 'better-sqlite3'
 import fs from 'node:fs'
 import path from 'node:path'
+import { logger } from './logger.js'
+
+const log = logger.child({ component: 'db' })
 
 // Esquema completo: base común (users/sessions/login_attempts/kv) + dominio Deltos.
 // Las fechas son epoch ms (INTEGER) salvo due_date, que es 'YYYY-MM-DD'.
@@ -178,7 +181,7 @@ export function migrateSchema(db) {
   const userCols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name)
   if (!userCols.includes('color')) {
     db.exec("ALTER TABLE users ADD COLUMN color TEXT DEFAULT 'slate'")
-    console.log('[db] migración: columna color añadida a users')
+    log.info('schema_migrated', { table: 'users', column: 'color' })
   }
 }
 
@@ -187,7 +190,7 @@ export function migrateSchema(db) {
 export function hourlyMaintenance(db, label) {
   db.pragma('wal_checkpoint(TRUNCATE)')
   const { changes } = db.prepare('DELETE FROM sessions WHERE expires_at < ?').run(Date.now())
-  if (changes > 0) console.log(`[db] ${label}: ${changes} sesiones caducadas eliminadas`)
+  if (changes > 0) log.info('sessions_expired_purged', { db: label, count: changes })
 }
 
 export function kvGet(db, key, fallback = null) {

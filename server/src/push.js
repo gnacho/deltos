@@ -10,6 +10,9 @@
 // - Tiempos en epoch ms (convención del resto del esquema).
 import crypto from 'node:crypto'
 import webpush from 'web-push'
+import { logger, hashUserId } from './logger.js'
+
+const log = logger.child({ component: 'push' })
 
 let vapidOk = false
 let sendFn = (sub, payload, opts) => webpush.sendNotification(sub, payload, opts)
@@ -18,12 +21,12 @@ let sendFn = (sub, payload, opts) => webpush.sendNotification(sub, payload, opts
 export function configurePush({ publicKey, privateKey, subject } = {}) {
   if (!publicKey || !privateKey || !subject) {
     vapidOk = false
-    console.warn('[push] sin VAPID_PUBLIC_KEY/PRIVATE_KEY/SUBJECT: notificaciones push desactivadas')
+    log.warn('push_disabled', { reason: 'vapid_missing' })
     return false
   }
   webpush.setVapidDetails(subject, publicKey, privateKey)
   vapidOk = true
-  console.log('[push] VAPID configurado: notificaciones push activas')
+  log.info('push_enabled')
   return true
 }
 
@@ -146,7 +149,8 @@ async function enviarAUna(db, sub, json, opciones) {
         }
         return 'fallido'
       }
-      console.error(`[push] error status=${status} sub=${sub.id}: ${err?.message}`)
+      // Nunca loguear el endpoint (capability URL secreta) ni las keys.
+      log.error('push_send_failed', { status, sub_id: sub.id, error: err })
       return 'fallido'
     }
   }
@@ -179,7 +183,7 @@ export async function notifyUsers(db, userIds, tipo, datos = {}, opciones = {}) 
     const lang = idiomaDe(db, userId)
     const json = componerPayload(lang, tipo, datos, url)
     if (demo) {
-      console.log(`[push:demo] user=${userId} tipo=${tipo} (sin envío real)`)
+      log.debug('push_demo_skipped', { user_id_hash: hashUserId(userId), tipo })
       res.omitidos++
       continue
     }
@@ -209,7 +213,7 @@ export function notifyAllExcept(db, demo, actorId, tipo, datos, opciones = {}) {
   const ids = db.prepare('SELECT id FROM users WHERE id != ?').all(actorId).map((r) => r.id)
   if (ids.length === 0) return
   notifyUsers(db, ids, tipo, datos, { ...opciones, demo }).catch((err) =>
-    console.error('[push] error en notifyAllExcept:', err)
+    log.error('push_notify_failed', { tipo, error: err })
   )
 }
 

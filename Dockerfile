@@ -1,7 +1,7 @@
 # ---------- deps: compila/instala solo dependencias de producción ----------
-FROM node:22-slim AS deps
+FROM node:24-slim AS deps
 WORKDIR /app/server
-# better-sqlite3 trae prebuilds para node22/linux-x64; las herramientas de
+# better-sqlite3 trae prebuilds para node24/linux-x64; las herramientas de
 # compilación son red de seguridad si el prebuild no estuviera disponible.
 RUN apt-get update \
   && apt-get install -y --no-install-recommends python3 make g++ \
@@ -10,7 +10,7 @@ COPY server/package.json server/package-lock.json ./
 RUN npm ci --omit=dev
 
 # ---------- runtime ----------
-FROM node:22-slim
+FROM node:24-slim
 ENV NODE_ENV=production \
     # Nombres REALES de server/src/config.js:
     PORT=3000 \

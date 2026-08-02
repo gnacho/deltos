@@ -94,7 +94,7 @@ export default function BoardPage() {
             <button
               type="button"
               onClick={data.refresh}
-              className="px-5 py-2.5 rounded-xl bg-emerald-500 text-white text-[14px] font-semibold hover:bg-emerald-600"
+              className="px-5 py-2.5 rounded-xl bg-brand text-brandfg text-[14px] font-semibold hover:brightness-110"
             >
               {t('common.retry')}
             </button>
@@ -420,7 +420,7 @@ export default function BoardPage() {
       <button
         type="button"
         onClick={() => openNewTask({ projectId: isTodo ? undefined : view, column: seg })}
-        className="lg:hidden fixed right-4 z-40 w-14 h-14 rounded-2xl bg-emerald-500 text-white shadow-lg flex items-center justify-center hover:bg-emerald-600"
+        className="lg:hidden fixed right-4 z-40 w-14 h-14 rounded-2xl bg-brand text-brandfg shadow-lg flex items-center justify-center hover:brightness-110"
         style={{ bottom: 'calc(84px + env(safe-area-inset-bottom))' }}
         aria-label={t('board.newTask')}
       >

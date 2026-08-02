@@ -84,7 +84,7 @@ describe('modo demo', () => {
 
     const denied = await app.request('/api/auth/demo', { method: 'POST' })
     expect(denied.status).toBe(403)
-    expect((await denied.json()).error).toContain('desactivado')
+    expect((await denied.json()).error.code).toBe('AUTH_DEMO_DISABLED')
 
     const pub2 = await (await app.request('/api/settings/demo')).json()
     expect(pub2.demo_enabled).toBe(false)

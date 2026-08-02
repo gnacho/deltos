@@ -19,15 +19,19 @@ import {
   RefreshCw,
   Trash2,
   Bell,
+  Layers,
 } from 'lucide-react';
 import { z } from 'zod';
-import { apiFetch, apiPost, apiPut, apiDelete, dispatchUnauthorized, ApiError } from '@/data/api-client';
+import { apiFetch, apiPost, apiPut, apiDelete, dispatchUnauthorized } from '@/data/api-client';
+import { apiErrorText, fieldErrors } from '@/lib/errors';
 import type { Language, SessionUser } from '@/data/types';
 import { useSession } from '@/auth/session-context';
 import { useTheme } from '@/theme/theme-context';
 import type { ThemeMode } from '@/theme/theme-context';
+import { ACCENT_IDS, ACCENTS } from '@/theme/accents';
 import { applyUserLanguage } from '@/i18n';
 import { Avatar } from '@/components/Avatar';
+import { LogoMark } from '@/components/Logo';
 import { useInstallPrompt } from '@/hooks/useInstallPrompt';
 import { useAppUpdate } from '@/hooks/useAppUpdate';
 import { usePush } from '@/hooks/usePush';
@@ -35,7 +39,7 @@ import pkg from '../../package.json';
 
 function Card({ children }: { children: React.ReactNode }) {
   return (
-    <section className="rounded-2xl bg-surface border border-app shadow-soft p-5">
+    <section className="settings-card rounded-2xl bg-surface border border-app shadow-soft p-5">
       {children}
     </section>
   );
@@ -53,7 +57,7 @@ function Heading({ icon: Icon, children }: { icon: typeof User; children: React.
 }
 
 const inputCls =
-  'w-full bg-surface2 border border-app rounded-xl px-3.5 py-2.5 text-[15px] outline-none focus:border-emerald-500';
+  'w-full bg-surface2 border border-app rounded-xl px-3.5 py-2.5 text-[15px] outline-none focus:border-brand';
 const labelCls = 'block text-[13px] font-medium mb-1.5';
 
 /* ---------------- Perfil ---------------- */
@@ -77,7 +81,7 @@ function ProfileCard() {
     } catch (err) {
       setMsg({
         ok: false,
-        text: err instanceof ApiError ? err.message : t('settings.profileError'),
+        text: apiErrorText(err, t('settings.profileError')),
       });
     } finally {
       setBusy(false);
@@ -126,7 +130,7 @@ function ProfileCard() {
         {msg && (
           <p
             role="status"
-            className={`text-[13px] font-medium ${msg.ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}
+            className={`text-[13px] font-medium ${msg.ok ? 'text-ok' : 'text-rose-600 dark:text-rose-400'}`}
           >
             {msg.text}
           </p>
@@ -134,7 +138,7 @@ function ProfileCard() {
         <button
           type="submit"
           disabled={busy}
-          className="px-5 h-11 rounded-xl bg-emerald-500 text-white text-[14px] font-semibold hover:bg-emerald-600 disabled:opacity-60"
+          className="px-5 h-11 rounded-xl bg-brand text-brandfg text-[14px] font-semibold hover:brightness-110 disabled:opacity-60"
         >
           {busy ? t('common.saving') : t('common.save')}
         </button>
@@ -144,14 +148,23 @@ function ProfileCard() {
 }
 
 /* ---------------- Apariencia ---------------- */
-/** Mini-preview de tema con los tokens reales (scope .light/.dark): prohibido hex duplicados. */
+/**
+ * Mini-preview de tema con los tokens reales (scope .light/.dark). El acento
+ * se pinta desde la tabla ACCENTS para el tema del preview (el scope de clase
+ * no puede heredar el acento vigente: redefine las variables por tema).
+ */
 function ThemePreview({ variant }: { variant: 'light' | 'dark' }) {
   const { t } = useTranslation();
+  const { accent } = useTheme();
+  const [accentColor] = variant === 'dark' ? ACCENTS[accent].dark : ACCENTS[accent].light;
   return (
     <div className={`rounded-xl border border-app p-1.5 ${variant}`} style={{ backgroundColor: 'var(--bg)' }}>
       <div className="flex h-14 flex-col justify-between rounded-lg border border-app p-2" style={{ backgroundColor: 'var(--surface)' }}>
         <div className="flex items-center justify-between">
-          <span className="flex h-4 w-4 items-center justify-center rounded bg-emerald-500/15 text-emerald-500">
+          <span
+            className="flex h-4 w-4 items-center justify-center rounded"
+            style={{ backgroundColor: `${accentColor}26`, color: accentColor }}
+          >
             <Check className="w-2.5 h-2.5" aria-hidden="true" />
           </span>
           <span className="text-[8px] font-medium uppercase tracking-wider" style={{ color: 'var(--text-faint)' }}>
@@ -160,9 +173,43 @@ function ThemePreview({ variant }: { variant: 'light' | 'dark' }) {
         </div>
         <div className="space-y-1">
           <div className="h-1.5 w-3/4 rounded-full" style={{ backgroundColor: 'var(--surface-2)' }} />
-          <div className="h-1.5 w-1/2 rounded-full bg-emerald-500/60" />
+          <div className="h-1.5 w-1/2 rounded-full" style={{ backgroundColor: `${accentColor}99` }} />
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Selector de acento: swatches con el color real del tema efectivo (fuente única: ACCENTS). */
+function AccentSwatches() {
+  const { t } = useTranslation();
+  const { accent, setAccent, dark } = useTheme();
+  return (
+    <div className="mt-4">
+      <p className="text-[13px] font-medium mb-1.5">{t('settings.accent.title')}</p>
+      <div className="flex items-center gap-3" role="radiogroup" aria-label={t('settings.accent.title')}>
+        {ACCENT_IDS.map((id) => {
+          const on = accent === id;
+          const [color] = dark ? ACCENTS[id].dark : ACCENTS[id].light;
+          return (
+            <button
+              key={id}
+              type="button"
+              role="radio"
+              aria-checked={on}
+              aria-label={t(`settings.accent.${id}`)}
+              title={t(`settings.accent.${id}`)}
+              onClick={() => setAccent(id)}
+              className="w-7 h-7 rounded-full transition-shadow"
+              style={{
+                backgroundColor: color,
+                boxShadow: on ? `0 0 0 2px var(--surface), 0 0 0 4px rgb(var(--accent-rgb))` : undefined,
+              }}
+            />
+          );
+        })}
+      </div>
+      <p className="text-[13px] text-faint mt-2">{t('settings.accent.hint')}</p>
     </div>
   );
 }
@@ -210,6 +257,9 @@ function AppearanceCard() {
         <ThemePreview variant="dark" />
       </div>
 
+      {/* Acento */}
+      <AccentSwatches />
+
       {/* Densidad */}
       <div className="mt-4">
         <p className="text-[13px] font-medium mb-1.5">{t('settings.density.title')}</p>
@@ -239,7 +289,7 @@ function AppearanceCard() {
           aria-label={t('settings.reduceMotion')}
           onClick={() => setReduceMotion(!reduceMotion)}
           className={`relative w-12 h-7 rounded-full shrink-0 transition-colors ${
-            reduceMotion ? 'bg-emerald-500' : 'bg-surface2 border border-app'
+            reduceMotion ? 'bg-brand' : 'bg-surface2 border border-app'
           }`}
         >
           <span
@@ -309,14 +359,14 @@ function InstallCard() {
         <button
           type="button"
           onClick={() => void install()}
-          className="h-14 px-8 rounded-2xl bg-emerald-500 text-white text-[16px] font-semibold inline-flex items-center gap-2.5 hover:bg-emerald-600 shadow-soft"
+          className="h-14 px-8 rounded-2xl bg-brand text-brandfg text-[16px] font-semibold inline-flex items-center gap-2.5 hover:brightness-110 shadow-soft"
         >
           <Download className="w-5 h-5" aria-hidden="true" />
           {t('settings.installButton')}
         </button>
       )}
       {state === 'installed' && (
-        <p className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-[13px] font-medium text-emerald-600 dark:text-emerald-400">
+        <p className="inline-flex items-center gap-2 rounded-full border border-ok/30 bg-ok/10 px-4 py-2 text-[13px] font-medium text-ok">
           <Check className="w-4 h-4" aria-hidden="true" />
           {t('settings.installDone')}
         </p>
@@ -358,7 +408,7 @@ function DemoCard() {
       });
       setEnabled(res.demo_enabled);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t('settings.demoError'));
+      setError(apiErrorText(err, t('settings.demoError')));
     } finally {
       setBusy(false);
     }
@@ -377,7 +427,7 @@ function DemoCard() {
           disabled={enabled === null || busy}
           onClick={() => void toggle()}
           className={`relative w-12 h-7 rounded-full shrink-0 transition-colors disabled:opacity-50 ${
-            enabled ? 'bg-emerald-500' : 'bg-surface2 border border-app'
+            enabled ? 'bg-brand' : 'bg-surface2 border border-app'
           }`}
         >
           <span
@@ -431,7 +481,7 @@ function NotificationsCard() {
           {soporte === 'ok' && estado.permiso !== 'denied' && (
             <div className="flex items-center justify-between gap-4">
               {estado.suscrito && (
-                <span className="inline-flex items-center gap-1.5 text-[13px] font-medium text-emerald-600 dark:text-emerald-400">
+                <span className="inline-flex items-center gap-1.5 text-[13px] font-medium text-ok">
                   <Check className="w-3.5 h-3.5" aria-hidden="true" />
                   {t('settings.notifEnabled')}
                 </span>
@@ -443,7 +493,7 @@ function NotificationsCard() {
                 className={`${estado.suscrito ? '' : 'ml-auto '}rounded-xl px-4 py-2 text-[13px] font-semibold border transition-colors disabled:opacity-50 ${
                   estado.suscrito
                     ? 'border-app text-faint hover:text-app hover:border-strong'
-                    : 'bg-emerald-500 border-emerald-500 text-white hover:bg-emerald-600'
+                    : 'bg-brand border-brand text-brandfg hover:brightness-110'
                 }`}
               >
                 {estado.suscrito ? t('settings.notifDisable') : t('settings.notifEnable')}
@@ -452,7 +502,7 @@ function NotificationsCard() {
           )}
           {estado.error && (
             <p role="alert" className="text-[13px] font-medium text-rose-600 dark:text-rose-400 mt-2">
-              {t('settings.notifError')}
+              {estado.error}
             </p>
           )}
         </>
@@ -496,7 +546,10 @@ function PasswordForm() {
       setNext('');
       setConfirm('');
     } catch (err) {
-      setErrors({ current: err instanceof ApiError ? err.message : t('settings.pwError') });
+      const text = apiErrorText(err, t('settings.pwError'));
+      // 422: errores por campo a partir de details.issues (zod)
+      const byField = fieldErrors(err, text);
+      setErrors(Object.keys(byField).length > 0 ? byField : { current: text });
     } finally {
       setBusy(false);
     }
@@ -540,7 +593,7 @@ function PasswordForm() {
       {ok && (
         <p
           role="status"
-          className="text-[13px] font-medium text-emerald-600 dark:text-emerald-400 inline-flex items-center gap-1.5"
+          className="text-[13px] font-medium text-ok inline-flex items-center gap-1.5"
         >
           <Check className="w-4 h-4" aria-hidden="true" />
           {t('settings.pwChanged')}
@@ -549,7 +602,7 @@ function PasswordForm() {
       <button
         type="submit"
         disabled={busy}
-        className="px-5 h-11 rounded-xl bg-emerald-500 text-white text-[14px] font-semibold hover:bg-emerald-600 disabled:opacity-60"
+        className="px-5 h-11 rounded-xl bg-brand text-brandfg text-[14px] font-semibold hover:brightness-110 disabled:opacity-60"
       >
         {busy ? t('settings.pwSubmitting') : t('settings.pwSubmit')}
       </button>
@@ -602,7 +655,7 @@ function UsersCard() {
       setRole('user');
       setShowCreate(false);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t('settings.users.createError'));
+      setError(apiErrorText(err, t('settings.users.createError')));
     } finally {
       setBusy(false);
     }
@@ -614,7 +667,7 @@ function UsersCard() {
       await apiPut(`/api/users/${id}/role`, { role: r });
       await reload();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t('settings.users.updateError'));
+      setError(apiErrorText(err, t('settings.users.updateError')));
       await reload();
     }
   };
@@ -625,7 +678,7 @@ function UsersCard() {
       await apiPut(`/api/users/${id}/language`, { language: l });
       await reload();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t('settings.users.updateError'));
+      setError(apiErrorText(err, t('settings.users.updateError')));
       await reload();
     }
   };
@@ -638,7 +691,7 @@ function UsersCard() {
       setPwdFor(null);
       setNewPwd('');
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t('settings.users.updateError'));
+      setError(apiErrorText(err, t('settings.users.updateError')));
     }
   };
 
@@ -649,7 +702,7 @@ function UsersCard() {
       setConfirmDelete(null);
       setUsers((us) => us.filter((u) => u.id !== id));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t('settings.users.updateError'));
+      setError(apiErrorText(err, t('settings.users.updateError')));
       setConfirmDelete(null);
     }
   };
@@ -764,7 +817,7 @@ function UsersCard() {
                 <button
                   type="submit"
                   disabled={newPwd.length < 6}
-                  className="h-[42px] rounded-xl bg-emerald-500 px-4 text-[13px] font-semibold text-white hover:bg-emerald-600 disabled:opacity-60"
+                  className="h-[42px] rounded-xl bg-brand px-4 text-[13px] font-semibold text-brandfg hover:brightness-110 disabled:opacity-60"
                 >
                   {t('common.save')}
                 </button>
@@ -823,7 +876,7 @@ function UsersCard() {
             <button
               type="submit"
               disabled={busy || !username || !password}
-              className="inline-flex h-11 items-center gap-2 rounded-xl bg-emerald-500 px-5 text-[14px] font-semibold text-white hover:bg-emerald-600 disabled:opacity-60"
+              className="inline-flex h-11 items-center gap-2 rounded-xl bg-brand px-5 text-[14px] font-semibold text-brandfg hover:brightness-110 disabled:opacity-60"
             >
               <UserPlus className="w-4 h-4" aria-hidden="true" />
               {busy ? t('settings.users.creating') : t('settings.users.create')}
@@ -903,17 +956,42 @@ function AboutCard() {
   return (
     <Card>
       <Heading icon={Info}>{t('settings.about.title')}</Heading>
-      <p className="text-[14px] font-medium">{t('settings.about.version', { version: pkg.version })}</p>
-      <p className="text-[13px] text-faint mt-1">{t('settings.about.desc')}</p>
-      <a
-        href={REPO_URL}
-        target="_blank"
-        rel="noreferrer"
-        className="mt-3 inline-flex h-9 items-center gap-2 rounded-xl border border-app bg-surface2 px-3.5 text-[13px] font-medium text-muted hover:text-text"
-      >
-        <ExternalLink className="w-4 h-4" aria-hidden="true" />
-        {t('settings.about.source')}
-      </a>
+      {/* Cabecera: logo + nombre + versión */}
+      <div className="flex items-center gap-3.5">
+        <LogoMark size={48} />
+        <div className="min-w-0">
+          <p className="font-display font-bold text-[17px] leading-tight">{t('common.appName')}</p>
+          <p className="tnum text-[12px] text-faint leading-tight mt-0.5">
+            {t('settings.about.version', { version: pkg.version })}
+          </p>
+        </div>
+      </div>
+      <p className="text-[13px] text-faint mt-3">{t('settings.about.desc')}</p>
+
+      {/* Tiles: repo + stack */}
+      <div className="mt-4 grid grid-cols-2 gap-2.5">
+        <a
+          href={REPO_URL}
+          target="_blank"
+          rel="noreferrer"
+          className="rounded-xl bg-surface2 border border-transparent hover:border-brand/50 p-3 transition-colors"
+        >
+          <span className="flex items-center gap-1.5 text-[13px] font-semibold">
+            <ExternalLink className="w-4 h-4 text-brand" aria-hidden="true" />
+            {t('settings.about.repoLabel')}
+          </span>
+          <span className="block text-[11.5px] text-faint mt-1 truncate">
+            {t('settings.about.repoHint')}
+          </span>
+        </a>
+        <div className="rounded-xl bg-surface2 p-3">
+          <span className="flex items-center gap-1.5 text-[13px] font-semibold">
+            <Layers className="w-4 h-4 text-brand" aria-hidden="true" />
+            {t('settings.about.stackLabel')}
+          </span>
+          <span className="block text-[11.5px] text-faint mt-1">{t('settings.about.stack')}</span>
+        </div>
+      </div>
 
       {/* Comprobar actualizaciones: nada si no hay repo ni service worker */}
       {upd.supported && (
@@ -922,7 +1000,7 @@ function AboutCard() {
             <button
               type="button"
               onClick={upd.applySw}
-              className="inline-flex h-10 items-center gap-2 rounded-xl bg-emerald-500 px-4 text-[14px] font-semibold text-white hover:bg-emerald-600"
+              className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand px-4 text-[14px] font-semibold text-brandfg hover:brightness-110"
             >
               <Download className="w-4 h-4" aria-hidden="true" />
               {t('settings.about.updateNow')}
@@ -946,7 +1024,7 @@ function AboutCard() {
           {upd.state === 'up-to-date' && (
             <span
               role="status"
-              className="inline-flex items-center gap-1.5 text-[13px] font-medium text-emerald-600 dark:text-emerald-400"
+              className="inline-flex items-center gap-1.5 text-[13px] font-medium text-ok"
             >
               <Check className="w-4 h-4" aria-hidden="true" />
               {t('settings.about.upToDate', { version: pkg.version })}
@@ -954,14 +1032,14 @@ function AboutCard() {
           )}
           {upd.state === 'available' && upd.latest && (
             <>
-              <span role="status" className="text-[13px] font-medium text-emerald-600 dark:text-emerald-400">
+              <span role="status" className="text-[13px] font-medium text-ok">
                 {t('settings.about.updateAvailable', { version: upd.latest.version })}
               </span>
               <a
                 href={upd.latest.url}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 text-[13px] font-medium text-emerald-600 dark:text-emerald-400"
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-ok/40 bg-ok/10 px-3 text-[13px] font-medium text-ok"
               >
                 <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" />
                 {t('settings.about.viewRelease')}

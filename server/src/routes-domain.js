@@ -1,20 +1,31 @@
 // routes-domain.js — rutas del dominio Deltos: bootstrap, proyectos, etiquetas,
 // tareas (CRUD + mover), comentarios, adjuntos, feed de actividad.
 // Todas bajo requireAuth; c.get('db') apunta a la BD de la sesión (prod o demo).
+// Convenciones api-stack (CONVENTIONS.md): zValidator en cada ruta, errores
+// por httpError() (el envelope lo construye app.onError), 201+Location al
+// crear, 204 sin cuerpo en DELETE, 409 ante UNIQUE, keyset en /api/activity.
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import { z } from 'zod'
 import bcrypt from 'bcryptjs'
+import { zValidator } from '@hono/zod-validator'
+import { SqliteError } from 'better-sqlite3'
 import { requireAdmin } from './auth.js'
 import { kvGet, kvSet } from './db.js'
 import { notifyUsers, notifyAllExcept } from './push.js'
+import { httpError, validationHook } from './errors.js'
+import { ERROR_CODES } from './error-codes.js'
+import { decodeCursor, keysetPage } from './pagination.js'
+import { logger } from './logger.js'
+
+const log = logger.child({ component: 'domain' })
 
 // Notificación fire-and-forget a usuarios concretos (nunca bloquea la HTTP).
 function notifyIds(db, demo, ids, tipo, datos, opciones = {}) {
   if (!ids || ids.length === 0) return
   notifyUsers(db, ids, tipo, datos, { ...opciones, demo }).catch((err) =>
-    console.error('[push] error notificando:', err)
+    log.error('push_notify_failed', { tipo, error: err })
   )
 }
 
@@ -24,6 +35,9 @@ const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'usa YYYY-MM-DD')
 const colorSchema = z.string().regex(/^[a-z]{2,20}$/, 'color inválido')
 const columnSchema = z.enum(['nuevo', 'encurso', 'hecho'])
 const prioritySchema = z.enum(['alta', 'media', 'baja']).nullable()
+// Los ids de Deltos son UUID strings; param suelto (no UUID estricto) para no
+// rechazar ids legados: la autorización la da la sesión, no la forma del id.
+const idParamSchema = z.object({ id: z.string().min(1).max(64) })
 
 const projectSchema = z.object({
   name: z.string().min(1).max(80),
@@ -84,6 +98,12 @@ const userPasswordSchema = z.object({
 })
 const userLanguageSchema = z.object({ language: z.enum(['auto', 'es', 'en']) })
 
+// Query del feed de actividad: keyset por cursor opaco (sin page/offset).
+const activityQuerySchema = z.object({
+  cursor: z.string().max(200).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(30),
+})
+
 function countAdmins(db) {
   return db.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'admin'").get().n
 }
@@ -91,17 +111,6 @@ function countAdmins(db) {
 const USER_COLS = 'id, username, email, phone, color, language, role, created_at'
 
 // --- Helpers ----------------------------------------------------------------
-
-async function parseJson(c, schema) {
-  const body = await c.req.json().catch(() => null)
-  if (body === null || typeof body !== 'object') return { error: 'cuerpo JSON inválido' }
-  const parsed = schema.safeParse(body)
-  if (!parsed.success) {
-    const first = parsed.error.issues[0]
-    return { error: first ? `${first.path.join('.')}: ${first.message}` : 'formato inválido' }
-  }
-  return { data: parsed.data }
-}
 
 function addEvent(db, taskId, userId, type, data = {}) {
   db.prepare(
@@ -207,95 +216,117 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod }) {
   })
 
   // --- Proyectos ---
-  app.post('/api/projects', async (c) => {
+  app.post('/api/projects', zValidator('json', projectSchema, validationHook), (c) => {
     const db = c.get('db')
-    const { data, error } = await parseJson(c, projectSchema)
-    if (error) return c.json({ error }, 400)
+    const data = c.req.valid('json')
     const id = crypto.randomUUID()
     const pos = db.prepare('SELECT COALESCE(MAX(position) + 1, 0) AS p FROM projects').get().p
     db.prepare('INSERT INTO projects (id, name, emoji, color, position, created_at) VALUES (?, ?, ?, ?, ?, ?)')
       .run(id, data.name, data.emoji, data.color, pos, Date.now())
     hub.broadcast('projects')
+    c.header('Location', `/api/projects/${id}`)
     return c.json({ project: db.prepare('SELECT * FROM projects WHERE id = ?').get(id) }, 201)
   })
 
-  app.patch('/api/projects/:id', async (c) => {
-    const db = c.get('db')
-    const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(c.req.param('id'))
-    if (!project) return c.json({ error: 'proyecto no encontrado' }, 404)
-    const { data, error } = await parseJson(c, projectPatchSchema)
-    if (error) return c.json({ error }, 400)
-    db.prepare('UPDATE projects SET name = ?, emoji = ?, color = ? WHERE id = ?').run(
-      data.name ?? project.name,
-      data.emoji ?? project.emoji,
-      data.color ?? project.color,
-      project.id
-    )
-    hub.broadcast('projects')
-    return c.json({ project: db.prepare('SELECT * FROM projects WHERE id = ?').get(project.id) })
-  })
+  app.patch(
+    '/api/projects/:id',
+    zValidator('param', idParamSchema, validationHook),
+    zValidator('json', projectPatchSchema, validationHook),
+    (c) => {
+      const db = c.get('db')
+      const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(c.req.valid('param').id)
+      if (!project) httpError(404, ERROR_CODES.PROJECT_NOT_FOUND)
+      const data = c.req.valid('json')
+      db.prepare('UPDATE projects SET name = ?, emoji = ?, color = ? WHERE id = ?').run(
+        data.name ?? project.name,
+        data.emoji ?? project.emoji,
+        data.color ?? project.color,
+        project.id
+      )
+      hub.broadcast('projects')
+      return c.json({ project: db.prepare('SELECT * FROM projects WHERE id = ?').get(project.id) })
+    }
+  )
 
-  app.delete('/api/projects/:id', (c) => {
+  app.delete('/api/projects/:id', zValidator('param', idParamSchema, validationHook), (c) => {
     const db = c.get('db')
-    const project = db.prepare('SELECT id FROM projects WHERE id = ?').get(c.req.param('id'))
-    if (!project) return c.json({ error: 'proyecto no encontrado' }, 404)
+    const project = db.prepare('SELECT id FROM projects WHERE id = ?').get(c.req.valid('param').id)
+    if (!project) httpError(404, ERROR_CODES.PROJECT_NOT_FOUND)
     const taskIds = db.prepare('SELECT id FROM tasks WHERE project_id = ?').all(project.id)
     for (const t of taskIds) removeAttachmentFiles(db, uploadsDir, t.id)
     db.prepare('DELETE FROM projects WHERE id = ?').run(project.id) // cascada a tareas
     hub.broadcast('projects')
     hub.broadcast('tasks')
-    return c.json({ ok: true })
+    return c.body(null, 204)
   })
 
   // --- Etiquetas (globales) ---
-  app.post('/api/labels', async (c) => {
+  app.post('/api/labels', zValidator('json', labelSchema, validationHook), (c) => {
     const db = c.get('db')
-    const { data, error } = await parseJson(c, labelSchema)
-    if (error) return c.json({ error }, 400)
+    const data = c.req.valid('json')
     if (db.prepare('SELECT id FROM labels WHERE name = ?').get(data.name)) {
-      return c.json({ error: 'ya existe una etiqueta con ese nombre' }, 409)
+      httpError(409, ERROR_CODES.LABEL_NAME_TAKEN)
     }
     const id = crypto.randomUUID()
-    db.prepare('INSERT INTO labels (id, name, color) VALUES (?, ?, ?)').run(id, data.name, data.color)
+    try {
+      db.prepare('INSERT INTO labels (id, name, color) VALUES (?, ?, ?)').run(id, data.name, data.color)
+    } catch (err) {
+      // Carrera entre el chequeo y el INSERT: UNIQUE con código de dominio.
+      if (err instanceof SqliteError && err.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+        httpError(409, ERROR_CODES.LABEL_NAME_TAKEN)
+      }
+      throw err
+    }
     hub.broadcast('labels')
+    c.header('Location', `/api/labels/${id}`)
     return c.json({ label: { id, ...data } }, 201)
   })
 
-  app.patch('/api/labels/:id', async (c) => {
-    const db = c.get('db')
-    const label = db.prepare('SELECT * FROM labels WHERE id = ?').get(c.req.param('id'))
-    if (!label) return c.json({ error: 'etiqueta no encontrada' }, 404)
-    const { data, error } = await parseJson(c, labelPatchSchema)
-    if (error) return c.json({ error }, 400)
-    db.prepare('UPDATE labels SET name = ?, color = ? WHERE id = ?').run(
-      data.name ?? label.name,
-      data.color ?? label.color,
-      label.id
-    )
-    hub.broadcast('labels')
-    return c.json({ label: db.prepare('SELECT * FROM labels WHERE id = ?').get(label.id) })
-  })
+  app.patch(
+    '/api/labels/:id',
+    zValidator('param', idParamSchema, validationHook),
+    zValidator('json', labelPatchSchema, validationHook),
+    (c) => {
+      const db = c.get('db')
+      const label = db.prepare('SELECT * FROM labels WHERE id = ?').get(c.req.valid('param').id)
+      if (!label) httpError(404, ERROR_CODES.LABEL_NOT_FOUND)
+      const data = c.req.valid('json')
+      try {
+        db.prepare('UPDATE labels SET name = ?, color = ? WHERE id = ?').run(
+          data.name ?? label.name,
+          data.color ?? label.color,
+          label.id
+        )
+      } catch (err) {
+        if (err instanceof SqliteError && err.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+          httpError(409, ERROR_CODES.LABEL_NAME_TAKEN)
+        }
+        throw err
+      }
+      hub.broadcast('labels')
+      return c.json({ label: db.prepare('SELECT * FROM labels WHERE id = ?').get(label.id) })
+    }
+  )
 
-  app.delete('/api/labels/:id', (c) => {
+  app.delete('/api/labels/:id', zValidator('param', idParamSchema, validationHook), (c) => {
     const db = c.get('db')
-    const { changes } = db.prepare('DELETE FROM labels WHERE id = ?').run(c.req.param('id'))
-    if (!changes) return c.json({ error: 'etiqueta no encontrada' }, 404)
+    const { changes } = db.prepare('DELETE FROM labels WHERE id = ?').run(c.req.valid('param').id)
+    if (!changes) httpError(404, ERROR_CODES.LABEL_NOT_FOUND)
     hub.broadcast('labels')
     hub.broadcast('tasks')
-    return c.json({ ok: true })
+    return c.body(null, 204)
   })
 
   // --- Tareas ---
-  app.post('/api/tasks', async (c) => {
+  app.post('/api/tasks', zValidator('json', taskCreateSchema, validationHook), (c) => {
     const db = c.get('db')
     const user = c.get('user')
-    const { data, error } = await parseJson(c, taskCreateSchema)
-    if (error) return c.json({ error }, 400)
+    const data = c.req.valid('json')
     if (!db.prepare('SELECT id FROM projects WHERE id = ?').get(data.project_id)) {
-      return c.json({ error: 'proyecto no encontrado' }, 404)
+      httpError(404, ERROR_CODES.PROJECT_NOT_FOUND)
     }
     if (data.assignee_id && !db.prepare('SELECT id FROM users WHERE id = ?').get(data.assignee_id)) {
-      return c.json({ error: 'usuario asignado no encontrado' }, 404)
+      httpError(404, ERROR_CODES.ASSIGNEE_NOT_FOUND)
     }
     const id = crypto.randomUUID()
     const now = Date.now()
@@ -322,104 +353,113 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod }) {
     if (asignado) notifyIds(db, c.get('demo'), [asignado], 'asignacion', datosPush)
     const otros = db.prepare('SELECT id FROM users WHERE id != ? AND id != ?').all(user.id, asignado || '').map((r) => r.id)
     notifyIds(db, c.get('demo'), otros, 'tarea_creada', datosPush)
+    c.header('Location', `/api/tasks/${id}`)
     return c.json({ task: hydrateTasks(db, 'WHERE t.id = ?', [id])[0] }, 201)
   })
 
-  app.patch('/api/tasks/:id', async (c) => {
-    const db = c.get('db')
-    const user = c.get('user')
-    const task = getTask(db, c.req.param('id'))
-    if (!task) return c.json({ error: 'tarea no encontrada' }, 404)
-    const { data, error } = await parseJson(c, taskPatchSchema)
-    if (error) return c.json({ error }, 400)
-    if (data.assignee_id && !db.prepare('SELECT id FROM users WHERE id = ?').get(data.assignee_id)) {
-      return c.json({ error: 'usuario asignado no encontrado' }, 404)
-    }
+  app.patch(
+    '/api/tasks/:id',
+    zValidator('param', idParamSchema, validationHook),
+    zValidator('json', taskPatchSchema, validationHook),
+    (c) => {
+      const db = c.get('db')
+      const user = c.get('user')
+      const task = getTask(db, c.req.valid('param').id)
+      if (!task) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
+      const data = c.req.valid('json')
+      if (data.assignee_id && !db.prepare('SELECT id FROM users WHERE id = ?').get(data.assignee_id)) {
+        httpError(404, ERROR_CODES.ASSIGNEE_NOT_FOUND)
+      }
 
-    const now = Date.now()
-    const update = db.transaction(() => {
-      // Cada cambio registra su activity_event
-      if (data.title !== undefined && data.title !== task.title) {
-        db.prepare('UPDATE tasks SET title = ? WHERE id = ?').run(data.title, task.id)
-        addEvent(db, task.id, user.id, 'title', { from: task.title, to: data.title })
+      const now = Date.now()
+      const update = db.transaction(() => {
+        // Cada cambio registra su activity_event
+        if (data.title !== undefined && data.title !== task.title) {
+          db.prepare('UPDATE tasks SET title = ? WHERE id = ?').run(data.title, task.id)
+          addEvent(db, task.id, user.id, 'title', { from: task.title, to: data.title })
+        }
+        if (data.description !== undefined && data.description !== task.description) {
+          db.prepare('UPDATE tasks SET description = ? WHERE id = ?').run(data.description, task.id)
+          addEvent(db, task.id, user.id, 'description', { from: task.description, to: data.description })
+        }
+        if (data.priority !== undefined && data.priority !== task.priority) {
+          db.prepare('UPDATE tasks SET priority = ? WHERE id = ?').run(data.priority, task.id)
+          addEvent(db, task.id, user.id, 'priority', { from: task.priority, to: data.priority })
+        }
+        if (data.due_date !== undefined && data.due_date !== task.due_date) {
+          db.prepare('UPDATE tasks SET due_date = ? WHERE id = ?').run(data.due_date, task.id)
+          addEvent(db, task.id, user.id, 'due', { from: task.due_date, to: data.due_date })
+        }
+        if (data.assignee_id !== undefined && data.assignee_id !== task.assignee_id) {
+          db.prepare('UPDATE tasks SET assignee_id = ? WHERE id = ?').run(data.assignee_id, task.id)
+          addEvent(db, task.id, user.id, 'assigned', { from: task.assignee_id, to: data.assignee_id })
+        }
+        if (data.labels !== undefined) replaceTaskLabels(db, task.id, data.labels)
+        db.prepare('UPDATE tasks SET updated_at = ? WHERE id = ?').run(now, task.id)
+      })
+      update()
+      hub.broadcast('tasks')
+      // Push: cambio de asignación → aviso al nuevo asignado.
+      if (data.assignee_id !== undefined && data.assignee_id && data.assignee_id !== task.assignee_id && data.assignee_id !== user.id) {
+        notifyIds(db, c.get('demo'), [data.assignee_id], 'asignacion', { usuario: user.username, titulo: task.title })
       }
-      if (data.description !== undefined && data.description !== task.description) {
-        db.prepare('UPDATE tasks SET description = ? WHERE id = ?').run(data.description, task.id)
-        addEvent(db, task.id, user.id, 'description', { from: task.description, to: data.description })
-      }
-      if (data.priority !== undefined && data.priority !== task.priority) {
-        db.prepare('UPDATE tasks SET priority = ? WHERE id = ?').run(data.priority, task.id)
-        addEvent(db, task.id, user.id, 'priority', { from: task.priority, to: data.priority })
-      }
-      if (data.due_date !== undefined && data.due_date !== task.due_date) {
-        db.prepare('UPDATE tasks SET due_date = ? WHERE id = ?').run(data.due_date, task.id)
-        addEvent(db, task.id, user.id, 'due', { from: task.due_date, to: data.due_date })
-      }
-      if (data.assignee_id !== undefined && data.assignee_id !== task.assignee_id) {
-        db.prepare('UPDATE tasks SET assignee_id = ? WHERE id = ?').run(data.assignee_id, task.id)
-        addEvent(db, task.id, user.id, 'assigned', { from: task.assignee_id, to: data.assignee_id })
-      }
-      if (data.labels !== undefined) replaceTaskLabels(db, task.id, data.labels)
-      db.prepare('UPDATE tasks SET updated_at = ? WHERE id = ?').run(now, task.id)
-    })
-    update()
-    hub.broadcast('tasks')
-    // Push: cambio de asignación → aviso al nuevo asignado.
-    if (data.assignee_id !== undefined && data.assignee_id && data.assignee_id !== task.assignee_id && data.assignee_id !== user.id) {
-      notifyIds(db, c.get('demo'), [data.assignee_id], 'asignacion', { usuario: user.username, titulo: task.title })
+      return c.json({ task: hydrateTasks(db, 'WHERE t.id = ?', [task.id])[0] })
     }
-    return c.json({ task: hydrateTasks(db, 'WHERE t.id = ?', [task.id])[0] })
-  })
+  )
 
   // Mover tarjeta: reordena posiciones de ambas columnas en transacción + evento 'moved'
-  app.post('/api/tasks/:id/move', async (c) => {
-    const db = c.get('db')
-    const user = c.get('user')
-    const task = getTask(db, c.req.param('id'))
-    if (!task) return c.json({ error: 'tarea no encontrada' }, 404)
-    const { data, error } = await parseJson(c, moveSchema)
-    if (error) return c.json({ error }, 400)
+  app.post(
+    '/api/tasks/:id/move',
+    zValidator('param', idParamSchema, validationHook),
+    zValidator('json', moveSchema, validationHook),
+    (c) => {
+      const db = c.get('db')
+      const user = c.get('user')
+      const task = getTask(db, c.req.valid('param').id)
+      if (!task) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
+      const data = c.req.valid('json')
 
-    const fromCol = task.column
-    const fromPos = task.position
-    const toCol = data.column
-    const targetCount = db
-      .prepare('SELECT COUNT(*) AS n FROM tasks WHERE "column" = ? AND id != ?')
-      .get(toCol, task.id).n
-    const toPos = Math.min(data.position, targetCount)
+      const fromCol = task.column
+      const fromPos = task.position
+      const toCol = data.column
+      const targetCount = db
+        .prepare('SELECT COUNT(*) AS n FROM tasks WHERE "column" = ? AND id != ?')
+        .get(toCol, task.id).n
+      const toPos = Math.min(data.position, targetCount)
 
-    const move = db.transaction(() => {
-      if (fromCol === toCol) {
-        if (toPos === fromPos) return false // sin cambio
-        if (toPos < fromPos) {
-          db.prepare(
-            'UPDATE tasks SET position = position + 1 WHERE "column" = ? AND position >= ? AND position < ?'
-          ).run(toCol, toPos, fromPos)
+      const move = db.transaction(() => {
+        if (fromCol === toCol) {
+          if (toPos === fromPos) return false // sin cambio
+          if (toPos < fromPos) {
+            db.prepare(
+              'UPDATE tasks SET position = position + 1 WHERE "column" = ? AND position >= ? AND position < ?'
+            ).run(toCol, toPos, fromPos)
+          } else {
+            db.prepare(
+              'UPDATE tasks SET position = position - 1 WHERE "column" = ? AND position > ? AND position <= ?'
+            ).run(toCol, fromPos, toPos)
+          }
         } else {
-          db.prepare(
-            'UPDATE tasks SET position = position - 1 WHERE "column" = ? AND position > ? AND position <= ?'
-          ).run(toCol, fromPos, toPos)
+          // compacta la columna origen y abre hueco en la destino
+          db.prepare('UPDATE tasks SET position = position - 1 WHERE "column" = ? AND position > ?').run(fromCol, fromPos)
+          db.prepare('UPDATE tasks SET position = position + 1 WHERE "column" = ? AND position >= ?').run(toCol, toPos)
         }
-      } else {
-        // compacta la columna origen y abre hueco en la destino
-        db.prepare('UPDATE tasks SET position = position - 1 WHERE "column" = ? AND position > ?').run(fromCol, fromPos)
-        db.prepare('UPDATE tasks SET position = position + 1 WHERE "column" = ? AND position >= ?').run(toCol, toPos)
-      }
-      db.prepare('UPDATE tasks SET "column" = ?, position = ?, updated_at = ? WHERE id = ?')
-        .run(toCol, toPos, Date.now(), task.id)
-      addEvent(db, task.id, user.id, 'moved', { from: fromCol, to: toCol })
-      return true
-    })
-    move()
-    hub.broadcast('tasks')
-    notifyAllExcept(db, c.get('demo'), user.id, 'tarea_movida', { usuario: user.username, titulo: task.title, columna: toCol })
-    return c.json({ task: hydrateTasks(db, 'WHERE t.id = ?', [task.id])[0] })
-  })
+        db.prepare('UPDATE tasks SET "column" = ?, position = ?, updated_at = ? WHERE id = ?')
+          .run(toCol, toPos, Date.now(), task.id)
+        addEvent(db, task.id, user.id, 'moved', { from: fromCol, to: toCol })
+        return true
+      })
+      move()
+      hub.broadcast('tasks')
+      notifyAllExcept(db, c.get('demo'), user.id, 'tarea_movida', { usuario: user.username, titulo: task.title, columna: toCol })
+      return c.json({ task: hydrateTasks(db, 'WHERE t.id = ?', [task.id])[0] })
+    }
+  )
 
-  app.delete('/api/tasks/:id', (c) => {
+  app.delete('/api/tasks/:id', zValidator('param', idParamSchema, validationHook), (c) => {
     const db = c.get('db')
-    const task = getTask(db, c.req.param('id'))
-    if (!task) return c.json({ error: 'tarea no encontrada' }, 404)
+    const task = getTask(db, c.req.valid('param').id)
+    if (!task) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
     removeAttachmentFiles(db, uploadsDir, task.id)
     const del = db.transaction(() => {
       db.prepare('DELETE FROM tasks WHERE id = ?').run(task.id) // cascada: labels/comments/adjuntos/eventos
@@ -428,14 +468,14 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod }) {
     })
     del()
     hub.broadcast('tasks')
-    return c.json({ ok: true })
+    return c.body(null, 204)
   })
 
   // Detalle completo: task + labels + attachments + comments + activity (paginado LIMIT 50)
-  app.get('/api/tasks/:id', (c) => {
+  app.get('/api/tasks/:id', zValidator('param', idParamSchema, validationHook), (c) => {
     const db = c.get('db')
-    const hydrated = hydrateTasks(db, 'WHERE t.id = ?', [c.req.param('id')])[0]
-    if (!hydrated) return c.json({ error: 'tarea no encontrada' }, 404)
+    const hydrated = hydrateTasks(db, 'WHERE t.id = ?', [c.req.valid('param').id])[0]
+    if (!hydrated) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
     const attachments = db
       .prepare(
         `SELECT a.id, a.filename, a.size, a.mime, a.created_at, a.uploaded_by, u.username AS uploaded_by_username
@@ -462,73 +502,85 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod }) {
   })
 
   // --- Comentarios ---
-  app.post('/api/tasks/:id/comments', async (c) => {
-    const db = c.get('db')
-    const user = c.get('user')
-    const task = getTask(db, c.req.param('id'))
-    if (!task) return c.json({ error: 'tarea no encontrada' }, 404)
-    const { data, error } = await parseJson(c, commentSchema)
-    if (error) return c.json({ error }, 400)
-    const id = crypto.randomUUID()
-    const now = Date.now()
-    db.prepare('INSERT INTO comments (id, task_id, user_id, body, created_at) VALUES (?, ?, ?, ?, ?)')
-      .run(id, task.id, user.id, data.body, now)
-    db.prepare('UPDATE tasks SET updated_at = ? WHERE id = ?').run(now, task.id)
-    hub.broadcast('comments')
-    notifyAllExcept(db, c.get('demo'), user.id, 'comentario', { usuario: user.username, titulo: task.title })
-    return c.json(
-      { comment: { id, body: data.body, created_at: now, user_id: user.id, username: user.username, user_color: user.color } },
-      201
-    )
-  })
+  app.post(
+    '/api/tasks/:id/comments',
+    zValidator('param', idParamSchema, validationHook),
+    zValidator('json', commentSchema, validationHook),
+    (c) => {
+      const db = c.get('db')
+      const user = c.get('user')
+      const task = getTask(db, c.req.valid('param').id)
+      if (!task) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
+      const data = c.req.valid('json')
+      const id = crypto.randomUUID()
+      const now = Date.now()
+      db.prepare('INSERT INTO comments (id, task_id, user_id, body, created_at) VALUES (?, ?, ?, ?, ?)')
+        .run(id, task.id, user.id, data.body, now)
+      db.prepare('UPDATE tasks SET updated_at = ? WHERE id = ?').run(now, task.id)
+      hub.broadcast('comments')
+      notifyAllExcept(db, c.get('demo'), user.id, 'comentario', { usuario: user.username, titulo: task.title })
+      // Location: no hay GET de comentario individual; apunta a la tarea que lo contiene.
+      c.header('Location', `/api/tasks/${task.id}`)
+      return c.json(
+        { comment: { id, body: data.body, created_at: now, user_id: user.id, username: user.username, user_color: user.color } },
+        201
+      )
+    }
+  )
 
   // --- Adjuntos ---
-  app.post('/api/tasks/:id/attachments', async (c) => {
-    const db = c.get('db')
-    const user = c.get('user')
-    const task = getTask(db, c.req.param('id'))
-    if (!task) return c.json({ error: 'tarea no encontrada' }, 404)
-    const body = await c.req.parseBody().catch(() => null)
-    const file = body?.file
-    if (!file || typeof file.arrayBuffer !== 'function') {
-      return c.json({ error: 'falta el fichero (campo "file" en multipart)' }, 400)
-    }
-    if (file.size > c.get('maxUploadBytes')) {
-      return c.json({ error: 'el fichero supera el límite de 10 MB' }, 413)
-    }
-    // Nombre aleatorio en disco; la extensión se sanea (solo alfanumérica, máx 10)
-    const ext = path.extname(file.name || '').replace(/[^a-zA-Z0-9.]/g, '').slice(0, 10)
-    const stored = `${crypto.randomUUID()}${ext}`
-    const buffer = Buffer.from(await file.arrayBuffer())
-    fs.mkdirSync(uploadsDir, { recursive: true })
-    fs.writeFileSync(path.join(uploadsDir, stored), buffer)
+  app.post(
+    '/api/tasks/:id/attachments',
+    zValidator('param', idParamSchema, validationHook),
+    async (c) => {
+      const db = c.get('db')
+      const user = c.get('user')
+      const task = getTask(db, c.req.valid('param').id)
+      if (!task) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
+      // Multipart: no va por zValidator('json'); se validan presencia y tamaño.
+      const body = await c.req.parseBody().catch(() => null)
+      const file = body?.file
+      if (!file || typeof file.arrayBuffer !== 'function') {
+        httpError(400, ERROR_CODES.UPLOAD_FILE_REQUIRED)
+      }
+      if (file.size > c.get('maxUploadBytes')) {
+        httpError(413, ERROR_CODES.UPLOAD_TOO_LARGE)
+      }
+      // Nombre aleatorio en disco; la extensión se sanea (solo alfanumérica, máx 10)
+      const ext = path.extname(file.name || '').replace(/[^a-zA-Z0-9.]/g, '').slice(0, 10)
+      const stored = `${crypto.randomUUID()}${ext}`
+      const buffer = Buffer.from(await file.arrayBuffer())
+      fs.mkdirSync(uploadsDir, { recursive: true })
+      fs.writeFileSync(path.join(uploadsDir, stored), buffer)
 
-    const id = crypto.randomUUID()
-    const now = Date.now()
-    const filename = String(file.name || 'adjunto').slice(0, 200)
-    const mime = String(file.type || 'application/octet-stream').slice(0, 100)
-    const insert = db.transaction(() => {
-      db.prepare(
-        'INSERT INTO attachments (id, task_id, filename, stored_name, size, mime, uploaded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-      ).run(id, task.id, filename, stored, buffer.length, mime, user.id, now)
-      db.prepare('UPDATE tasks SET updated_at = ? WHERE id = ?').run(now, task.id)
-      addEvent(db, task.id, user.id, 'attachment', { filename })
-    })
-    insert()
-    hub.broadcast('attachments')
-    hub.broadcast('tasks')
-    return c.json(
-      { attachment: { id, filename, size: buffer.length, mime, created_at: now, uploaded_by: user.id, uploaded_by_username: user.username } },
-      201
-    )
-  })
+      const id = crypto.randomUUID()
+      const now = Date.now()
+      const filename = String(file.name || 'adjunto').slice(0, 200)
+      const mime = String(file.type || 'application/octet-stream').slice(0, 100)
+      const insert = db.transaction(() => {
+        db.prepare(
+          'INSERT INTO attachments (id, task_id, filename, stored_name, size, mime, uploaded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        ).run(id, task.id, filename, stored, buffer.length, mime, user.id, now)
+        db.prepare('UPDATE tasks SET updated_at = ? WHERE id = ?').run(now, task.id)
+        addEvent(db, task.id, user.id, 'attachment', { filename })
+      })
+      insert()
+      hub.broadcast('attachments')
+      hub.broadcast('tasks')
+      c.header('Location', `/api/attachments/${id}`)
+      return c.json(
+        { attachment: { id, filename, size: buffer.length, mime, created_at: now, uploaded_by: user.id, uploaded_by_username: user.username } },
+        201
+      )
+    }
+  )
 
-  app.get('/api/attachments/:id', (c) => {
+  app.get('/api/attachments/:id', zValidator('param', idParamSchema, validationHook), (c) => {
     const db = c.get('db')
-    const att = db.prepare('SELECT * FROM attachments WHERE id = ?').get(c.req.param('id'))
-    if (!att) return c.json({ error: 'adjunto no encontrado' }, 404)
+    const att = db.prepare('SELECT * FROM attachments WHERE id = ?').get(c.req.valid('param').id)
+    if (!att) httpError(404, ERROR_CODES.ATTACHMENT_NOT_FOUND)
     const filePath = path.join(uploadsDir, path.basename(att.stored_name))
-    if (!fs.existsSync(filePath)) return c.json({ error: 'fichero no disponible en disco' }, 404)
+    if (!fs.existsSync(filePath)) httpError(404, ERROR_CODES.ATTACHMENT_FILE_MISSING)
     c.header('Content-Type', att.mime || 'application/octet-stream')
     c.header(
       'Content-Disposition',
@@ -537,13 +589,19 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod }) {
     return c.body(fs.readFileSync(filePath))
   })
 
-  // --- Feed global de actividad (paginado) ---
-  app.get('/api/activity', (c) => {
+  // --- Feed global de actividad: paginación KEYSET (skill api-stack) ---------
+  // Cursor opaco base64url {ts, id} sobre (created_at DESC, id DESC); LIMIT n+1;
+  // respuesta { items, nextCursor, hasMore }. Cursor malformado → 400
+  // INVALID_CURSOR. (Antes: page/limit/total con OFFSET — cambio de contrato,
+  // ver CONVENTIONS.md para la fase 2 del frontend.)
+  app.get('/api/activity', zValidator('query', activityQuerySchema, validationHook), (c) => {
     const db = c.get('db')
-    const page = Math.max(1, parseInt(c.req.query('page') || '1', 10) || 1)
-    const limit = Math.min(100, Math.max(1, parseInt(c.req.query('limit') || '30', 10) || 30))
-    const total = db.prepare('SELECT COUNT(*) AS n FROM activity_events').get().n
-    const items = db
+    const { cursor, limit } = c.req.valid('query')
+    const decoded = cursor ? decodeCursor(cursor) : null
+    const keyset = decoded
+      ? 'WHERE (e.created_at < @cts OR (e.created_at = @cts AND e.id < @cid))'
+      : ''
+    const rows = db
       .prepare(
         `SELECT e.id, e.type, e.data, e.created_at, e.task_id,
                 t.title AS task_title, t.project_id, p.name AS project_name,
@@ -552,17 +610,22 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod }) {
          JOIN tasks t ON t.id = e.task_id
          JOIN projects p ON p.id = t.project_id
          LEFT JOIN users u ON u.id = e.user_id
-         ORDER BY e.created_at DESC LIMIT ? OFFSET ?`
+         ${keyset}
+         ORDER BY e.created_at DESC, e.id DESC
+         LIMIT @limitPlusOne`
       )
-      .all(limit, (page - 1) * limit)
+      .all({
+        ...(decoded ? { cts: decoded.ts, cid: decoded.id } : {}),
+        limitPlusOne: limit + 1,
+      })
       .map((e) => ({ ...e, data: JSON.parse(e.data || '{}') }))
-    return c.json({ items, page, limit, total })
+    const page = keysetPage(rows, limit)
+    return c.json({ items: page.items, nextCursor: page.nextCursor, hasMore: page.hasMore })
   })
 
   // --- Admin: usuarios ---
   app.get('/api/users', (c) => {
-    const denied = requireAdmin(c)
-    if (denied) return denied
+    requireAdmin(c)
     const db = c.get('db')
     const users = db
       .prepare('SELECT id, username, email, phone, color, language, role, created_at FROM users ORDER BY username')
@@ -570,21 +633,27 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod }) {
     return c.json({ users })
   })
 
-  app.post('/api/users', async (c) => {
-    const denied = requireAdmin(c)
-    if (denied) return denied
+  app.post('/api/users', zValidator('json', userCreateSchema, validationHook), async (c) => {
+    requireAdmin(c)
     const db = c.get('db')
-    const { data, error } = await parseJson(c, userCreateSchema)
-    if (error) return c.json({ error }, 400)
+    const data = c.req.valid('json')
     if (db.prepare('SELECT id FROM users WHERE username = ?').get(data.username)) {
-      return c.json({ error: 'usuario ya existe' }, 409)
+      httpError(409, ERROR_CODES.USER_ALREADY_EXISTS)
     }
     const hash = await bcrypt.hash(data.password, 10)
     const id = crypto.randomUUID()
-    db.prepare(
-      'INSERT INTO users (id, username, password_hash, color, language, role, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
-    ).run(id, data.username, hash, data.color, 'auto', data.role, Date.now())
+    try {
+      db.prepare(
+        'INSERT INTO users (id, username, password_hash, color, language, role, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      ).run(id, data.username, hash, data.color, 'auto', data.role, Date.now())
+    } catch (err) {
+      if (err instanceof SqliteError && err.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+        httpError(409, ERROR_CODES.USER_ALREADY_EXISTS)
+      }
+      throw err
+    }
     hub.broadcast('users')
+    c.header('Location', `/api/users/${id}`)
     return c.json(
       { user: db.prepare('SELECT id, username, email, phone, color, language, role, created_at FROM users WHERE id = ?').get(id) },
       201
@@ -592,77 +661,85 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod }) {
   })
 
   // Cambio de rol (admin). Salvaguardas: no auto-cambio y protección último admin.
-  app.put('/api/users/:id/role', async (c) => {
-    const denied = requireAdmin(c)
-    if (denied) return denied
-    const db = c.get('db')
-    const me = c.get('user')
-    const id = c.req.param('id')
-    if (id === me.id) return c.json({ error: 'no puedes cambiar tu propio rol' }, 400)
-    const { data, error } = await parseJson(c, userRoleSchema)
-    if (error) return c.json({ error }, 400)
-    const target = db.prepare(`SELECT ${USER_COLS} FROM users WHERE id = ?`).get(id)
-    if (!target) return c.json({ error: 'usuario no encontrado' }, 404)
-    if (target.role === 'admin' && data.role === 'user' && countAdmins(db) <= 1) {
-      return c.json({ error: 'debe quedar al menos un administrador' }, 400)
+  app.put(
+    '/api/users/:id/role',
+    zValidator('param', idParamSchema, validationHook),
+    zValidator('json', userRoleSchema, validationHook),
+    (c) => {
+      requireAdmin(c)
+      const db = c.get('db')
+      const me = c.get('user')
+      const id = c.req.valid('param').id
+      if (id === me.id) httpError(400, ERROR_CODES.USER_SELF_ROLE)
+      const data = c.req.valid('json')
+      const target = db.prepare(`SELECT ${USER_COLS} FROM users WHERE id = ?`).get(id)
+      if (!target) httpError(404, ERROR_CODES.USER_NOT_FOUND)
+      if (target.role === 'admin' && data.role === 'user' && countAdmins(db) <= 1) {
+        httpError(400, ERROR_CODES.USER_LAST_ADMIN)
+      }
+      db.prepare('UPDATE users SET role = ? WHERE id = ?').run(data.role, id)
+      hub.broadcast('users')
+      return c.json({ user: db.prepare(`SELECT ${USER_COLS} FROM users WHERE id = ?`).get(id) })
     }
-    db.prepare('UPDATE users SET role = ? WHERE id = ?').run(data.role, id)
-    hub.broadcast('users')
-    return c.json({ user: db.prepare(`SELECT ${USER_COLS} FROM users WHERE id = ?`).get(id) })
-  })
+  )
 
   // Reset de contraseña (admin): re-hashea y destruye las sesiones del usuario.
-  app.put('/api/users/:id/password', async (c) => {
-    const denied = requireAdmin(c)
-    if (denied) return denied
-    const db = c.get('db')
-    const id = c.req.param('id')
-    const { data, error } = await parseJson(c, userPasswordSchema)
-    if (error) return c.json({ error }, 400)
-    if (!db.prepare('SELECT id FROM users WHERE id = ?').get(id)) {
-      return c.json({ error: 'usuario no encontrado' }, 404)
+  app.put(
+    '/api/users/:id/password',
+    zValidator('param', idParamSchema, validationHook),
+    zValidator('json', userPasswordSchema, validationHook),
+    async (c) => {
+      requireAdmin(c)
+      const db = c.get('db')
+      const id = c.req.valid('param').id
+      const data = c.req.valid('json')
+      if (!db.prepare('SELECT id FROM users WHERE id = ?').get(id)) {
+        httpError(404, ERROR_CODES.USER_NOT_FOUND)
+      }
+      const hash = await bcrypt.hash(data.password, 10)
+      db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, id)
+      db.prepare('DELETE FROM sessions WHERE user_id = ?').run(id)
+      hub.broadcast('users')
+      return c.json({ ok: true })
     }
-    const hash = await bcrypt.hash(data.password, 10)
-    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, id)
-    db.prepare('DELETE FROM sessions WHERE user_id = ?').run(id)
-    hub.broadcast('users')
-    return c.json({ ok: true })
-  })
+  )
 
   // Idioma de un usuario (admin): users.language es la fuente de verdad.
-  app.put('/api/users/:id/language', async (c) => {
-    const denied = requireAdmin(c)
-    if (denied) return denied
-    const db = c.get('db')
-    const id = c.req.param('id')
-    const { data, error } = await parseJson(c, userLanguageSchema)
-    if (error) return c.json({ error }, 400)
-    if (!db.prepare('SELECT id FROM users WHERE id = ?').get(id)) {
-      return c.json({ error: 'usuario no encontrado' }, 404)
+  app.put(
+    '/api/users/:id/language',
+    zValidator('param', idParamSchema, validationHook),
+    zValidator('json', userLanguageSchema, validationHook),
+    (c) => {
+      requireAdmin(c)
+      const db = c.get('db')
+      const id = c.req.valid('param').id
+      const data = c.req.valid('json')
+      if (!db.prepare('SELECT id FROM users WHERE id = ?').get(id)) {
+        httpError(404, ERROR_CODES.USER_NOT_FOUND)
+      }
+      db.prepare('UPDATE users SET language = ? WHERE id = ?').run(data.language, id)
+      hub.broadcast('users')
+      return c.json({ user: db.prepare(`SELECT ${USER_COLS} FROM users WHERE id = ?`).get(id) })
     }
-    db.prepare('UPDATE users SET language = ? WHERE id = ?').run(data.language, id)
-    hub.broadcast('users')
-    return c.json({ user: db.prepare(`SELECT ${USER_COLS} FROM users WHERE id = ?`).get(id) })
-  })
+  )
 
   // Borrado (admin). Salvaguardas: no auto-borrado, protección último admin;
   // destruye las sesiones del usuario eliminado.
-  app.delete('/api/users/:id', (c) => {
-    const denied = requireAdmin(c)
-    if (denied) return denied
+  app.delete('/api/users/:id', zValidator('param', idParamSchema, validationHook), (c) => {
+    requireAdmin(c)
     const db = c.get('db')
     const me = c.get('user')
-    const id = c.req.param('id')
-    if (id === me.id) return c.json({ error: 'no puedes eliminarte a ti mismo' }, 400)
+    const id = c.req.valid('param').id
+    if (id === me.id) httpError(400, ERROR_CODES.USER_SELF_DELETE)
     const target = db.prepare(`SELECT ${USER_COLS} FROM users WHERE id = ?`).get(id)
-    if (!target) return c.json({ error: 'usuario no encontrado' }, 404)
+    if (!target) httpError(404, ERROR_CODES.USER_NOT_FOUND)
     if (target.role === 'admin' && countAdmins(db) <= 1) {
-      return c.json({ error: 'debe quedar al menos un administrador' }, 400)
+      httpError(400, ERROR_CODES.USER_LAST_ADMIN)
     }
     db.prepare('DELETE FROM sessions WHERE user_id = ?').run(id)
     db.prepare('DELETE FROM users WHERE id = ?').run(id)
     hub.broadcast('users')
-    return c.json({ ok: true })
+    return c.body(null, 204)
   })
 
   // --- Ajustes: modo demo (flag en kv de producción) ---
@@ -672,12 +749,10 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod }) {
   })
 
   // PUT solo admin de producción: conmuta el modo demo
-  app.put('/api/settings/demo', async (c) => {
-    const denied = requireAdmin(c)
-    if (denied) return denied
-    if (c.get('demo')) return c.json({ error: 'ajuste solo disponible desde la sesión de producción' }, 403)
-    const { data, error } = await parseJson(c, demoToggleSchema)
-    if (error) return c.json({ error }, 400)
+  app.put('/api/settings/demo', zValidator('json', demoToggleSchema, validationHook), (c) => {
+    requireAdmin(c)
+    if (c.get('demo')) httpError(403, ERROR_CODES.SETTINGS_PROD_ONLY)
+    const data = c.req.valid('json')
     kvSet(prod, 'demo_enabled', data.enabled ? '1' : '0')
     hub.broadcast('settings')
     return c.json({ demo_enabled: data.enabled })

@@ -67,7 +67,7 @@ describe('users admin', () => {
     const pepe = await loginAs(app, 'pepe', 'pepe123')
     expect(pepe).toBeTruthy()
     const res = await app.request(`/api/users/${u.id}`, jsonReq(admin, 'DELETE', `/api/users/${u.id}`))
-    expect(res.status).toBe(200)
+    expect(res.status).toBe(204)
     const meRes = await app.request('/api/auth/me', { headers: { cookie: pepe } })
     expect(meRes.status).toBe(401)
   })
@@ -78,7 +78,7 @@ describe('users admin', () => {
     const me = prod.prepare('SELECT id FROM users WHERE username = ?').get('admin')
     const res = await app.request(`/api/users/${me.id}`, jsonReq(cookie, 'DELETE', `/api/users/${me.id}`))
     expect(res.status).toBe(400)
-    expect((await res.json()).error).toMatch(/ti mismo/)
+    expect((await res.json()).error.code).toBe('USER_SELF_DELETE')
   })
 
   it('reset de contraseña destruye sesiones y permite entrar con la nueva', async () => {

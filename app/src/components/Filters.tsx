@@ -162,7 +162,7 @@ export function Filters({
           onClick={() => setOpen((o) => !o)}
           className={`inline-flex items-center gap-2 rounded-full border bg-surface px-3.5 py-2 text-[13px] font-medium shadow-soft ${
             activeCount
-              ? 'border-emerald-500/50 text-emerald-700 dark:text-emerald-400'
+              ? 'border-brand/50 text-brand'
               : 'border-app text-muted hover:bg-surface2'
           }`}
         >

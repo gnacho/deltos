@@ -6,6 +6,7 @@ import { useData } from '@/data/data-context';
 import { useSession } from '@/auth/session-context';
 import { Avatar } from '@/components/Avatar';
 import { relTime } from '@/i18n';
+import { apiErrorText } from '@/lib/errors';
 
 /** Pestaña Comentarios: lista real + publicar. */
 export function CommentsTab({ detail }: { detail: TaskDetail }) {
@@ -26,7 +27,7 @@ export function CommentsTab({ detail }: { detail: TaskDetail }) {
       await data.addComment(detail.task.id, text);
       setBody('');
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('comments.error'));
+      setError(apiErrorText(err, t('comments.error')));
     } finally {
       setSending(false);
     }
@@ -73,7 +74,7 @@ export function CommentsTab({ detail }: { detail: TaskDetail }) {
           <button
             type="submit"
             disabled={sending || !body.trim()}
-            className="px-3.5 py-2 rounded-lg bg-emerald-500 text-white text-[13px] font-semibold hover:bg-emerald-600 disabled:opacity-60"
+            className="px-3.5 py-2 rounded-lg bg-brand text-brandfg text-[13px] font-semibold hover:brightness-110 disabled:opacity-60"
           >
             {sending ? t('comments.submitting') : t('comments.submit')}
           </button>

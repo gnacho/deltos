@@ -110,7 +110,7 @@ export function DetailsTab({ detail, onClose }: { detail: TaskDetail; onClose: (
               if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
             }}
             aria-invalid={titleError !== null}
-            className="w-full bg-surface2 border border-app rounded-xl px-3.5 py-2.5 text-[15px] font-medium outline-none focus:border-emerald-500"
+            className="w-full bg-surface2 border border-app rounded-xl px-3.5 py-2.5 text-[15px] font-medium outline-none focus:border-brand"
           />
           {titleError && (
             <p role="alert" className="text-[12px] text-rose-600 dark:text-rose-400 mt-1">
@@ -214,7 +214,7 @@ export function DetailsTab({ detail, onClose }: { detail: TaskDetail; onClose: (
             type="date"
             value={task.due_date ?? ''}
             onChange={(e) => void patch({ due_date: e.target.value || null })}
-            className="w-full bg-surface2 border border-app rounded-xl px-3 py-2 text-[14px] outline-none focus:border-emerald-500"
+            className="w-full bg-surface2 border border-app rounded-xl px-3 py-2 text-[14px] outline-none focus:border-brand"
           />
         </div>
 
@@ -261,7 +261,7 @@ export function DetailsTab({ detail, onClose }: { detail: TaskDetail; onClose: (
           placeholder={t('task.descriptionPlaceholder')}
           onChange={(e) => setDescription(e.target.value)}
           onBlur={saveDescription}
-          className="w-full bg-surface2 border border-app rounded-xl px-3.5 py-2.5 text-[15px] leading-relaxed outline-none focus:border-emerald-500 resize-y"
+          className="w-full bg-surface2 border border-app rounded-xl px-3.5 py-2.5 text-[15px] leading-relaxed outline-none focus:border-brand resize-y"
         />
       </section>
 
@@ -315,7 +315,7 @@ export function DetailsTab({ detail, onClose }: { detail: TaskDetail; onClose: (
       <div className="flex items-center justify-between gap-3 pt-2 border-t border-app">
         <p className="text-[12px] text-faint" role="status" aria-live="polite">
           {saveState === 'saved' && (
-            <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+            <span className="inline-flex items-center gap-1 text-ok">
               <Check className="w-3.5 h-3.5" aria-hidden="true" />
               {t('task.saved')}
             </span>

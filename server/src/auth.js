@@ -4,6 +4,11 @@ import crypto from 'node:crypto'
 import bcrypt from 'bcryptjs'
 import { serialize, parse } from 'cookie'
 import { kvGet, kvSet } from './db.js'
+import { logger } from './logger.js'
+import { httpError } from './errors.js'
+import { ERROR_CODES } from './error-codes.js'
+
+const log = logger.child({ component: 'auth' })
 
 export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000 // 30 días
 export const COOKIE_NAME = 'deltos_session'
@@ -17,7 +22,7 @@ export function getSecret(prodDb, envSecret) {
   if (!secret) {
     secret = crypto.randomBytes(32).toString('hex')
     kvSet(prodDb, 'session_secret', secret)
-    console.log('[auth] SESSION_SECRET autogenerado y persistido en kv')
+    log.info('session_secret_generated')
   }
   return secret
 }
@@ -106,7 +111,7 @@ export function requireAuth(ctx) {
     if (isPublic) return next()
 
     const session = resolveSession(ctx, c.req.header('cookie'))
-    if (!session) return c.json({ error: 'no autenticado' }, 401)
+    if (!session) httpError(401, ERROR_CODES.AUTH_REQUIRED)
     c.set('db', session.db)
     c.set('user', session.user)
     c.set('demo', session.demo)
@@ -115,12 +120,13 @@ export function requireAuth(ctx) {
   }
 }
 
+// Lanza 403 AUTH_FORBIDDEN si el usuario de la sesión no es admin.
+// (Antes devolvía una Response; ahora el envelope lo construye app.onError.)
 export function requireAdmin(c) {
   const user = c.get('user')
   if (!user || user.role !== 'admin') {
-    return c.json({ error: 'se requiere rol de administrador' }, 403)
+    httpError(403, ERROR_CODES.AUTH_FORBIDDEN)
   }
-  return null
 }
 
 // --- Login / logout -------------------------------------------------------
@@ -173,7 +179,7 @@ export async function changePassword(db, userId, current, next) {
 // Bootstrap: crea el admin inicial en users desde .env (idempotente).
 export async function ensureBootstrapAdmin(db, username, password) {
   if (!password) {
-    console.warn('[auth] AUTH_PASS no definido: no se crea admin bootstrap. Define AUTH_USER/AUTH_PASS en .env')
+    log.warn('bootstrap_admin_skipped', { reason: 'auth_pass_missing' })
     return false
   }
   const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username)
@@ -182,7 +188,7 @@ export async function ensureBootstrapAdmin(db, username, password) {
   db.prepare(
     "INSERT INTO users (id, username, password_hash, color, language, role, created_at) VALUES (?, ?, ?, 'violet', 'auto', 'admin', ?)"
   ).run(crypto.randomUUID(), username, hash, Date.now())
-  console.log(`[auth] admin bootstrap creado: ${username}`)
+  log.info('bootstrap_admin_created', { username })
   return true
 }
 
