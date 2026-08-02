@@ -44,13 +44,23 @@ const projectSchema = z.object({
   emoji: z.string().max(8).default(''),
   color: colorSchema.default('sky'),
 })
-const projectPatchSchema = projectSchema.partial()
+// PATCH: campos explícitamente opcionales SIN default — zod v4 mantiene el
+// default del schema base dentro de .partial() y un PATCH que no envíe el
+// campo lo RESETEARÍA al default (bug v1.6.0: renombrar etiqueta → slate).
+const projectPatchSchema = z.object({
+  name: z.string().min(1).max(80).optional(),
+  emoji: z.string().max(8).optional(),
+  color: colorSchema.optional(),
+})
 
 const labelSchema = z.object({
   name: z.string().min(1).max(40),
   color: colorSchema.default('slate'),
 })
-const labelPatchSchema = labelSchema.partial()
+const labelPatchSchema = z.object({
+  name: z.string().min(1).max(40).optional(),
+  color: colorSchema.optional(),
+})
 
 const taskCreateSchema = z.object({
   project_id: z.string().min(1).max(64),

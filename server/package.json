@@ -1,6 +1,6 @@
 {
   "name": "deltos-server",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "description": "Backend de Deltos — PWA de gestión de tareas para pareja (Hono + better-sqlite3)",
   "type": "module",
   "engines": {

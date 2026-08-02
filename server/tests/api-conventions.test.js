@@ -333,3 +333,34 @@ describe('anti pantalla-negra: /api/version + cabeceras de caché', () => {
     expect(asset.status).toBe(404)
   })
 })
+
+describe('PATCH parcial NO resetea campos con default (regresión v1.6.0)', () => {
+  it('PATCH /api/labels/:id solo con name conserva el color', async () => {
+    const { app } = await makeInstance()
+    const cookie = await loginAdmin(app)
+    const created = await (
+      await app.request('/api/labels', jsonReq(cookie, 'POST', '/api/labels', { name: 'color-ok', color: 'rose' }))
+    ).json()
+    const res = await app.request(
+      `/api/labels/${created.label.id}`,
+      jsonReq(cookie, 'PATCH', `/api/labels/${created.label.id}`, { name: 'color-ok-2' })
+    )
+    const body = await res.json()
+    expect(body.label.color).toBe('rose')
+  })
+
+  it('PATCH /api/projects/:id solo con name conserva emoji y color', async () => {
+    const { app } = await makeInstance()
+    const cookie = await loginAdmin(app)
+    const created = await (
+      await app.request('/api/projects', jsonReq(cookie, 'POST', '/api/projects', { name: 'P1', emoji: '🏠', color: 'violet' }))
+    ).json()
+    const res = await app.request(
+      `/api/projects/${created.project.id}`,
+      jsonReq(cookie, 'PATCH', `/api/projects/${created.project.id}`, { name: 'P1b' })
+    )
+    const body = await res.json()
+    expect(body.project.emoji).toBe('🏠')
+    expect(body.project.color).toBe('violet')
+  })
+})
