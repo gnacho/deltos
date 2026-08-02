@@ -22,7 +22,7 @@
 Deltos es una PWA de gestión de tareas para el día a día: un tablero kanban
 compartido con sincronización en vivo, comentarios, adjuntos y notificaciones
 push, servido por un único servicio Node + SQLite. Vale para una pareja, una
-familia, un grupo de amigos organizando un viaje o un equipo pequeño — sin la
+familia, un grupo de amigos organizando un viaje o un equipo pequeño, sin la
 complejidad de las herramientas grandes y sin tus datos en la nube de otro.
 
 ## ¿Por qué existe?
@@ -38,41 +38,41 @@ en vivo. Hace menos que Trello o Jira, y para nosotros esa era la idea.
 
 ## ¿Por qué este stack?
 
-- **Node 22 + Hono + better-sqlite3** — la app es sobre todo E/S: sync en
+- **Node 22 + Hono + better-sqlite3**: la app es sobre todo E/S: sync en
   vivo por SSE, subida de adjuntos, unos pocos usuarios concurrentes. El
   bucle de eventos de Node encaja en esa forma y Hono aporta rutas sin
   impuesto de framework.
-- **SQLite, sin base de datos externa** — un fichero en `/var/lib/deltos`,
+- **SQLite, sin base de datos externa**: un fichero en `/var/lib/deltos`,
   modo WAL; un backup es copiar un archivo. Nada que administrar para unos
   pocos usuarios.
-- **systemd tras Nginx Proxy Manager, sin Docker** — corre en un LXC pequeño
+- **systemd tras Nginx Proxy Manager, sin Docker**: corre en un LXC pequeño
   en casa; menos capas, logs en journald y una actualización es mover un
   symlink (Docker sigue disponible como alternativa, ver Instalación).
-- **React 19 + Vite + Tailwind** — la shell de UI (sidebar, temas, i18n,
+- **React 19 + Vite + Tailwind**: la shell de UI (sidebar, temas, i18n,
   ajustes) es compartida con mis otras apps, así que un arreglo llega a
   todas a la vez.
 
 ## Características
 
-- **Kanban compartido** — columnas Nuevo / En curso / Hecho con arrastrar y
+- **Kanban compartido**: columnas Nuevo / En curso / Hecho con arrastrar y
   soltar, en vivo entre sesiones vía SSE (sin recargar, sin polling).
-- **Notificaciones push** — Web Push (VAPID) cuando alguien crea, mueve,
+- **Notificaciones push**: Web Push (VAPID) cuando alguien crea, mueve,
   comenta o te asigna una tarjeta, incluso con la app cerrada. Dormido en
   HTTP plano; se activa solo cuando la app se sirve por HTTPS.
-- **Tarjetas con todo** — comentarios, adjuntos con visor de imágenes en la
+- **Tarjetas con todo**: comentarios, adjuntos con visor de imágenes en la
   app, etiquetas, prioridad, vencimiento y feed de actividad por tarjeta.
-- **Multiusuario** — roles admin/usuario, idioma por usuario (ES/EN),
+- **Multiusuario**: roles admin/usuario, idioma por usuario (ES/EN),
   contraseñas bcrypt, login con rate-limit y registro de auditoría.
-- **PWA instalable** — tema claro/oscuro siguiendo al sistema, service
+- **PWA instalable**: tema claro/oscuro siguiendo al sistema, service
   worker offline y "comprobar actualizaciones" contra GitHub releases desde
   Ajustes.
-- **Modo demo con un clic** — base de datos sembrada aparte, sin contraseña;
+- **Modo demo con un clic**: base de datos sembrada aparte, sin contraseña;
   desactivable en Ajustes.
-- **Almacenamiento SQLite** — modo WAL, un único fichero en `/var/lib/deltos`.
+- **Almacenamiento SQLite**: modo WAL, un único fichero en `/var/lib/deltos`.
 
 ## Capturas
 
-**Detalle de tarjeta — pestañas de detalles, adjuntos, comentarios y actividad**
+**Detalle de tarjeta:** pestañas de detalles, adjuntos, comentarios y actividad**
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/screenshot-task-es-dark.png">
@@ -80,7 +80,7 @@ en vivo. Hace menos que Trello o Jira, y para nosotros esa era la idea.
   <img alt="Modal de tarea con título, proyecto, asignado, prioridad, vencimiento, etiquetas, descripción y acciones de mover a columna" src="assets/screenshot-task-es-light.png" width="800">
 </picture>
 
-**Ajustes — apariencia con color de acento, perfil, etiquetas, idioma**
+**Ajustes:** apariencia con color de acento, perfil, etiquetas, idioma**
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/screenshot-settings-es-dark.png">
@@ -96,8 +96,8 @@ Requisitos: Linux (x86_64 o arm64) con systemd, acceso root o sudo.
 curl -fsSL https://raw.githubusercontent.com/gnacho/deltos/main/install.sh | sudo sh   # (recomendado)
 ```
 
-El instalador es un script POSIX shell legible y sin dependencias —
-[inspecciónalo antes de ejecutarlo](install.sh), para eso se mantiene
+El instalador es un script POSIX shell legible y sin dependencias.
+[Inspecciónalo antes de ejecutarlo](install.sh): para eso se mantiene
 simple. Detecta tu distro/arquitectura, descarga la última release y
 **verifica su checksum SHA-256**, instala un runtime Node versionado y la
 app en `/opt/deltos`, crea un servicio systemd `deltos` enjaulado y muestra
@@ -131,7 +131,7 @@ Descarga el artefacto de tu arquitectura desde
 [Releases](https://github.com/gnacho/deltos/releases/latest) y verifícalo
 contra `checksums.txt` (`sha256sum -c checksums.txt --ignore-missing`).
 Las releases se publican por tag `v*` con `node_modules` precompilado por
-arquitectura (`.github/workflows/release.yml`) — no hace falta compilador
+arquitectura (`.github/workflows/release.yml`); no hace falta compilador
 en el servidor.
 
 </details>
@@ -145,12 +145,12 @@ El servicio lee su entorno (instalador: `/etc/deltos/env`):
 | `PORT`              | `3000`                  | Puerto de escucha (tras Nginx Proxy Manager). |
 | `DATA_DIR`          | `/var/lib/deltos`       | Ficheros SQLite + uploads. |
 | `STATIC_DIR`        | `app/dist`              | Frontend compilado a servir. |
-| `AUTH_USER`/`AUTH_PASS` | —                   | Admin de arranque en el primer boot (idempotente). |
+| `AUTH_USER`/`AUTH_PASS` | - | Admin de arranque en el primer boot (idempotente). |
 | `COOKIE_SECURE`     | `false`                 | `true` solo tras HTTPS. |
 | `SESSION_SECRET`    | auto-generado           | Secreto HMAC; se persiste en la BD si no se define. |
 | `MAX_SSE_CLIENTS`   | `20`                    | Clientes de sync en vivo concurrentes. |
 | `MAX_UPLOAD_MB`     | `10`                    | Tamaño máximo de adjunto. |
-| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` | — | Claves Web Push (las tres o ninguna). Genera con `npx web-push generate-vapid-keys --json`; el subject debe ser un `mailto:`. Sin ellas el push queda apagado y la app funciona igual. |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` | - | Claves Web Push (las tres o ninguna). Genera con `npx web-push generate-vapid-keys --json`; el subject debe ser un `mailto:`. Sin ellas el push queda apagado y la app funciona igual. |
 
 Reinicia tras cambios: `sudo systemctl restart deltos`.
 

@@ -22,7 +22,7 @@
 Deltos is a task-management PWA for everyday life: a shared kanban board with
 live sync, comments, attachments and push notifications, served by a single
 small Node + SQLite service. It works for a couple, a family, a group of
-friends planning a trip, or a small team — without the complexity of the big
+friends planning a trip, or a small team, without the complexity of the big
 tools and without your data on somebody else's cloud.
 
 ## Why does this exist?
@@ -38,37 +38,37 @@ Trello or Jira, and for us that was the point.
 
 ## Why this stack?
 
-- **Node 22 + Hono + better-sqlite3** — the app is mostly I/O: SSE live
+- **Node 22 + Hono + better-sqlite3**: the app is mostly I/O: SSE live
   sync, uploads, a handful of concurrent users. Node's event loop fits that
   shape and Hono adds routing without framework tax.
-- **SQLite, no external database** — one file under `/var/lib/deltos`, WAL
+- **SQLite, no external database**: one file under `/var/lib/deltos`, WAL
   mode; a backup is a file copy. Nothing to administer for a few users.
-- **systemd behind Nginx Proxy Manager, no Docker** — it runs in a small LXC
+- **systemd behind Nginx Proxy Manager, no Docker**: it runs in a small LXC
   at home; fewer layers, logs in journald, an upgrade is a symlink swap
   (Docker is still available as an alternative, see Installation).
-- **React 19 + Vite + Tailwind** — the UI shell (sidebar, themes, i18n,
+- **React 19 + Vite + Tailwind**: the UI shell (sidebar, themes, i18n,
   settings) is shared with my other apps, so a fix lands everywhere at once.
 
 ## Features
 
-- **Shared kanban** — New / In progress / Done columns with drag & drop, live
+- **Shared kanban**: New / In progress / Done columns with drag & drop, live
   between sessions over SSE (no refresh, no polling).
-- **Push notifications** — Web Push (VAPID) when someone creates, moves,
+- **Push notifications**: Web Push (VAPID) when someone creates, moves,
   comments on or assigns you a card, even with the app closed. Dormant on
   plain HTTP; turns itself on once the app is served over HTTPS.
-- **Cards with everything** — comments, attachments with an in-app image
+- **Cards with everything**: comments, attachments with an in-app image
   viewer, labels, priority, due dates and a per-card activity feed.
-- **Multiuser** — admin/user roles, per-user language (ES/EN), bcrypt
+- **Multiuser**: admin/user roles, per-user language (ES/EN), bcrypt
   passwords, rate-limited login, audit trail.
-- **Installable PWA** — light/dark theme following the system, offline
+- **Installable PWA**: light/dark theme following the system, offline
   service worker, "check for updates" against GitHub releases from Settings.
-- **One-click demo mode** — separate seeded database, no password; can be
+- **One-click demo mode**: separate seeded database, no password; can be
   disabled in Settings.
-- **SQLite storage** — WAL mode, single file under `/var/lib/deltos`.
+- **SQLite storage**: WAL mode, single file under `/var/lib/deltos`.
 
 ## Screenshots
 
-**Card detail — tabs for details, attachments, comments and activity**
+**Card detail:** tabs for details, attachments, comments and activity**
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/screenshot-task-en-dark.png">
@@ -76,7 +76,7 @@ Trello or Jira, and for us that was the point.
   <img alt="Task modal showing title, project, assignee, priority, due date, labels, description and move-to column actions" src="assets/screenshot-task-en-light.png" width="800">
 </picture>
 
-**Settings — appearance with accent color, profile, labels, language**
+**Settings:** appearance with accent color, profile, labels, language**
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/screenshot-settings-en-dark.png">
@@ -92,8 +92,8 @@ Requirements: Linux (x86_64 or arm64) with systemd, root or sudo access.
 curl -fsSL https://raw.githubusercontent.com/gnacho/deltos/main/install.sh | sudo sh   # (recommended)
 ```
 
-The installer is a readable, dependency-free POSIX shell script —
-[inspect it before running](install.sh), that's the point of keeping it
+The installer is a readable, dependency-free POSIX shell script.
+[Inspect it before running](install.sh): that's the point of keeping it
 plain. It detects your distro/arch, downloads the latest release and
 **verifies its SHA-256 checksum**, installs a versioned Node runtime and the
 app under `/opt/deltos`, creates a sandboxed `deltos` systemd service and
@@ -127,7 +127,7 @@ Download the artifact for your architecture from
 [Releases](https://github.com/gnacho/deltos/releases/latest) and verify it
 against `checksums.txt` (`sha256sum -c checksums.txt --ignore-missing`).
 Releases are published per `v*` tag with `node_modules` pre-built per arch
-(`.github/workflows/release.yml`) — no compiler needed on the server.
+(`.github/workflows/release.yml`); no compiler needed on the server.
 
 </details>
 
@@ -140,12 +140,12 @@ The service reads its environment (installer: `/etc/deltos/env`):
 | `PORT`              | `3000`                  | Listen port (behind Nginx Proxy Manager). |
 | `DATA_DIR`          | `/var/lib/deltos`       | SQLite files + uploads. |
 | `STATIC_DIR`        | `app/dist`              | Built frontend to serve. |
-| `AUTH_USER`/`AUTH_PASS` | —                   | Bootstrap admin on first boot (idempotent). |
+| `AUTH_USER`/`AUTH_PASS` | - | Bootstrap admin on first boot (idempotent). |
 | `COOKIE_SECURE`     | `false`                 | `true` only behind HTTPS. |
 | `SESSION_SECRET`    | auto-generated          | HMAC secret; persisted in the DB if unset. |
 | `MAX_SSE_CLIENTS`   | `20`                    | Concurrent live-sync clients. |
 | `MAX_UPLOAD_MB`     | `10`                    | Attachment size limit. |
-| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` | — | Web Push keys (all three or none). Generate with `npx web-push generate-vapid-keys --json`; subject must be a `mailto:`. Without them, push stays off and the app runs fine. |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` | - | Web Push keys (all three or none). Generate with `npx web-push generate-vapid-keys --json`; subject must be a `mailto:`. Without them, push stays off and the app runs fine. |
 
 Restart after changes: `sudo systemctl restart deltos`.
 
