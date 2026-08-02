@@ -52,6 +52,8 @@ export interface DataApi {
   uploadAttachment: (id: string, file: File) => Promise<void>;
   createProject: (input: CreateProjectInput) => Promise<Project>;
   createLabel: (input: { name: string; color: string }) => Promise<Label>;
+  updateLabel: (id: string, patch: { name?: string; color?: string }) => Promise<void>;
+  deleteLabel: (id: string) => Promise<void>;
 }
 
 export const DataContext = createContext<DataApi | null>(null);

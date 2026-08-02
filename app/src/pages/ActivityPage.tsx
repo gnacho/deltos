@@ -107,7 +107,7 @@ export default function ActivityPage() {
         </div>
       </div>
 
-      <div className="max-w-2xl mx-auto">
+      <div className="max-w-[1440px] mx-auto">
         {loading ? (
           <div className="animate-pulse space-y-2.5" role="status">
             {[0, 1, 2, 3, 4].map((i) => (
@@ -144,6 +144,7 @@ export default function ActivityPage() {
                     aria-hidden="true"
                   />
                 </h2>
+                <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2 xl:grid-cols-3">
                 {g.items.map((it, i) => {
                   const Icon = EVENT_ICON[it.type] ?? Plus;
                   const project = data.getProject(it.project_id);
@@ -155,7 +156,7 @@ export default function ActivityPage() {
                       type="button"
                       onClick={() => openTask(it.task_id, 'actividad')}
                       style={{ animationDelay: `${Math.min(i, 10) * 30}ms` }}
-                      className="card w-full text-left flex items-center gap-3 rounded-2xl bg-surface border border-app shadow-soft px-4 py-3 mb-2.5"
+                      className="card w-full text-left flex items-center gap-3 rounded-2xl bg-surface border border-app shadow-soft px-4 py-3"
                       aria-label={t('task.openDetail', { title: it.task_title })}
                     >
                       <span className="w-9 h-9 rounded-full bg-surface2 border border-app text-faint flex items-center justify-center shrink-0">
@@ -186,6 +187,7 @@ export default function ActivityPage() {
                     </button>
                   );
                 })}
+                </div>
               </section>
             ))}
 

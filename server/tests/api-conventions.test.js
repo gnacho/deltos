@@ -312,3 +312,24 @@ describe('log-ops: redacción PII y wide events', () => {
     expect(res.headers.get('x-request-id')).toBeTruthy()
   })
 })
+
+describe('anti pantalla-negra: /api/version + cabeceras de caché', () => {
+  it('GET /api/version con sesión → { version, build }', async () => {
+    const { app } = await makeInstance()
+    const cookie = await loginAdmin(app)
+    const res = await app.request('/api/version', { headers: { cookie } })
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.version).toMatch(/^\d+\.\d+\.\d+$/)
+    expect(typeof body.build).toBe('string')
+  })
+
+  it('/assets/* → immutable; SPA fallback → no-cache', async () => {
+    const { app } = await makeInstance()
+    const cookie = await loginAdmin(app)
+    const spa = await app.request('/', { headers: { cookie } })
+    expect(spa.headers.get('cache-control')).toBe('no-cache')
+    const asset = await app.request('/assets/fichero-que-no-existe.js', { headers: { cookie } })
+    expect(asset.status).toBe(404)
+  })
+})

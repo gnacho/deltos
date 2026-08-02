@@ -307,9 +307,10 @@
       "updateError": "No se pudo comprobar. Inténtalo de nuevo.",
       "updateNow": "Actualizar y recargar",
       "stack": "Node 24 · Hono · SQLite · React 19",
-      "stackLabel": "Stack",
-      "repoLabel": "Código",
-      "repoHint": "github.com/gnacho/deltos"
+      "code": "Código en GitHub",
+      "changelog": "Cambios",
+      "kofi": "Apoya el proyecto en Ko-fi",
+      "privacy": "100% privado · 0% nube"
     },
     "notifications": "Notificaciones",
     "notifHint": "Avisos cuando la otra persona cree, mueva, comente o te asigne tarjetas, aunque tengas la app cerrada.",
@@ -330,6 +331,20 @@
       "sky": "Cielo",
       "violet": "Violeta",
       "amber": "Ámbar"
+    },
+    "labels": {
+      "title": "Etiquetas",
+      "subtitle": "Crea y edita las etiquetas disponibles para las tareas.",
+      "empty": "Aún no hay etiquetas. Crea la primera abajo.",
+      "name": "Nombre",
+      "namePlaceholder": "p. ej. Urgente",
+      "color": "Color",
+      "create": "Crear etiqueta",
+      "creating": "Creando…",
+      "rename": "Renombrar",
+      "delete": "Eliminar etiqueta",
+      "nameTaken": "Ya existe una etiqueta con ese nombre",
+      "error": "No se pudo guardar la etiqueta"
     }
   },
   "connection": {
@@ -387,5 +402,14 @@
     "SSE_TOO_MANY_CLIENTS": "Demasiados clientes conectados",
     "PUSH_NOT_CONFIGURED": "El servidor no tiene claves push configuradas",
     "PUSH_DEMO_UNAVAILABLE": "Las notificaciones push no están disponibles en modo demo"
+  },
+  "update": {
+    "banner": "Hay una nueva versión de Deltos en el servidor.",
+    "reload": "Recargar"
+  },
+  "errorBoundary": {
+    "title": "Algo no ha ido bien",
+    "desc": "La aplicación ha encontrado un error inesperado. Recargar suele solucionarlo.",
+    "reload": "Recargar"
   }
 }

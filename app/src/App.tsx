@@ -1,4 +1,4 @@
-import { Suspense, lazy } from 'react';
+import { Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ThemeProvider } from '@/theme/ThemeProvider';
@@ -6,11 +6,14 @@ import AuthGate from '@/auth/AuthGate';
 import { DataProvider } from '@/data/DataProvider';
 import Layout from '@/components/Layout';
 
-/* React.lazy por ruta desde el día 1 */
-const BoardPage = lazy(() => import('@/pages/BoardPage'));
-const ProjectsPage = lazy(() => import('@/pages/ProjectsPage'));
-const ActivityPage = lazy(() => import('@/pages/ActivityPage'));
-const SettingsPage = lazy(() => import('@/pages/SettingsPage'));
+import ErrorBoundary from '@/components/ErrorBoundary';
+import { lazyRetry } from '@/lib/lazy-retry';
+
+/* React.lazy por ruta desde el día 1, con reintento anti pantalla-negra */
+const BoardPage = lazyRetry(() => import('@/pages/BoardPage'));
+const ProjectsPage = lazyRetry(() => import('@/pages/ProjectsPage'));
+const ActivityPage = lazyRetry(() => import('@/pages/ActivityPage'));
+const SettingsPage = lazyRetry(() => import('@/pages/SettingsPage'));
 
 function RouteFallback() {
   const { t } = useTranslation();
@@ -32,41 +35,51 @@ export default function App() {
                 <Route
                   index
                   element={
-                    <Suspense fallback={<RouteFallback />}>
-                      <BoardPage />
-                    </Suspense>
+                    <ErrorBoundary>
+                      <Suspense fallback={<RouteFallback />}>
+                        <BoardPage />
+                      </Suspense>
+                    </ErrorBoundary>
                   }
                 />
                 <Route
                   path="p/:projectId"
                   element={
-                    <Suspense fallback={<RouteFallback />}>
-                      <BoardPage />
-                    </Suspense>
+                    <ErrorBoundary>
+                      <Suspense fallback={<RouteFallback />}>
+                        <BoardPage />
+                      </Suspense>
+                    </ErrorBoundary>
                   }
                 />
                 <Route
                   path="projects"
                   element={
-                    <Suspense fallback={<RouteFallback />}>
-                      <ProjectsPage />
-                    </Suspense>
+                    <ErrorBoundary>
+                      <Suspense fallback={<RouteFallback />}>
+                        <ProjectsPage />
+                      </Suspense>
+                    </ErrorBoundary>
                   }
                 />
                 <Route
                   path="activity"
                   element={
-                    <Suspense fallback={<RouteFallback />}>
-                      <ActivityPage />
-                    </Suspense>
+                    <ErrorBoundary>
+                      <Suspense fallback={<RouteFallback />}>
+                        <ActivityPage />
+                      </Suspense>
+                    </ErrorBoundary>
                   }
                 />
                 <Route
                   path="settings"
                   element={
-                    <Suspense fallback={<RouteFallback />}>
-                      <SettingsPage />
-                    </Suspense>
+                    <ErrorBoundary>
+                      <Suspense fallback={<RouteFallback />}>
+                        <SettingsPage />
+                      </Suspense>
+                    </ErrorBoundary>
                   }
                 />
                 <Route path="*" element={<Navigate to="/" replace />} />

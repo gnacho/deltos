@@ -307,9 +307,10 @@
       "updateError": "Could not check for updates. Try again.",
       "updateNow": "Update and reload",
       "stack": "Node 24 · Hono · SQLite · React 19",
-      "stackLabel": "Stack",
-      "repoLabel": "Code",
-      "repoHint": "github.com/gnacho/deltos"
+      "code": "Source on GitHub",
+      "changelog": "Changelog",
+      "kofi": "Support the project on Ko-fi",
+      "privacy": "100% private · 0% cloud"
     },
     "notifications": "Notifications",
     "notifHint": "Get notified when the other person creates, moves, comments on or assigns you cards, even with the app closed.",
@@ -330,6 +331,20 @@
       "sky": "Sky",
       "violet": "Violet",
       "amber": "Amber"
+    },
+    "labels": {
+      "title": "Labels",
+      "subtitle": "Create and edit the labels available for tasks.",
+      "empty": "No labels yet. Create the first one below.",
+      "name": "Name",
+      "namePlaceholder": "e.g. Urgent",
+      "color": "Color",
+      "create": "Create label",
+      "creating": "Creating…",
+      "rename": "Rename",
+      "delete": "Delete label",
+      "nameTaken": "A label with that name already exists",
+      "error": "Couldn't save the label"
     }
   },
   "connection": {
@@ -387,5 +402,14 @@
     "SSE_TOO_MANY_CLIENTS": "Too many connected clients",
     "PUSH_NOT_CONFIGURED": "The server has no push keys configured",
     "PUSH_DEMO_UNAVAILABLE": "Push notifications are not available in demo mode"
+  },
+  "update": {
+    "banner": "A new version of Deltos is on the server.",
+    "reload": "Reload"
+  },
+  "errorBoundary": {
+    "title": "Something went wrong",
+    "desc": "The app hit an unexpected error. Reloading usually fixes it.",
+    "reload": "Reload"
   }
 }

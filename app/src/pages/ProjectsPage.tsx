@@ -64,7 +64,7 @@ export default function ProjectsPage() {
         </p>
       </div>
 
-      <div className="max-w-2xl mx-auto space-y-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 sm:items-start">
         {projects.map((p, i) => {
           const open = p.counts.nuevo + p.counts.encurso;
           return (
@@ -126,7 +126,7 @@ export default function ProjectsPage() {
           <button
             type="button"
             onClick={() => setFormOpen(true)}
-            className="w-full flex items-center justify-center gap-2 rounded-2xl border border-dashed border-app px-4 py-4 text-[14px] font-medium text-muted hover:bg-surface2"
+            className="w-full sm:col-span-2 xl:col-span-3 flex items-center justify-center gap-2 rounded-2xl border border-dashed border-app px-4 py-4 text-[14px] font-medium text-muted hover:bg-surface2"
           >
             <Plus className="w-4 h-4" aria-hidden="true" />
             {t('projects.new')}
@@ -135,7 +135,7 @@ export default function ProjectsPage() {
           <form
             onSubmit={createProject}
             noValidate
-            className="rounded-2xl bg-surface border border-app shadow-soft p-5 space-y-4"
+            className="sm:col-span-2 xl:col-span-3 rounded-2xl bg-surface border border-app shadow-soft p-5 space-y-4"
             aria-label={t('projects.form.title')}
           >
             <h2 className="font-display font-semibold text-[15px]">{t('projects.form.title')}</h2>

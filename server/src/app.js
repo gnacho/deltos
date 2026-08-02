@@ -18,6 +18,8 @@ import { wideEvent } from './wide-event.js'
 import { httpError, onError, validationHook } from './errors.js'
 import { ERROR_CODES } from './error-codes.js'
 
+const pkg = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
+
 const registerSchema = z.object({
   username: z.string().min(1).max(50),
   password: z.string().min(6, 'la contraseña debe tener al menos 6 caracteres').max(100),
@@ -195,11 +197,26 @@ export function createApp(ctx) {
   })
 
   // --- Dominio + push + health ---
+  // Versión del PROPIO servidor: el banner anti pantalla-negra del front la
+  // sondea (poll 10 min) y avisa cuando cambia tras un despliegue.
+  app.get('/api/version', (c) =>
+    c.json({ version: pkg.version, build: process.env.BUILD_SHA || pkg.version })
+  )
   registerDomainRoutes(app, { hub, uploadsDir: ctx.uploadsDir, prod })
   registerPushRoutes(app)
   registerHealth(app, { prod, demo })
 
   // --- Estáticos + SPA fallback (excluyendo /api/* y /assets/*) ---
+  // Caché (canon webapp-shell/actualizaciones): assets con hash = immutable;
+  // index.html y sw.js = no-cache (revalidan siempre → el despliegue se ve).
+  app.use('/assets/*', async (c, next) => {
+    await next()
+    if (c.res.ok) c.header('Cache-Control', 'public, max-age=31536000, immutable')
+  })
+  app.use('/sw.js', async (c, next) => {
+    await next()
+    if (c.res.ok) c.header('Cache-Control', 'no-cache')
+  })
   // Sin onNotFound (la firma no es la del contexto Hono → 500 en assets).
   app.use('/*', serveStatic({ root: config.staticDir }))
   app.get('*', (c) => {
@@ -208,6 +225,7 @@ export function createApp(ctx) {
       httpError(404, ERROR_CODES.NOT_FOUND)
     }
     // index.html se lee EN CADA PETICIÓN (deploy por rsync sin restart)
+    c.header('Cache-Control', 'no-cache')
     try {
       const html = fs.readFileSync(path.join(config.staticDir, 'index.html'), 'utf8')
       return c.html(html)

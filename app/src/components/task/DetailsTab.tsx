@@ -330,8 +330,8 @@ export function DetailsTab({ detail, onClose }: { detail: TaskDetail; onClose: (
           disabled={deleting}
           className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[13px] font-medium ${
             deleteArmed
-              ? 'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300'
-              : 'bg-surface2 border border-app text-muted hover:text-[var(--text)]'
+              ? 'bg-rose-600 text-white hover:bg-rose-700'
+              : 'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300 hover:bg-rose-200/70 dark:hover:bg-rose-500/25'
           } disabled:opacity-60`}
         >
           <Trash2 className="w-4 h-4" aria-hidden="true" />

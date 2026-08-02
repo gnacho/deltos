@@ -222,6 +222,22 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [fetchBootstrap],
   );
 
+  const updateLabel = useCallback(
+    async (id: string, patch: { name?: string; color?: string }): Promise<void> => {
+      await apiPatch<{ label: Label }>(`/api/labels/${encodeURIComponent(id)}`, patch);
+      await fetchBootstrap();
+    },
+    [fetchBootstrap],
+  );
+
+  const deleteLabel = useCallback(
+    async (id: string): Promise<void> => {
+      await apiDelete(`/api/labels/${encodeURIComponent(id)}`);
+      await fetchBootstrap();
+    },
+    [fetchBootstrap],
+  );
+
   const refreshTaskDetail = useCallback(
     (id: string) => {
       detailCache.current.delete(id);
@@ -264,6 +280,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       uploadAttachment,
       createProject,
       createLabel,
+      updateLabel,
+      deleteLabel,
     };
     // version es el disparador de recomputo (cachés en refs)
     // eslint-disable-next-line react-hooks/exhaustive-deps

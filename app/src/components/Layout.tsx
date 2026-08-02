@@ -22,6 +22,7 @@ import { colorOf } from '@/lib/colors';
 import { SELECT_STYLE } from '@/lib/select-style';
 import { ModalContext, type NewTaskDefaults, type TaskTab } from '@/components/modal-context';
 import { TaskModal } from '@/components/TaskModal';
+import { useUpdateAvailable } from '@/hooks/useUpdateAvailable';
 import { NewTaskModal } from '@/components/NewTaskModal';
 
 /**
@@ -100,6 +101,30 @@ function IconNavLink({
         {label}
       </span>
     </NavLink>
+  );
+}
+
+/** Banner "hay una versión nueva en ESTE servidor" (anti pantalla-negra). */
+function UpdateBanner() {
+  const { t } = useTranslation();
+  const { demo } = useSession();
+  const available = useUpdateAvailable(!demo);
+  if (!available) return null;
+  return (
+    <div
+      role="status"
+      className="mb-4 flex items-center gap-2.5 rounded-xl border border-sky-500/35 bg-sky-500/10 px-3.5 py-2.5 text-[13px] font-semibold text-sky-600 dark:text-sky-400"
+    >
+      <span className="h-2 w-2 shrink-0 rounded-full bg-sky-500 animate-ping" />
+      <span className="flex-1">{t('update.banner')}</span>
+      <button
+        type="button"
+        onClick={() => location.reload()}
+        className="shrink-0 rounded-lg bg-sky-500 px-3 py-1 text-[12px] font-semibold text-white hover:brightness-110"
+      >
+        {t('update.reload')}
+      </button>
+    </div>
   );
 }
 
@@ -414,11 +439,10 @@ export default function Layout() {
       <main
         className={`${lgMargin} md:pl-16 pt-[68px] md:pt-[calc(56px+16px)] pb-[calc(84px+env(safe-area-inset-bottom))] md:pb-8`}
       >
-        {demo && (
-          <div className="mx-auto max-w-[1440px] px-4 sm:px-6 lg:px-8">
-            <DemoBanner />
-          </div>
-        )}
+        <div className="mx-auto max-w-[1440px] px-4 sm:px-6 lg:px-8">
+          <UpdateBanner />
+          {demo && <DemoBanner />}
+        </div>
         <Outlet />
       </main>
 

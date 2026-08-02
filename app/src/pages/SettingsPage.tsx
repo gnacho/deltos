@@ -19,13 +19,20 @@ import {
   RefreshCw,
   Trash2,
   Bell,
-  Layers,
+  Tag,
+  Pencil,
+  Github,
+  FileText,
+  Heart,
+  ShieldCheck,
 } from 'lucide-react';
 import { z } from 'zod';
-import { apiFetch, apiPost, apiPut, apiDelete, dispatchUnauthorized } from '@/data/api-client';
+import { apiFetch, apiPost, apiPut, apiDelete, dispatchUnauthorized, ApiError } from '@/data/api-client';
 import { apiErrorText, fieldErrors } from '@/lib/errors';
-import type { Language, SessionUser } from '@/data/types';
+import type { Label, Language, SessionUser } from '@/data/types';
 import { useSession } from '@/auth/session-context';
+import { useData } from '@/data/data-context';
+import { colorOf, PROJECT_COLORS } from '@/lib/colors';
 import { useTheme } from '@/theme/theme-context';
 import type { ThemeMode } from '@/theme/theme-context';
 import { ACCENT_IDS, ACCENTS } from '@/theme/accents';
@@ -348,10 +355,14 @@ function LanguageCard() {
 }
 
 /* ---------------- Instalar (solo si el navegador lo soporta) ---------------- */
-function InstallCard() {
+function InstallCard({
+  state,
+  install,
+}: {
+  state: ReturnType<typeof useInstallPrompt>['state'];
+  install: () => Promise<void>;
+}) {
   const { t } = useTranslation();
-  const { state, install } = useInstallPrompt();
-  if (state === 'hidden') return null;
   return (
     <Card>
       <Heading icon={Download}>{t('settings.install')}</Heading>
@@ -898,6 +909,258 @@ function UsersCard() {
   );
 }
 
+
+/* ---------------- Etiquetas (todos los usuarios) ---------------- */
+function ColorSwatches({
+  value,
+  onChange,
+  ariaLabel,
+}: {
+  value: string;
+  onChange: (c: string) => void;
+  ariaLabel: string;
+}) {
+  return (
+    <div className="flex flex-wrap gap-2" role="group" aria-label={ariaLabel}>
+      {PROJECT_COLORS.map((c) => {
+        const active = value === c;
+        return (
+          <button
+            key={c}
+            type="button"
+            aria-pressed={active}
+            aria-label={c}
+            title={c}
+            onClick={() => onChange(c)}
+            className={`w-7 h-7 rounded-full ${colorOf(c).dot} flex items-center justify-center ${
+              active ? 'ring-2 ring-offset-2 ring-current ring-offset-[var(--surface)]' : 'opacity-60 hover:opacity-100'
+            }`}
+          >
+            {active && <Check className="w-3.5 h-3.5 text-white" aria-hidden="true" />}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function LabelsCard() {
+  const { t } = useTranslation();
+  const data = useData();
+  const labels = data.getLabels();
+  const [name, setName] = useState('');
+  const [color, setColor] = useState('sky');
+  const [editing, setEditing] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const labelError = (err: unknown) =>
+    err instanceof ApiError && err.code === 'LABEL_NAME_TAKEN'
+      ? t('settings.labels.nameTaken')
+      : apiErrorText(err, t('settings.labels.error'));
+
+  const create = async (e: FormEvent) => {
+    e.preventDefault();
+    const trimmed = name.trim();
+    if (!trimmed || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await data.createLabel({ name: trimmed, color });
+      setName('');
+      setColor('sky');
+    } catch (err) {
+      setError(labelError(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const startEdit = (l: Label) => {
+    setEditing(l.id);
+    setEditName(l.name);
+    setConfirmDelete(null);
+    setError(null);
+  };
+
+  const saveEdit = async (id: string) => {
+    const trimmed = editName.trim();
+    if (!trimmed || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await data.updateLabel(id, { name: trimmed });
+      setEditing(null);
+    } catch (err) {
+      setError(labelError(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const recolor = async (id: string, c: string) => {
+    setError(null);
+    try {
+      await data.updateLabel(id, { color: c });
+    } catch (err) {
+      setError(labelError(err));
+    }
+  };
+
+  const remove = async (id: string) => {
+    setError(null);
+    try {
+      await data.deleteLabel(id);
+      setConfirmDelete(null);
+      if (editing === id) setEditing(null);
+    } catch (err) {
+      setError(labelError(err));
+      setConfirmDelete(null);
+    }
+  };
+
+  return (
+    <Card>
+      <Heading icon={Tag}>{t('settings.labels.title')}</Heading>
+      <p className="text-[13px] text-faint mb-4">{t('settings.labels.subtitle')}</p>
+
+      {labels.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-app px-4 py-6 text-center text-[13px] text-muted mb-4">
+          {t('settings.labels.empty')}
+        </p>
+      ) : (
+        <ul className="space-y-2 mb-4">
+          {labels.map((l) => (
+            <li key={l.id} className="rounded-xl border border-app bg-surface2 px-3.5 py-2.5">
+              {editing === l.id ? (
+                <form
+                  className="flex flex-wrap items-center gap-2"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void saveEdit(l.id);
+                  }}
+                >
+                  <input
+                    value={editName}
+                    maxLength={40}
+                    autoFocus
+                    onChange={(e) => setEditName(e.target.value)}
+                    aria-label={t('settings.labels.name')}
+                    className={`${inputCls} flex-1 min-w-32`}
+                  />
+                  <button
+                    type="submit"
+                    disabled={busy || !editName.trim()}
+                    className="h-9 rounded-xl bg-brand px-3 text-[13px] font-semibold text-brandfg hover:brightness-110 disabled:opacity-60"
+                  >
+                    {t('common.save')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditing(null)}
+                    className="h-9 rounded-xl border border-app px-3 text-[13px] text-muted"
+                  >
+                    {t('common.cancel')}
+                  </button>
+                </form>
+              ) : (
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[13px] font-medium ${colorOf(l.color).chip}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${colorOf(l.color).dot}`} aria-hidden="true" />
+                    {l.name}
+                  </span>
+                  <span className="flex-1" />
+                  <button
+                    type="button"
+                    aria-label={t('settings.labels.rename')}
+                    title={t('settings.labels.rename')}
+                    onClick={() => startEdit(l)}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-app bg-surface text-muted hover:text-text"
+                  >
+                    <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
+                  </button>
+                  {confirmDelete === l.id ? (
+                    <span className="flex gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => void remove(l.id)}
+                        className="h-8 rounded-lg bg-rose-600 px-3 text-[13px] font-semibold text-white"
+                      >
+                        {t('common.confirm')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDelete(null)}
+                        className="h-8 rounded-lg border border-app px-3 text-[13px] text-muted"
+                      >
+                        {t('common.cancel')}
+                      </button>
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      aria-label={t('settings.labels.delete')}
+                      title={t('settings.labels.delete')}
+                      onClick={() => {
+                        setConfirmDelete(l.id);
+                        setEditing(null);
+                      }}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-app bg-surface text-muted hover:text-rose-600 dark:hover:text-rose-400"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                    </button>
+                  )}
+                </div>
+              )}
+              {editing !== l.id && (
+                <div className="mt-2.5">
+                  <ColorSwatches
+                    value={l.color}
+                    onChange={(c) => void recolor(l.id, c)}
+                    ariaLabel={t('settings.labels.color')}
+                  />
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <form onSubmit={create} className="space-y-3 border-t border-app pt-4">
+        <div>
+          <label htmlFor="nl-name" className={labelCls}>
+            {t('settings.labels.name')}
+          </label>
+          <input
+            id="nl-name"
+            value={name}
+            maxLength={40}
+            onChange={(e) => setName(e.target.value)}
+            placeholder={t('settings.labels.namePlaceholder')}
+            className={inputCls}
+          />
+        </div>
+        <ColorSwatches value={color} onChange={setColor} ariaLabel={t('settings.labels.color')} />
+        {error && (
+          <p role="alert" className="text-[13px] font-medium text-rose-600 dark:text-rose-400">
+            {error}
+          </p>
+        )}
+        <button
+          type="submit"
+          disabled={busy || !name.trim()}
+          className="inline-flex h-11 items-center gap-2 rounded-xl bg-brand px-5 text-[14px] font-semibold text-brandfg hover:brightness-110 disabled:opacity-60"
+        >
+          <Tag className="w-4 h-4" aria-hidden="true" />
+          {busy ? t('settings.labels.creating') : t('settings.labels.create')}
+        </button>
+      </form>
+    </Card>
+  );
+}
+
 /* ---------------- Mi sesión (patrón easyzfs: 2 botones) ---------------- */
 function SessionCard() {
   const { t } = useTranslation();
@@ -953,43 +1216,44 @@ const REPO_URL = 'https://github.com/gnacho/deltos';
 function AboutCard() {
   const { t } = useTranslation();
   const upd = useAppUpdate(pkg.version, REPO_URL);
+  const tiles: { icon: typeof Github; label: string; href?: string }[] = [
+    { icon: Github, label: t('settings.about.code'), href: REPO_URL },
+    { icon: FileText, label: t('settings.about.changelog'), href: `${REPO_URL}/commits/main` },
+    { icon: Heart, label: t('settings.about.kofi') }, // sin href de momento (no hay cuenta)
+    { icon: ShieldCheck, label: t('settings.about.privacy') },
+  ];
+  const tileCls =
+    'flex items-center gap-2.5 rounded-xl border border-app px-3.5 py-2.5 text-[13px] font-medium text-muted transition-colors duration-150 hover:border-brand/50 hover:text-brand';
   return (
     <Card>
       <Heading icon={Info}>{t('settings.about.title')}</Heading>
-      {/* Cabecera: logo + nombre + versión */}
-      <div className="flex items-center gap-3.5">
-        <LogoMark size={48} />
-        <div className="min-w-0">
-          <p className="font-display font-bold text-[17px] leading-tight">{t('common.appName')}</p>
-          <p className="tnum text-[12px] text-faint leading-tight mt-0.5">
-            {t('settings.about.version', { version: pkg.version })}
-          </p>
+      <div className="grid gap-6 md:grid-cols-2">
+        {/* Izquierda: logo + nombre + versión + descripción */}
+        <div className="flex items-start gap-3.5">
+          <LogoMark size={48} />
+          <div className="min-w-0">
+            <p className="font-display font-bold text-[17px] leading-tight">{t('common.appName')}</p>
+            <p className="tnum text-[12px] text-faint leading-tight mt-0.5">
+              {t('settings.about.version', { version: pkg.version })}
+            </p>
+            <p className="text-[13px] text-faint mt-2.5 leading-relaxed">{t('settings.about.desc')}</p>
+          </div>
         </div>
-      </div>
-      <p className="text-[13px] text-faint mt-3">{t('settings.about.desc')}</p>
-
-      {/* Tiles: repo + stack */}
-      <div className="mt-4 grid grid-cols-2 gap-2.5">
-        <a
-          href={REPO_URL}
-          target="_blank"
-          rel="noreferrer"
-          className="rounded-xl bg-surface2 border border-transparent hover:border-brand/50 p-3 transition-colors"
-        >
-          <span className="flex items-center gap-1.5 text-[13px] font-semibold">
-            <ExternalLink className="w-4 h-4 text-brand" aria-hidden="true" />
-            {t('settings.about.repoLabel')}
-          </span>
-          <span className="block text-[11.5px] text-faint mt-1 truncate">
-            {t('settings.about.repoHint')}
-          </span>
-        </a>
-        <div className="rounded-xl bg-surface2 p-3">
-          <span className="flex items-center gap-1.5 text-[13px] font-semibold">
-            <Layers className="w-4 h-4 text-brand" aria-hidden="true" />
-            {t('settings.about.stackLabel')}
-          </span>
-          <span className="block text-[11.5px] text-faint mt-1">{t('settings.about.stack')}</span>
+        {/* Derecha: tiles de enlaces (canónicos: código, cambios, ko-fi, privacidad) */}
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {tiles.map((item) =>
+            item.href ? (
+              <a key={item.label} href={item.href} target="_blank" rel="noreferrer" className={tileCls}>
+                <item.icon className="w-4 h-4 shrink-0" aria-hidden="true" />
+                <span className="leading-snug">{item.label}</span>
+              </a>
+            ) : (
+              <div key={item.label} className={tileCls}>
+                <item.icon className="w-4 h-4 shrink-0" aria-hidden="true" />
+                <span className="leading-snug">{item.label}</span>
+              </div>
+            ),
+          )}
         </div>
       </div>
 
@@ -1053,6 +1317,9 @@ function AboutCard() {
           )}
         </div>
       )}
+      <p className="mt-5 border-t border-app pt-3 font-mono text-[12px] text-faint">
+        {t('settings.about.stack')}
+      </p>
     </Card>
   );
 }
@@ -1061,9 +1328,12 @@ function AboutCard() {
 export default function SettingsPage() {
   const { t } = useTranslation();
   const { user, demo } = useSession();
+  const { state: installState, install } = useInstallPrompt();
+  const installVisible = installState !== 'hidden';
+  const isAdmin = user.role === 'admin' && !demo;
 
   return (
-    <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 pt-5 lg:pt-7">
+    <div className="mx-auto w-full max-w-[1100px] px-4 sm:px-6 lg:px-8 pt-5 lg:pt-7">
       <div className="flex flex-wrap items-end justify-between gap-3 mb-5">
         <div>
           <h1 className="font-display font-bold text-2xl lg:text-[28px] tracking-tight">
@@ -1073,16 +1343,42 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <div className="max-w-2xl mx-auto space-y-4">
-        <ProfileCard />
-        <AppearanceCard />
-        <LanguageCard />
-        <NotificationsCard />
-        {user.role === 'admin' && !demo && <UsersCard />}
-        {user.role === 'admin' && !demo && <DemoCard />}
-        <SessionCard />
-        <InstallCard />
-        <AboutCard />
+      {/* Layout canónico (patrón NetPulse): grid 12 col, spans 7/5/12 */}
+      <div className="grid grid-cols-1 gap-4 md:gap-5 lg:grid-cols-12 lg:items-start">
+        <div className="lg:col-span-7">
+          <AppearanceCard />
+        </div>
+        <div className="lg:col-span-5">
+          <ProfileCard />
+        </div>
+        <div className="lg:col-span-7">
+          <LabelsCard />
+        </div>
+        <div className="lg:col-span-5 space-y-4 md:space-y-5">
+          <LanguageCard />
+          <NotificationsCard />
+        </div>
+        {isAdmin && (
+          <>
+            <div className="lg:col-span-7">
+              <UsersCard />
+            </div>
+            <div className="lg:col-span-5">
+              <DemoCard />
+            </div>
+          </>
+        )}
+        <div className={installVisible ? 'lg:col-span-7' : 'lg:col-span-12'}>
+          <SessionCard />
+        </div>
+        {installVisible && (
+          <div className="lg:col-span-5">
+            <InstallCard state={installState} install={install} />
+          </div>
+        )}
+        <div className="lg:col-span-12">
+          <AboutCard />
+        </div>
       </div>
     </div>
   );
