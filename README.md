@@ -13,32 +13,49 @@
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/hero-dark.png">
-    <source media="(prefers-color-scheme: light)" srcset="assets/hero-light.png">
-    <img alt="Deltos kanban board with three columns (New, In progress, Done), project filters and task cards with priority and due dates" src="assets/hero-light.png" width="800">
+    <source media="(prefers-color-scheme: dark)" srcset="assets/hero-en-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="assets/hero-en-light.png">
+    <img alt="Deltos kanban board with three columns (New, In progress, Done), project and label filters, and task cards with priority and due dates" src="assets/hero-en-light.png" width="800">
   </picture>
 </p>
 
-Deltos is a task-management PWA for couples: a shared kanban board with live
-sync, comments, attachments and push notifications, served by a single small
-Node + SQLite service. No accounts, no cloud, no Docker required.
+Deltos is a task-management PWA for everyday life: a shared kanban board with
+live sync, comments, attachments and push notifications, served by a single
+small Node + SQLite service. It works for a couple, a family, a group of
+friends planning a trip, or a small team — without the complexity of the big
+tools and without your data on somebody else's cloud.
 
 ## Why does this exist?
 
-Every couple-tasks app we tried wanted an account, a subscription, or both —
-and our shared lists ended up on somebody else's server, behind a login we
-didn't control. With a house move coming, I wanted a board my partner and I
-could open from the home network, install as an app, and forget about. Deltos
-is that: one Node service with SQLite, running in a small container at home
-since August 2026. It does less than Trello, and that's the point.
+Deltos started as the board for a friends' trip: six people, a spreadsheet
+nobody updated, and a chat where every decision got buried. Then we kept
+using it at home for the day-to-day stuff, and again through a renovation
+and the move that came with it. Everything we had tried before wanted an
+account and a subscription, kept our lists on someone else's server, or
+brought more process than a family needs. So I built the small thing: one
+service, one file of database, a board that syncs live. It does less than
+Trello or Jira, and for us that was the point.
+
+## Why this stack?
+
+- **Node 22 + Hono + better-sqlite3** — the app is mostly I/O: SSE live
+  sync, uploads, a handful of concurrent users. Node's event loop fits that
+  shape and Hono adds routing without framework tax.
+- **SQLite, no external database** — one file under `/var/lib/deltos`, WAL
+  mode; a backup is a file copy. Nothing to administer for a few users.
+- **systemd behind Nginx Proxy Manager, no Docker** — it runs in a small LXC
+  at home; fewer layers, logs in journald, an upgrade is a symlink swap
+  (Docker is still available as an alternative, see Installation).
+- **React 19 + Vite + Tailwind** — the UI shell (sidebar, themes, i18n,
+  settings) is shared with my other apps, so a fix lands everywhere at once.
 
 ## Features
 
 - **Shared kanban** — New / In progress / Done columns with drag & drop, live
   between sessions over SSE (no refresh, no polling).
-- **Push notifications** — Web Push (VAPID) when the other person creates,
-  moves, comments on or assigns you a card, even with the app closed. Dormant
-  on plain HTTP; turns itself on once the app is served over HTTPS.
+- **Push notifications** — Web Push (VAPID) when someone creates, moves,
+  comments on or assigns you a card, even with the app closed. Dormant on
+  plain HTTP; turns itself on once the app is served over HTTPS.
 - **Cards with everything** — comments, attachments with an in-app image
   viewer, labels, priority, due dates and a per-card activity feed.
 - **Multiuser** — admin/user roles, per-user language (ES/EN), bcrypt
@@ -54,17 +71,17 @@ since August 2026. It does less than Trello, and that's the point.
 **Card detail — tabs for details, attachments, comments and activity**
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/screenshot-task-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="assets/screenshot-task-light.png">
-  <img alt="Task modal showing title, project, assignee, priority, due date, labels, description and move-to column actions" src="assets/screenshot-task-light.png" width="800">
+  <source media="(prefers-color-scheme: dark)" srcset="assets/screenshot-task-en-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="assets/screenshot-task-en-light.png">
+  <img alt="Task modal showing title, project, assignee, priority, due date, labels, description and move-to column actions" src="assets/screenshot-task-en-light.png" width="800">
 </picture>
 
-**Settings — profile, appearance, language, notifications with push enable button, users**
+**Settings — appearance with accent color, profile, labels, language**
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/screenshot-settings-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="assets/screenshot-settings-light.png">
-  <img alt="Settings page showing theme previews, language selector, notifications card with an enable-alerts button and the users section" src="assets/screenshot-settings-light.png" width="800">
+  <source media="(prefers-color-scheme: dark)" srcset="assets/screenshot-settings-en-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="assets/screenshot-settings-en-light.png">
+  <img alt="Settings page showing theme previews, accent color swatches, density options, profile card, label manager and language selector" src="assets/screenshot-settings-en-light.png" width="800">
 </picture>
 
 ## Installation
@@ -167,7 +184,7 @@ from `app/dist` with SPA fallback.
 ## Tests
 
 ```bash
-cd server && npm test          # vitest: 50 API/auth/push/attachment tests
+cd server && npm test          # vitest: 76 API/auth/push/label tests
 ```
 
 ## License
