@@ -17,6 +17,8 @@ import { registerHealth } from './health.js'
 import { wideEvent } from './wide-event.js'
 import { httpError, onError, validationHook } from './errors.js'
 import { ERROR_CODES } from './error-codes.js'
+import { mutationRateLimit } from './rate-limit.js'
+import { idempotencyMiddleware } from './idempotency.js'
 
 const pkg = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
 
@@ -92,7 +94,7 @@ export function createApp(ctx) {
     const method = c.req.method
     if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return next()
     if (!c.get('user')) return next()
-    const session = auth.resolveSession({ prod, demo, secret }, c.req.header('cookie'))
+    const session = auth.resolveSession({ prod, demo, secret }, c.req.header('cookie'), c.req.header('user-agent'))
     const expected = session?.csrfToken
     const given = c.req.header('x-csrf-token')
     if (!expected || !given || expected !== given) {
@@ -100,6 +102,12 @@ export function createApp(ctx) {
     }
     await next()
   })
+
+  // --- Rate-limit: 60 mutaciones/min por usuario (in-memory) ---
+  app.use('/api/*', mutationRateLimit())
+
+  // --- Idempotency: POST con Idempotency-Key cachea respuesta 24h ---
+  app.use('/api/*', idempotencyMiddleware())
 
   const cookieOpts = { secure: config.cookieSecure }
 

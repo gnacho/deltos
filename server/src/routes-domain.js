@@ -134,15 +134,22 @@ function addEvent(db, taskId, userId, type, data = {}) {
   ).run(crypto.randomUUID(), taskId, userId, type, JSON.stringify(data), Date.now())
 }
 
+function auditLog(db, actorId, action, targetType, targetId, data = {}) {
+  db.prepare(
+    'INSERT INTO admin_audit (id, actor_id, action, target_type, target_id, data, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ).run(crypto.randomUUID(), actorId, action, targetType, targetId, JSON.stringify(data), Date.now())
+}
+
 // Hidrata tareas con labels[], assignee y counts {comments, attachments}
 function hydrateTasks(db, whereSql = '', params = []) {
+  const filter = whereSql ? `t.deleted_at IS NULL AND (${whereSql})` : 't.deleted_at IS NULL'
   const tasks = db
     .prepare(
       `SELECT t.*, u.username AS assignee_username, u.color AS assignee_color,
               (SELECT COUNT(*) FROM comments cm WHERE cm.task_id = t.id) AS comments_count,
               (SELECT COUNT(*) FROM attachments at WHERE at.task_id = t.id) AS attachments_count
        FROM tasks t LEFT JOIN users u ON u.id = t.assignee_id
-       ${whereSql}
+       WHERE ${filter}
        ORDER BY t."column", t.position`
     )
     .all(...params)
@@ -186,7 +193,7 @@ function replaceTaskLabels(db, taskId, labelIds) {
 }
 
 function getTask(db, id) {
-  return db.prepare('SELECT * FROM tasks WHERE id = ?').get(id)
+  return db.prepare('SELECT * FROM tasks WHERE id = ? AND deleted_at IS NULL').get(id)
 }
 
 // Borra de disco los adjuntos de una tarea (mejor esfuerzo)
@@ -214,7 +221,7 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
                 COALESCE(SUM(CASE WHEN t."column" = 'nuevo' THEN 1 ELSE 0 END), 0) AS nuevo,
                 COALESCE(SUM(CASE WHEN t."column" = 'encurso' THEN 1 ELSE 0 END), 0) AS encurso,
                 COALESCE(SUM(CASE WHEN t."column" = 'hecho' THEN 1 ELSE 0 END), 0) AS hecho
-         FROM projects p LEFT JOIN tasks t ON t.project_id = p.id
+         FROM projects p LEFT JOIN tasks t ON t.project_id = p.id AND t.deleted_at IS NULL
          GROUP BY p.id ORDER BY p.position`
       )
       .all()
@@ -370,7 +377,7 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
     const otros = db.prepare('SELECT id FROM users WHERE id != ? AND id != ?').all(user.id, asignado || '').map((r) => r.id)
     notifyIds(db, c.get('demo'), otros, 'tarea_creada', datosPush)
     c.header('Location', `/api/tasks/${id}`)
-    return c.json({ task: hydrateTasks(db, 'WHERE t.id = ?', [id])[0] }, 201)
+    return c.json({ task: hydrateTasks(db, 't.id = ?', [id])[0] }, 201)
   })
 
   app.patch(
@@ -419,7 +426,7 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
       if (data.assignee_id !== undefined && data.assignee_id && data.assignee_id !== task.assignee_id && data.assignee_id !== user.id) {
         notifyIds(db, c.get('demo'), [data.assignee_id], 'asignacion', { usuario: user.username, titulo: task.title })
       }
-      return c.json({ task: hydrateTasks(db, 'WHERE t.id = ?', [task.id])[0] })
+      return c.json({ task: hydrateTasks(db, 't.id = ?', [task.id])[0] })
     }
   )
 
@@ -468,7 +475,7 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
       move()
       hub.broadcast('tasks')
       notifyAllExcept(db, c.get('demo'), user.id, 'tarea_movida', { usuario: user.username, titulo: task.title, columna: toCol })
-      return c.json({ task: hydrateTasks(db, 'WHERE t.id = ?', [task.id])[0] })
+      return c.json({ task: hydrateTasks(db, 't.id = ?', [task.id])[0] })
     }
   )
 
@@ -476,10 +483,9 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
     const db = c.get('db')
     const task = getTask(db, c.req.valid('param').id)
     if (!task) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
-    removeAttachmentFiles(db, uploadsDir, task.id)
     const del = db.transaction(() => {
-      db.prepare('DELETE FROM tasks WHERE id = ?').run(task.id) // cascada: labels/comments/adjuntos/eventos
-      db.prepare('UPDATE tasks SET position = position - 1 WHERE "column" = ? AND position > ?')
+      db.prepare('UPDATE tasks SET deleted_at = ? WHERE id = ?').run(Date.now(), task.id)
+      db.prepare('UPDATE tasks SET position = position - 1 WHERE "column" = ? AND position > ? AND deleted_at IS NULL')
         .run(task.column, task.position)
     })
     del()
@@ -490,7 +496,7 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
   // Detalle completo: task + labels + attachments + comments + activity (paginado LIMIT 50)
   app.get('/api/tasks/:id', zValidator('param', idParamSchema, validationHook), (c) => {
     const db = c.get('db')
-    const hydrated = hydrateTasks(db, 'WHERE t.id = ?', [c.req.valid('param').id])[0]
+    const hydrated = hydrateTasks(db, 't.id = ?', [c.req.valid('param').id])[0]
     if (!hydrated) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
     const attachments = db
       .prepare(
@@ -628,6 +634,68 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
     return c.body(fs.readFileSync(filePath))
   })
 
+  // --- Export de datos (todos los datos del usuario en JSON) ---
+  app.get('/api/export', (c) => {
+    const db = c.get('db')
+    const user = c.get('user')
+    const projects = db.prepare('SELECT * FROM projects ORDER BY position').all()
+    const labels = db.prepare('SELECT * FROM labels ORDER BY name').all()
+    const tasks = db.prepare('SELECT * FROM tasks WHERE deleted_at IS NULL ORDER BY "column", position').all()
+    const comments = db.prepare('SELECT * FROM comments ORDER BY created_at').all()
+    const attachments = db.prepare('SELECT id, task_id, filename, size, mime, created_at FROM attachments ORDER BY created_at').all()
+    const events = db.prepare('SELECT * FROM activity_events ORDER BY created_at').all()
+    const trash = db.prepare('SELECT * FROM tasks WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC').all()
+    return c.json({
+      exported_at: new Date().toISOString(),
+      user: { id: user.id, username: user.username, email: user.email, language: user.language },
+      projects, labels, tasks, comments, attachments, events, trash,
+    })
+  })
+
+  // --- Papelera: tareas borradas (soft-delete) ---
+  app.get('/api/trash', (c) => {
+    const db = c.get('db')
+    const tasks = db
+      .prepare(
+        `SELECT t.*, p.name AS project_name
+         FROM tasks t LEFT JOIN projects p ON p.id = t.project_id
+         WHERE t.deleted_at IS NOT NULL
+         ORDER BY t.deleted_at DESC`
+      )
+      .all()
+    return c.json({ tasks })
+  })
+
+  app.post('/api/trash/:id/restore', zValidator('param', idParamSchema, validationHook), (c) => {
+    const db = c.get('db')
+    const task = db.prepare('SELECT * FROM tasks WHERE id = ? AND deleted_at IS NOT NULL').get(c.req.valid('param').id)
+    if (!task) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
+    const pos = db.prepare('SELECT COALESCE(MAX(position) + 1, 0) AS p FROM tasks WHERE "column" = ? AND deleted_at IS NULL')
+      .get(task.column).p
+    db.prepare('UPDATE tasks SET deleted_at = NULL, position = ?, updated_at = ? WHERE id = ?').run(pos, Date.now(), task.id)
+    hub.broadcast('tasks')
+    return c.json({ task: hydrateTasks(db, 't.id = ?', [task.id])[0] })
+  })
+
+  app.delete('/api/trash/:id', zValidator('param', idParamSchema, validationHook), (c) => {
+    const db = c.get('db')
+    const task = db.prepare('SELECT * FROM tasks WHERE id = ? AND deleted_at IS NOT NULL').get(c.req.valid('param').id)
+    if (!task) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
+    removeAttachmentFiles(db, uploadsDir, task.id)
+    db.prepare('DELETE FROM tasks WHERE id = ?').run(task.id)
+    hub.broadcast('tasks')
+    return c.body(null, 204)
+  })
+
+  app.delete('/api/trash', (c) => {
+    const db = c.get('db')
+    const taskIds = db.prepare('SELECT id FROM tasks WHERE deleted_at IS NOT NULL').all().map((r) => r.id)
+    for (const tid of taskIds) removeAttachmentFiles(db, uploadsDir, tid)
+    db.prepare('DELETE FROM tasks WHERE deleted_at IS NOT NULL').run()
+    hub.broadcast('tasks')
+    return c.body(null, 204)
+  })
+
   // --- Feed global de actividad: paginación KEYSET (skill api-stack) ---------
   // Cursor opaco base64url {ts, id} sobre (created_at DESC, id DESC); LIMIT n+1;
   // respuesta { items, nextCursor, hasMore }. Cursor malformado → 400
@@ -646,7 +714,7 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
                 t.title AS task_title, t.project_id, p.name AS project_name,
                 u.username, u.color AS user_color
          FROM activity_events e
-         JOIN tasks t ON t.id = e.task_id
+         JOIN tasks t ON t.id = e.task_id AND t.deleted_at IS NULL
          JOIN projects p ON p.id = t.project_id
          LEFT JOIN users u ON u.id = e.user_id
          ${keyset}
@@ -675,6 +743,7 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
   app.post('/api/users', zValidator('json', userCreateSchema, validationHook), async (c) => {
     requireAdmin(c)
     const db = c.get('db')
+    const me = c.get('user')
     const data = c.req.valid('json')
     if (db.prepare('SELECT id FROM users WHERE username = ?').get(data.username)) {
       httpError(409, ERROR_CODES.USER_ALREADY_EXISTS)
@@ -692,6 +761,7 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
       throw err
     }
     hub.broadcast('users')
+    auditLog(db, me.id, 'user_created', 'user', id, { username: data.username, role: data.role })
     c.header('Location', `/api/users/${id}`)
     return c.json(
       { user: db.prepare('SELECT id, username, email, phone, color, language, role, created_at FROM users WHERE id = ?').get(id) },
@@ -717,6 +787,7 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
         httpError(400, ERROR_CODES.USER_LAST_ADMIN)
       }
       db.prepare('UPDATE users SET role = ? WHERE id = ?').run(data.role, id)
+      auditLog(db, me.id, 'user_role_changed', 'user', id, { from: target.role, to: data.role })
       hub.broadcast('users')
       return c.json({ user: db.prepare(`SELECT ${USER_COLS} FROM users WHERE id = ?`).get(id) })
     }
@@ -738,6 +809,7 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
       const hash = await bcrypt.hash(data.password, 10)
       db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, id)
       db.prepare('DELETE FROM sessions WHERE user_id = ?').run(id)
+      auditLog(db, c.get('user').id, 'user_password_reset', 'user', id)
       hub.broadcast('users')
       return c.json({ ok: true })
     }
@@ -757,6 +829,7 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
         httpError(404, ERROR_CODES.USER_NOT_FOUND)
       }
       db.prepare('UPDATE users SET language = ? WHERE id = ?').run(data.language, id)
+      auditLog(db, c.get('user').id, 'user_language_changed', 'user', id, { to: data.language })
       hub.broadcast('users')
       return c.json({ user: db.prepare(`SELECT ${USER_COLS} FROM users WHERE id = ?`).get(id) })
     }
@@ -776,6 +849,7 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
       httpError(400, ERROR_CODES.USER_LAST_ADMIN)
     }
     db.prepare('DELETE FROM sessions WHERE user_id = ?').run(id)
+    auditLog(db, me.id, 'user_deleted', 'user', id, { username: target.username })
     db.prepare('DELETE FROM users WHERE id = ?').run(id)
     hub.broadcast('users')
     return c.body(null, 204)
@@ -793,8 +867,36 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
     if (c.get('demo')) httpError(403, ERROR_CODES.SETTINGS_PROD_ONLY)
     const data = c.req.valid('json')
     kvSet(prod, 'demo_enabled', data.enabled ? '1' : '0')
+    auditLog(prod, c.get('user').id, 'demo_toggled', 'setting', 'demo_enabled', { enabled: data.enabled })
     hub.broadcast('settings')
     return c.json({ demo_enabled: data.enabled })
+  })
+
+  // --- Audit log (admin): histórico de acciones administrativas ---
+  app.get('/api/admin/audit', zValidator('query', activityQuerySchema, validationHook), (c) => {
+    requireAdmin(c)
+    const db = c.get('db')
+    const { cursor, limit } = c.req.valid('query')
+    const decoded = cursor ? decodeCursor(cursor) : null
+    const keyset = decoded
+      ? 'WHERE (a.created_at < @cts OR (a.created_at = @cts AND a.id < @cid))'
+      : ''
+    const rows = db
+      .prepare(
+        `SELECT a.*, u.username AS actor_username
+         FROM admin_audit a
+         LEFT JOIN users u ON u.id = a.actor_id
+         ${keyset}
+         ORDER BY a.created_at DESC, a.id DESC
+         LIMIT @limitPlusOne`
+      )
+      .all({
+        ...(decoded ? { cts: decoded.ts, cid: decoded.id } : {}),
+        limitPlusOne: limit + 1,
+      })
+      .map((r) => ({ ...r, data: JSON.parse(r.data || '{}') }))
+    const page = keysetPage(rows, limit)
+    return c.json({ items: page.items, nextCursor: page.nextCursor, hasMore: page.hasMore })
   })
 
   // --- Ajustes del servidor (admin): backup y adjuntos ---
@@ -816,6 +918,7 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
     kvSet(prod, 'backup_enabled', data.backup_enabled ? '1' : '0')
     kvSet(prod, 'backup_retention_days', String(data.backup_retention_days))
     kvSet(prod, 'max_attachments_per_task', String(data.max_attachments_per_task))
+    auditLog(prod, c.get('user').id, 'server_settings_changed', 'setting', 'server', data)
     hub.broadcast('settings')
     return c.json({
       backup_enabled: data.backup_enabled,

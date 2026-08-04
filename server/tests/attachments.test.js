@@ -42,6 +42,9 @@ describe('adjuntos', () => {
     expect(fs.readdirSync(uploadsDir)).toHaveLength(1)
 
     await app.request(`/api/tasks/${task.id}`, jsonReq(auth, 'DELETE', ''))
+    expect(fs.readdirSync(uploadsDir)).toHaveLength(1)
+    const perm = await app.request(`/api/trash/${task.id}`, jsonReq(auth, 'DELETE', ''))
+    expect(perm.status).toBe(204)
     expect(fs.readdirSync(uploadsDir)).toHaveLength(0)
   })
 

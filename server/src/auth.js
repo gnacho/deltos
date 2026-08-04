@@ -74,7 +74,7 @@ const USER_PUBLIC_COLS = 'id, username, email, phone, color, language, role, cre
 
 // Resuelve la cookie de sesión contra la BD de producción y, si no está,
 // contra la BD demo. Devuelve { db, demo, user, sessionId } o null.
-export function resolveSession({ prod, demo, secret }, cookieHeader) {
+export function resolveSession({ prod, demo, secret }, cookieHeader, ua) {
   const cookies = parse(cookieHeader || '')
   const raw = cookies[COOKIE_NAME]
   if (!raw) return null
@@ -89,6 +89,10 @@ export function resolveSession({ prod, demo, secret }, cookieHeader) {
     if (!db) continue
     const s = db.prepare('SELECT * FROM sessions WHERE id = ?').get(id)
     if (!s || s.expires_at <= now) continue
+    if (s.ua && ua && s.ua !== ua) {
+      db.prepare('DELETE FROM sessions WHERE id = ?').run(id)
+      return null
+    }
     const user = db.prepare(`SELECT ${USER_PUBLIC_COLS} FROM users WHERE id = ?`).get(s.user_id)
     if (user) return { db, demo: isDemo, user, sessionId: id, csrfToken: s.csrf_token }
   }
@@ -111,7 +115,7 @@ export function requireAuth(ctx) {
       PUBLIC_PATHS.has(path) || (path === '/api/settings/demo' && c.req.method === 'GET')
     if (isPublic) return next()
 
-    const session = resolveSession(ctx, c.req.header('cookie'))
+    const session = resolveSession(ctx, c.req.header('cookie'), c.req.header('user-agent'))
     if (!session) httpError(401, ERROR_CODES.AUTH_REQUIRED)
     c.set('db', session.db)
     c.set('user', session.user)

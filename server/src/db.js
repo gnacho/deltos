@@ -70,7 +70,8 @@ CREATE TABLE IF NOT EXISTS tasks (
   assignee_id TEXT REFERENCES users(id) ON DELETE SET NULL,
   created_by TEXT REFERENCES users(id),
   created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL
+  updated_at INTEGER NOT NULL,
+  deleted_at INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS task_labels (
@@ -163,6 +164,28 @@ CREATE INDEX IF NOT EXISTS idx_activity_created ON activity_events(created_at);
 CREATE INDEX IF NOT EXISTS idx_sessions_expiry ON sessions(expires_at);
 CREATE INDEX IF NOT EXISTS idx_push_subs_user ON push_subscriptions(user_id);
 CREATE INDEX IF NOT EXISTS idx_notification_queue_user ON notification_queue(user_id, tipo);
+
+-- Audit log de acciones admin (quién hizo qué, cuándo, sobre quién/quién).
+CREATE TABLE IF NOT EXISTS admin_audit (
+  id TEXT PRIMARY KEY,
+  actor_id TEXT NOT NULL REFERENCES users(id),
+  action TEXT NOT NULL,
+  target_type TEXT,
+  target_id TEXT,
+  data TEXT DEFAULT '{}',
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_admin_audit_created ON admin_audit(created_at DESC);
+
+-- Idempotency: cache de respuestas POST para reintentos seguros (TTL 24h).
+CREATE TABLE IF NOT EXISTS idempotency_keys (
+  key TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id),
+  status INTEGER NOT NULL,
+  response_body TEXT,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_idempotency_expiry ON idempotency_keys(created_at);
 `
 
 export function openDb(file) {
@@ -189,14 +212,22 @@ export function migrateSchema(db) {
     db.exec('ALTER TABLE sessions ADD COLUMN csrf_token TEXT')
     log.info('schema_migrated', { table: 'sessions', column: 'csrf_token' })
   }
+  const taskCols = db.prepare('PRAGMA table_info(tasks)').all().map((c) => c.name)
+  if (!taskCols.includes('deleted_at')) {
+    db.exec('ALTER TABLE tasks ADD COLUMN deleted_at INTEGER')
+    log.info('schema_migrated', { table: 'tasks', column: 'deleted_at' })
+  }
 }
 
 // Checkpoint WAL periódico (llamado cada hora desde index.js): sin esto el WAL
 // crece indefinidamente. También limpia sesiones caducadas.
 export function hourlyMaintenance(db, label) {
   db.pragma('wal_checkpoint(TRUNCATE)')
-  const { changes } = db.prepare('DELETE FROM sessions WHERE expires_at < ?').run(Date.now())
-  if (changes > 0) log.info('sessions_expired_purged', { db: label, count: changes })
+  const { changes: sessChanges } = db.prepare('DELETE FROM sessions WHERE expires_at < ?').run(Date.now())
+  if (sessChanges > 0) log.info('sessions_expired_purged', { db: label, count: sessChanges })
+  const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000
+  const { changes: trashChanges } = db.prepare('DELETE FROM tasks WHERE deleted_at IS NOT NULL AND deleted_at < ?').run(thirtyDaysAgo)
+  if (trashChanges > 0) log.info('trash_purged', { db: label, count: trashChanges })
 }
 
 export function kvGet(db, key, fallback = null) {
