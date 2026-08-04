@@ -14,6 +14,7 @@ import { useData } from '@/data/data-context';
 import { useSession } from '@/auth/session-context';
 import { fmtSize } from '@/lib/format';
 import { ImageLightbox } from '@/components/task/ImageLightbox';
+import { PhotoCropDialog } from '@/components/PhotoCropDialog';
 
 const MAX_BYTES = 10 * 1024 * 1024;
 
@@ -58,6 +59,7 @@ export function AttachmentsTab({ detail }: { detail: TaskDetail }) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [viewer, setViewer] = useState<number | null>(null);
+  const [cropFile, setCropFile] = useState<File | null>(null);
 
   const images = detail.attachments.filter(isImageAttachment).map((a) => ({
     src: `/api/attachments/${encodeURIComponent(a.id)}`,
@@ -76,6 +78,11 @@ export function AttachmentsTab({ detail }: { detail: TaskDetail }) {
       setError(t('attachments.tooBig'));
       return;
     }
+    if (file.type.startsWith('image/')) {
+      setCropFile(file);
+      if (inputRef.current) inputRef.current.value = '';
+      return;
+    }
     setUploading(true);
     try {
       await data.uploadAttachment(detail.task.id, file);
@@ -84,6 +91,20 @@ export function AttachmentsTab({ detail }: { detail: TaskDetail }) {
     } finally {
       setUploading(false);
       if (inputRef.current) inputRef.current.value = '';
+    }
+  };
+
+  const onCropSave = async (blob: Blob) => {
+    setError(null);
+    setUploading(true);
+    try {
+      const ext = blob.type === 'image/webp' ? 'webp' : 'jpg';
+      const named = new File([blob], `photo.${ext}`, { type: blob.type });
+      await data.uploadAttachment(detail.task.id, named);
+    } catch (err) {
+      setError(apiErrorText(err, t('attachments.uploadError')));
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -174,6 +195,14 @@ export function AttachmentsTab({ detail }: { detail: TaskDetail }) {
       </div>
 
       <ImageLightbox images={images} index={viewer} onIndexChange={setViewer} />
+
+      <PhotoCropDialog
+        file={cropFile}
+        open={!!cropFile}
+        onClose={() => setCropFile(null)}
+        onSave={onCropSave}
+        allowedRatios={[4 / 3, 16 / 9, 1, 0]}
+      />
     </div>
   );
 }

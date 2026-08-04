@@ -138,6 +138,17 @@
     "nextPhoto": "Next image",
     "counter": "{{current}} of {{total}}"
   },
+  "crop": {
+    "title": "Crop photo",
+    "desc": "Drag to frame, scroll or slider to zoom",
+    "viewport": "Crop area. Arrows to move, +/- to zoom, Enter to save",
+    "zoom": "Zoom",
+    "cancel": "Cancel",
+    "save": "Save",
+    "saving": "Saving…",
+    "close": "Close",
+    "free": "Free"
+  },
   "comments": {
     "empty": "No comments yet.",
     "placeholder": "Write a comment…",

@@ -138,6 +138,17 @@
     "nextPhoto": "Imagen siguiente",
     "counter": "{{current}} de {{total}}"
   },
+  "crop": {
+    "title": "Recortar foto",
+    "desc": "Arrastra para encuadrar, scroll o slider para zoom",
+    "viewport": "Área de recorte. Flechas para mover, +/- para zoom, Enter para guardar",
+    "zoom": "Zoom",
+    "cancel": "Cancelar",
+    "save": "Guardar",
+    "saving": "Guardando…",
+    "close": "Cerrar",
+    "free": "Libre"
+  },
   "comments": {
     "empty": "Sin comentarios todavía.",
     "placeholder": "Escribe un comentario…",
