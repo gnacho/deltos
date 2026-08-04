@@ -63,6 +63,14 @@ export class ApiError extends Error {
   }
 }
 
+/** Token CSRF de la sesión actual; se obtiene del login o de /api/auth/me. */
+let csrfToken: string | null = null;
+
+/** Guarda el token CSRF (llamar tras login exitoso o al recibir /api/auth/me). */
+export function setCsrfToken(token: string | null): void {
+  csrfToken = token;
+}
+
 /** Evita cascadas cuando N peticiones reciben 401 a la vez. */
 let handling401 = false;
 
@@ -107,10 +115,20 @@ export interface ApiOptions extends RequestInit {
 
 export async function apiFetch<T>(path: string, init?: ApiOptions): Promise<T> {
   const { noAuthEvent, ...rest } = init ?? {};
+  const method = (rest.method ?? 'GET').toUpperCase();
+  const needsCsrf = method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS';
+  const headers: Record<string, string> = { Accept: 'application/json' };
+  if (needsCsrf && csrfToken) headers['x-csrf-token'] = csrfToken;
+  if (rest.headers) {
+    const h = rest.headers instanceof Headers
+      ? Object.fromEntries(rest.headers.entries())
+      : rest.headers as Record<string, string>;
+    Object.assign(headers, h);
+  }
   const res = await fetch(path, {
-    credentials: 'same-origin', // cookie HttpOnly de sesión
+    credentials: 'same-origin',
     ...rest,
-    headers: { Accept: 'application/json', ...rest.headers },
+    headers,
   });
 
   // 204 No Content (DELETE y cía.): jamás intentar parsear cuerpo.

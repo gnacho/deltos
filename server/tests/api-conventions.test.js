@@ -36,24 +36,24 @@ describe('envelope de errores { error: { code, message, details? } }', () => {
 
   it('404 de dominio → TASK_NOT_FOUND', async () => {
     const { app } = await makeInstance()
-    const cookie = await loginAdmin(app)
-    const res = await app.request('/api/tasks/no-existe', { headers: { cookie } })
+    const auth = await loginAdmin(app)
+    const res = await app.request('/api/tasks/no-existe', { headers: { cookie: auth.cookie } })
     expect(res.status).toBe(404)
     expect((await res.json()).error.code).toBe('TASK_NOT_FOUND')
   })
 
   it('404 de ruta inexistente → NOT_FOUND', async () => {
     const { app } = await makeInstance()
-    const cookie = await loginAdmin(app)
-    const res = await app.request('/api/no-existe', { headers: { cookie } })
+    const auth = await loginAdmin(app)
+    const res = await app.request('/api/no-existe', { headers: { cookie: auth.cookie } })
     expect(res.status).toBe(404)
     expect((await res.json()).error.code).toBe('NOT_FOUND')
   })
 
   it('422 de zValidator → VALIDATION_FAILED con details.issues', async () => {
     const { app } = await makeInstance()
-    const cookie = await loginAdmin(app)
-    const res = await app.request('/api/projects', jsonReq(cookie, 'POST', '', { name: '' }))
+    const auth = await loginAdmin(app)
+    const res = await app.request('/api/projects', jsonReq(auth, 'POST', '', { name: '' }))
     expect(res.status).toBe(422)
     const body = await res.json()
     expect(body.error.code).toBe('VALIDATION_FAILED')
@@ -63,27 +63,27 @@ describe('envelope de errores { error: { code, message, details? } }', () => {
 
   it('409 UNIQUE → código de dominio LABEL_NAME_TAKEN', async () => {
     const { app } = await makeInstance()
-    const cookie = await loginAdmin(app)
-    await app.request('/api/labels', jsonReq(cookie, 'POST', '', { name: 'casa' }))
-    const dup = await app.request('/api/labels', jsonReq(cookie, 'POST', '', { name: 'casa' }))
+    const auth = await loginAdmin(app)
+    await app.request('/api/labels', jsonReq(auth, 'POST', '', { name: 'casa' }))
+    const dup = await app.request('/api/labels', jsonReq(auth, 'POST', '', { name: 'casa' }))
     expect(dup.status).toBe(409)
     expect((await dup.json()).error.code).toBe('LABEL_NAME_TAKEN')
   })
 
   it('409 al renombrar etiqueta a nombre existente (SQLITE_CONSTRAINT_UNIQUE en ruta)', async () => {
     const { app } = await makeInstance()
-    const cookie = await loginAdmin(app)
-    const a = (await (await app.request('/api/labels', jsonReq(cookie, 'POST', '', { name: 'a' }))).json()).label
-    await app.request('/api/labels', jsonReq(cookie, 'POST', '', { name: 'b' }))
-    const res = await app.request(`/api/labels/${a.id}`, jsonReq(cookie, 'PATCH', '', { name: 'b' }))
+    const auth = await loginAdmin(app)
+    const a = (await (await app.request('/api/labels', jsonReq(auth, 'POST', '', { name: 'a' }))).json()).label
+    await app.request('/api/labels', jsonReq(auth, 'POST', '', { name: 'b' }))
+    const res = await app.request(`/api/labels/${a.id}`, jsonReq(auth, 'PATCH', '', { name: 'b' }))
     expect(res.status).toBe(409)
     expect((await res.json()).error.code).toBe('LABEL_NAME_TAKEN')
   })
 
   it('400 cursor malformado → INVALID_CURSOR', async () => {
     const { app } = await makeInstance()
-    const cookie = await loginAdmin(app)
-    const res = await app.request('/api/activity?cursor=no-es-base64url-valido!!', { headers: { cookie } })
+    const auth = await loginAdmin(app)
+    const res = await app.request('/api/activity?cursor=no-es-base64url-valido!!', { headers: { cookie: auth.cookie } })
     expect(res.status).toBe(400)
     expect((await res.json()).error.code).toBe('INVALID_CURSOR')
   })
@@ -111,8 +111,8 @@ describe('envelope de errores { error: { code, message, details? } }', () => {
 describe('códigos de estado: 201 + Location, 204 en DELETE', () => {
   it('POST /api/projects → 201 con Location', async () => {
     const { app } = await makeInstance()
-    const cookie = await loginAdmin(app)
-    const res = await app.request('/api/projects', jsonReq(cookie, 'POST', '', { name: 'Casa' }))
+    const auth = await loginAdmin(app)
+    const res = await app.request('/api/projects', jsonReq(auth, 'POST', '', { name: 'Casa' }))
     expect(res.status).toBe(201)
     const { project } = await res.json()
     expect(res.headers.get('location')).toBe(`/api/projects/${project.id}`)
@@ -120,18 +120,18 @@ describe('códigos de estado: 201 + Location, 204 en DELETE', () => {
 
   it('POST /api/tasks → 201 con Location; DELETE → 204 sin cuerpo', async () => {
     const { app } = await makeInstance()
-    const cookie = await loginAdmin(app)
+    const auth = await loginAdmin(app)
     const { project } = await (
-      await app.request('/api/projects', jsonReq(cookie, 'POST', '', { name: 'Casa' }))
+      await app.request('/api/projects', jsonReq(auth, 'POST', '', { name: 'Casa' }))
     ).json()
     const created = await app.request(
       '/api/tasks',
-      jsonReq(cookie, 'POST', '', { project_id: project.id, title: 'T1' })
+      jsonReq(auth, 'POST', '', { project_id: project.id, title: 'T1' })
     )
     expect(created.status).toBe(201)
     const { task } = await created.json()
     expect(created.headers.get('location')).toBe(`/api/tasks/${task.id}`)
-    const del = await app.request(`/api/tasks/${task.id}`, jsonReq(cookie, 'DELETE', ''))
+    const del = await app.request(`/api/tasks/${task.id}`, jsonReq(auth, 'DELETE', ''))
     expect(del.status).toBe(204)
     expect(await del.text()).toBe('')
   })
@@ -140,19 +140,19 @@ describe('códigos de estado: 201 + Location, 204 en DELETE', () => {
 describe('paginación keyset de /api/activity', () => {
   it('recorre todas las páginas sin duplicados ni huecos', async () => {
     const { app } = await makeInstance()
-    const cookie = await loginAdmin(app)
+    const auth = await loginAdmin(app)
     const { project } = await (
-      await app.request('/api/projects', jsonReq(cookie, 'POST', '', { name: 'Casa' }))
+      await app.request('/api/projects', jsonReq(auth, 'POST', '', { name: 'Casa' }))
     ).json()
     // 5 tareas → 5 eventos 'created'
     for (let i = 0; i < 5; i++) {
-      await app.request('/api/tasks', jsonReq(cookie, 'POST', '', { project_id: project.id, title: `T${i}` }))
+      await app.request('/api/tasks', jsonReq(auth, 'POST', '', { project_id: project.id, title: `T${i}` }))
     }
     const seen = []
     let cursor = null
     for (let page = 0; page < 10; page++) {
       const url = `/api/activity?limit=2${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`
-      const body = await (await app.request(url, { headers: { cookie } })).json()
+      const body = await (await app.request(url, { headers: { cookie: auth.cookie } })).json()
       seen.push(...body.items.map((e) => e.id))
       if (!body.hasMore) {
         expect(body.nextCursor).toBeNull()
@@ -167,9 +167,9 @@ describe('paginación keyset de /api/activity', () => {
 
   it('cursor con forma inválida (JSON pero sin ts/id) → 400 INVALID_CURSOR', async () => {
     const { app } = await makeInstance()
-    const cookie = await loginAdmin(app)
+    const auth = await loginAdmin(app)
     const bad = Buffer.from(JSON.stringify({ foo: 1 }), 'utf8').toString('base64url')
-    const res = await app.request(`/api/activity?cursor=${bad}`, { headers: { cookie } })
+    const res = await app.request(`/api/activity?cursor=${bad}`, { headers: { cookie: auth.cookie } })
     expect(res.status).toBe(400)
     expect((await res.json()).error.code).toBe('INVALID_CURSOR')
   })
@@ -262,9 +262,9 @@ describe('log-ops: redacción PII y wide events', () => {
 
   it('wide event: exactamente 1 línea JSON por request API, con campos del contrato', async () => {
     const { app } = await makeInstance()
-    const cookie = await loginAdmin(app)
+    const auth = await loginAdmin(app)
     const { lines } = spyStdout()
-    await app.request('/api/bootstrap', { headers: { cookie } })
+    await app.request('/api/bootstrap', { headers: { cookie: auth.cookie } })
     const events = jsonLines(lines, 'http_request')
     expect(events).toHaveLength(1)
     const e = events[0]
@@ -298,11 +298,11 @@ describe('log-ops: redacción PII y wide events', () => {
 
   it('wide event: estáticos/SPA OK no generan evento; 404 de API sí', async () => {
     const { app } = await makeInstance()
-    const cookie = await loginAdmin(app)
+    const auth = await loginAdmin(app)
     const { lines } = spyStdout()
     await app.request('/') // SPA fallback (200 u HTML placeholder)
     expect(jsonLines(lines, 'http_request')).toHaveLength(0)
-    await app.request('/api/no-existe', { headers: { cookie } })
+    await app.request('/api/no-existe', { headers: { cookie: auth.cookie } })
     expect(jsonLines(lines, 'http_request')).toHaveLength(1)
   })
 
@@ -316,8 +316,8 @@ describe('log-ops: redacción PII y wide events', () => {
 describe('anti pantalla-negra: /api/version + cabeceras de caché', () => {
   it('GET /api/version con sesión → { version, build }', async () => {
     const { app } = await makeInstance()
-    const cookie = await loginAdmin(app)
-    const res = await app.request('/api/version', { headers: { cookie } })
+    const auth = await loginAdmin(app)
+    const res = await app.request('/api/version', { headers: { cookie: auth.cookie } })
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.version).toMatch(/^\d+\.\d+\.\d+$/)
@@ -326,10 +326,10 @@ describe('anti pantalla-negra: /api/version + cabeceras de caché', () => {
 
   it('/assets/* → immutable; SPA fallback → no-cache', async () => {
     const { app } = await makeInstance()
-    const cookie = await loginAdmin(app)
-    const spa = await app.request('/', { headers: { cookie } })
+    const auth = await loginAdmin(app)
+    const spa = await app.request('/', { headers: { cookie: auth.cookie } })
     expect(spa.headers.get('cache-control')).toBe('no-cache')
-    const asset = await app.request('/assets/fichero-que-no-existe.js', { headers: { cookie } })
+    const asset = await app.request('/assets/fichero-que-no-existe.js', { headers: { cookie: auth.cookie } })
     expect(asset.status).toBe(404)
   })
 })
@@ -337,13 +337,13 @@ describe('anti pantalla-negra: /api/version + cabeceras de caché', () => {
 describe('PATCH parcial NO resetea campos con default (regresión v1.6.0)', () => {
   it('PATCH /api/labels/:id solo con name conserva el color', async () => {
     const { app } = await makeInstance()
-    const cookie = await loginAdmin(app)
+    const auth = await loginAdmin(app)
     const created = await (
-      await app.request('/api/labels', jsonReq(cookie, 'POST', '/api/labels', { name: 'color-ok', color: 'rose' }))
+      await app.request('/api/labels', jsonReq(auth, 'POST', '/api/labels', { name: 'color-ok', color: 'rose' }))
     ).json()
     const res = await app.request(
       `/api/labels/${created.label.id}`,
-      jsonReq(cookie, 'PATCH', `/api/labels/${created.label.id}`, { name: 'color-ok-2' })
+      jsonReq(auth, 'PATCH', `/api/labels/${created.label.id}`, { name: 'color-ok-2' })
     )
     const body = await res.json()
     expect(body.label.color).toBe('rose')
@@ -351,13 +351,13 @@ describe('PATCH parcial NO resetea campos con default (regresión v1.6.0)', () =
 
   it('PATCH /api/projects/:id solo con name conserva emoji y color', async () => {
     const { app } = await makeInstance()
-    const cookie = await loginAdmin(app)
+    const auth = await loginAdmin(app)
     const created = await (
-      await app.request('/api/projects', jsonReq(cookie, 'POST', '/api/projects', { name: 'P1', emoji: '🏠', color: 'violet' }))
+      await app.request('/api/projects', jsonReq(auth, 'POST', '/api/projects', { name: 'P1', emoji: '🏠', color: 'violet' }))
     ).json()
     const res = await app.request(
       `/api/projects/${created.project.id}`,
-      jsonReq(cookie, 'PATCH', `/api/projects/${created.project.id}`, { name: 'P1b' })
+      jsonReq(auth, 'PATCH', `/api/projects/${created.project.id}`, { name: 'P1b' })
     )
     const body = await res.json()
     expect(body.project.emoji).toBe('🏠')

@@ -24,6 +24,7 @@ export const ERROR_CODES = {
   AUTH_FORBIDDEN: 'AUTH_FORBIDDEN', // 403, requiere rol admin
   AUTH_WRONG_CURRENT_PASSWORD: 'AUTH_WRONG_CURRENT_PASSWORD', // 400
   AUTH_DEMO_DISABLED: 'AUTH_DEMO_DISABLED', // 403, modo demo desactivado
+  CSRF_INVALID: 'CSRF_INVALID', // 403, token CSRF ausente o no coincide
   DEMO_UNAVAILABLE: 'DEMO_UNAVAILABLE', // 503, BD demo sin usuario demo
 
   // Usuarios (admin)
@@ -43,6 +44,7 @@ export const ERROR_CODES = {
   ATTACHMENT_FILE_MISSING: 'ATTACHMENT_FILE_MISSING', // 404, fichero no está en disco
   UPLOAD_FILE_REQUIRED: 'UPLOAD_FILE_REQUIRED', // 400, falta campo "file"
   UPLOAD_TOO_LARGE: 'UPLOAD_TOO_LARGE', // 413, fichero > MAX_UPLOAD_MB
+  UPLOAD_INVALID_MIME: 'UPLOAD_INVALID_MIME', // 415, tipo de fichero no permitido
 
   // Ajustes
   SETTINGS_PROD_ONLY: 'SETTINGS_PROD_ONLY', // 403, ajuste solo desde sesión prod
@@ -71,6 +73,7 @@ export const ERROR_MESSAGES_ES = {
   [ERROR_CODES.AUTH_FORBIDDEN]: 'Se requiere rol de administrador',
   [ERROR_CODES.AUTH_WRONG_CURRENT_PASSWORD]: 'La contraseña actual es incorrecta',
   [ERROR_CODES.AUTH_DEMO_DISABLED]: 'El modo demo está desactivado',
+  [ERROR_CODES.CSRF_INVALID]: 'Token de seguridad no válido. Recarga la página.',
   [ERROR_CODES.DEMO_UNAVAILABLE]: 'Modo demo no disponible',
 
   [ERROR_CODES.USER_NOT_FOUND]: 'Usuario no encontrado',
@@ -88,6 +91,7 @@ export const ERROR_MESSAGES_ES = {
   [ERROR_CODES.ATTACHMENT_FILE_MISSING]: 'Fichero no disponible en disco',
   [ERROR_CODES.UPLOAD_FILE_REQUIRED]: 'Falta el fichero (campo "file" en multipart)',
   [ERROR_CODES.UPLOAD_TOO_LARGE]: 'El fichero supera el límite de subida',
+  [ERROR_CODES.UPLOAD_INVALID_MIME]: 'El tipo de fichero no está permitido',
 
   [ERROR_CODES.SETTINGS_PROD_ONLY]: 'Ajuste solo disponible desde la sesión de producción',
 

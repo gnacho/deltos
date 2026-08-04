@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { apiFetch } from '@/data/api-client';
+import { apiFetch, setCsrfToken } from '@/data/api-client';
 import type { MeResponse, SessionUser } from '@/data/types';
 import { applyUserLanguage } from '@/i18n';
 import { SessionContext, type SessionApi } from './session-context';
@@ -26,11 +26,13 @@ export default function AuthGate({ children }: { children: ReactNode }) {
       const me = await apiFetch<MeResponse>('/api/auth/me', { noAuthEvent: true });
       setUser(me.user);
       setDemo(me.demo);
+      setCsrfToken(me.csrfToken ?? null);
       applyUserLanguage(me.user.language ?? 'auto');
       return true;
     } catch {
       setUser(null);
       setDemo(false);
+      setCsrfToken(null);
       return false;
     }
   }, []);

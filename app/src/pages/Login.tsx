@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Sparkles, Sun, Moon } from 'lucide-react';
-import { apiFetch, apiPost, dispatchAuthed } from '@/data/api-client';
+import { apiFetch, apiPost, dispatchAuthed, setCsrfToken } from '@/data/api-client';
 import { apiErrorText } from '@/lib/errors';
 
 /**
@@ -63,11 +63,12 @@ export default function Login() {
     }
     setBusy('login');
     try {
-      await apiPost<MeResponse>(
+      const res = await apiPost<MeResponse>(
         '/api/auth/login',
         { username: username.trim(), password },
         { noAuthEvent: true },
       );
+      setCsrfToken(res.csrfToken ?? null);
       await storeCredentials(username.trim(), password);
       dispatchAuthed();
     } catch (err) {
@@ -80,7 +81,8 @@ export default function Login() {
     setError(null);
     setBusy('demo');
     try {
-      await apiPost<MeResponse>('/api/auth/demo', undefined, { noAuthEvent: true });
+      const res = await apiPost<MeResponse>('/api/auth/demo', undefined, { noAuthEvent: true });
+      setCsrfToken(res.csrfToken ?? null);
       dispatchAuthed();
     } catch (err) {
       setError(apiErrorText(err, t('login.errorGeneric')));

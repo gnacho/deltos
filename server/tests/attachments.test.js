@@ -6,13 +6,13 @@ import { makeInstance, loginAdmin, jsonReq } from './helpers.js'
 describe('adjuntos', () => {
   it('sube, registra evento y descarga con content-type', async () => {
     const { app, uploadsDir } = await makeInstance({ seedDemoData: false })
-    const cookie = await loginAdmin(app)
+    const auth = await loginAdmin(app)
     const project = (
-      await (await app.request('/api/projects', jsonReq(cookie, 'POST', '', { name: 'Casa' }))).json()
+      await (await app.request('/api/projects', jsonReq(auth, 'POST', '', { name: 'Casa' }))).json()
     ).project
     const task = (
       await (
-        await app.request('/api/tasks', jsonReq(cookie, 'POST', '', { project_id: project.id, title: 'Con adjunto' }))
+        await app.request('/api/tasks', jsonReq(auth, 'POST', '', { project_id: project.id, title: 'Con adjunto' }))
       ).json()
     ).task
 
@@ -20,7 +20,7 @@ describe('adjuntos', () => {
     form.append('file', new File(['contenido de prueba'], 'nota.txt', { type: 'text/plain' }))
     const up = await app.request(`/api/tasks/${task.id}/attachments`, {
       method: 'POST',
-      headers: { cookie },
+      headers: { cookie: auth.cookie, 'x-csrf-token': auth.csrfToken },
       body: form,
     })
     expect(up.status).toBe(201)
@@ -28,46 +28,64 @@ describe('adjuntos', () => {
     expect(attachment.filename).toBe('nota.txt')
     expect(attachment.size).toBe(19)
 
-    // evento 'attachment' en el detalle
-    const detail = await (await app.request(`/api/tasks/${task.id}`, { headers: { cookie } })).json()
+    const detail = await (await app.request(`/api/tasks/${task.id}`, { headers: { cookie: auth.cookie } })).json()
     expect(detail.attachments).toHaveLength(1)
     expect(detail.activity.some((e) => e.type === 'attachment' && e.data.filename === 'nota.txt')).toBe(true)
 
-    // descarga
-    const down = await app.request(`/api/attachments/${attachment.id}`, { headers: { cookie } })
+    const down = await app.request(`/api/attachments/${attachment.id}`, { headers: { cookie: auth.cookie } })
     expect(down.status).toBe(200)
     expect(down.headers.get('content-type')).toContain('text/plain')
     expect(down.headers.get('content-disposition')).toContain('nota.txt')
     expect(await down.text()).toBe('contenido de prueba')
 
-    // el fichero existe en disco con nombre aleatorio
     const fs = await import('node:fs')
     expect(fs.readdirSync(uploadsDir)).toHaveLength(1)
 
-    // borrar la tarea elimina el fichero de disco
-    await app.request(`/api/tasks/${task.id}`, jsonReq(cookie, 'DELETE', ''))
+    await app.request(`/api/tasks/${task.id}`, jsonReq(auth, 'DELETE', ''))
     expect(fs.readdirSync(uploadsDir)).toHaveLength(0)
   })
 
   it('rechaza multipart sin fichero', async () => {
     const { app } = await makeInstance({ seedDemoData: false })
-    const cookie = await loginAdmin(app)
+    const auth = await loginAdmin(app)
     const project = (
-      await (await app.request('/api/projects', jsonReq(cookie, 'POST', '', { name: 'Casa' }))).json()
+      await (await app.request('/api/projects', jsonReq(auth, 'POST', '', { name: 'Casa' }))).json()
     ).project
     const task = (
       await (
-        await app.request('/api/tasks', jsonReq(cookie, 'POST', '', { project_id: project.id, title: 'T' }))
+        await app.request('/api/tasks', jsonReq(auth, 'POST', '', { project_id: project.id, title: 'T' }))
       ).json()
     ).task
     const form = new FormData()
     form.append('nada', 'x')
     const res = await app.request(`/api/tasks/${task.id}/attachments`, {
       method: 'POST',
-      headers: { cookie },
+      headers: { cookie: auth.cookie, 'x-csrf-token': auth.csrfToken },
       body: form,
     })
     expect(res.status).toBe(400)
+  })
+
+  it('rechaza ficheros con MIME no permitido', async () => {
+    const { app } = await makeInstance({ seedDemoData: false })
+    const auth = await loginAdmin(app)
+    const project = (
+      await (await app.request('/api/projects', jsonReq(auth, 'POST', '', { name: 'Casa' }))).json()
+    ).project
+    const task = (
+      await (
+        await app.request('/api/tasks', jsonReq(auth, 'POST', '', { project_id: project.id, title: 'T' }))
+      ).json()
+    ).task
+    const form = new FormData()
+    form.append('file', new File(['<script>alert(1)</script>'], 'malware.exe', { type: 'application/x-msdownload' }))
+    const res = await app.request(`/api/tasks/${task.id}/attachments`, {
+      method: 'POST',
+      headers: { cookie: auth.cookie, 'x-csrf-token': auth.csrfToken },
+      body: form,
+    })
+    expect(res.status).toBe(415)
+    expect((await res.json()).error.code).toBe('UPLOAD_INVALID_MIME')
   })
 
   it('los adjuntos sembrados en demo se descargan', async () => {

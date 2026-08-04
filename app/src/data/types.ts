@@ -130,6 +130,7 @@ export interface ActivityFeed {
 export interface MeResponse {
   user: SessionUser;
   demo: boolean;
+  csrfToken?: string | null;
 }
 
 export interface TaskPatch {

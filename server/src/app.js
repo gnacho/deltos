@@ -85,6 +85,22 @@ export function createApp(ctx) {
   // --- Auth: todo /api/* requiere sesión salvo login/register/demo/logout ---
   app.use('/api/*', auth.requireAuth({ prod, demo, secret }))
 
+  // --- CSRF: mutaciones POST/PUT/PATCH/DELETE requieren cabecera x-csrf-token
+  // que coincida con el token de la sesión. GET/HEAD exentos (idempotentes).
+  // Rutas públicas (sin sesión) exentas: login/demo/logout no tienen sesión.
+  app.use('/api/*', async (c, next) => {
+    const method = c.req.method
+    if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return next()
+    if (!c.get('user')) return next()
+    const session = auth.resolveSession({ prod, demo, secret }, c.req.header('cookie'))
+    const expected = session?.csrfToken
+    const given = c.req.header('x-csrf-token')
+    if (!expected || !given || expected !== given) {
+      httpError(403, ERROR_CODES.CSRF_INVALID)
+    }
+    await next()
+  })
+
   const cookieOpts = { secure: config.cookieSecure }
 
   // --- Autenticación ---
@@ -116,9 +132,9 @@ export function createApp(ctx) {
     // Rotación de sesión tras login exitoso (previene session fixation)
     const previous = auth.resolveSession({ prod, demo, secret }, c.req.header('cookie'))
     if (previous) auth.destroySession(previous.db, previous.sessionId)
-    const sessionId = auth.createSession(prod, user.id, c.req.header('user-agent'))
+    const { id: sessionId, csrfToken } = auth.createSession(prod, user.id, c.req.header('user-agent'))
     c.header('Set-Cookie', auth.cookieFor(secret, sessionId, cookieOpts))
-    return c.json({ user, demo: false })
+    return c.json({ user, demo: false, csrfToken })
   })
 
   // Modo demo: un clic, sin contraseña. 403 si está desactivado en Ajustes.
@@ -132,9 +148,9 @@ export function createApp(ctx) {
     if (!user) httpError(503, ERROR_CODES.DEMO_UNAVAILABLE)
     const previous = auth.resolveSession({ prod, demo, secret }, c.req.header('cookie'))
     if (previous) auth.destroySession(previous.db, previous.sessionId)
-    const sessionId = auth.createSession(demo, user.id, c.req.header('user-agent'))
+    const { id: sessionId, csrfToken } = auth.createSession(demo, user.id, c.req.header('user-agent'))
     c.header('Set-Cookie', auth.cookieFor(secret, sessionId, cookieOpts))
-    return c.json({ user, demo: true })
+    return c.json({ user, demo: true, csrfToken })
   })
 
   app.post('/api/auth/logout', (c) => {
@@ -144,9 +160,10 @@ export function createApp(ctx) {
     return c.json({ ok: true })
   })
 
-  // GET /api/auth/me — devuelve user + {demo:true} si la sesión es de la BD demo
+  // GET /api/auth/me — devuelve user + {demo:true} + csrfToken de la sesión
   app.get('/api/auth/me', (c) => {
-    return c.json({ user: c.get('user'), demo: c.get('demo') })
+    const session = auth.resolveSession({ prod, demo, secret }, c.req.header('cookie'))
+    return c.json({ user: c.get('user'), demo: c.get('demo'), csrfToken: session?.csrfToken ?? null })
   })
 
   app.put('/api/auth/profile', zValidator('json', profileSchema, validationHook), (c) => {
@@ -157,12 +174,14 @@ export function createApp(ctx) {
     return c.json({ ok: true, user: updated })
   })
 
-  // Cambio de contraseña: verifica la actual con bcrypt antes de re-hashear
+  // Cambio de contraseña: verifica la actual, re-hashea e invalida las demás
+  // sesiones del usuario (la actual sobrevive para no desconectar al propio).
   app.put('/api/auth/password', zValidator('json', passwordSchema, validationHook), async (c) => {
     const data = c.req.valid('json')
     const result = await auth.changePassword(c.get('db'), c.get('user').id, data.current, data.next)
     if (result === 'wrong-current') httpError(400, ERROR_CODES.AUTH_WRONG_CURRENT_PASSWORD)
     if (result !== 'ok') httpError(500, ERROR_CODES.INTERNAL_ERROR)
+    auth.destroyOtherSessions(c.get('db'), c.get('user').id, c.get('sessionId'))
     return c.json({ ok: true })
   })
 

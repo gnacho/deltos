@@ -27,7 +27,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   created_at INTEGER NOT NULL,
   expires_at INTEGER NOT NULL,
-  ua TEXT
+  ua TEXT,
+  csrf_token TEXT
 );
 
 CREATE TABLE IF NOT EXISTS login_attempts (
@@ -182,6 +183,11 @@ export function migrateSchema(db) {
   if (!userCols.includes('color')) {
     db.exec("ALTER TABLE users ADD COLUMN color TEXT DEFAULT 'slate'")
     log.info('schema_migrated', { table: 'users', column: 'color' })
+  }
+  const sessionCols = db.prepare('PRAGMA table_info(sessions)').all().map((c) => c.name)
+  if (!sessionCols.includes('csrf_token')) {
+    db.exec('ALTER TABLE sessions ADD COLUMN csrf_token TEXT')
+    log.info('schema_migrated', { table: 'sessions', column: 'csrf_token' })
   }
 }
 

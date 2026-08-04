@@ -1,21 +1,21 @@
 // demo.test.js — modo demo: BD separada, seed determinista, toggle 403,
 // sesión demo marcada con {demo:true}.
 import { describe, it, expect } from 'vitest'
-import { makeInstance, loginAdmin, loginDemo, jsonReq } from './helpers.js'
+import { makeInstance, loginAdmin, loginDemo, loginUser, jsonReq } from './helpers.js'
 
 describe('modo demo', () => {
   it('POST /api/auth/demo crea sesión demo y /me la marca con demo:true', async () => {
     const { app } = await makeInstance()
-    const cookie = await loginDemo(app)
-    const me = await (await app.request('/api/auth/me', { headers: { cookie } })).json()
+    const auth = await loginDemo(app)
+    const me = await (await app.request('/api/auth/me', { headers: { cookie: auth.cookie } })).json()
     expect(me.demo).toBe(true)
     expect(me.user.username).toBe('demo')
   })
 
   it('el dataset demo está sembrado (mockup) y separado de producción', async () => {
     const { app } = await makeInstance()
-    const demoCookie = await loginDemo(app)
-    const boot = await (await app.request('/api/bootstrap', { headers: { cookie: demoCookie } })).json()
+    const demo = await loginDemo(app)
+    const boot = await (await app.request('/api/bootstrap', { headers: { cookie: demo.cookie } })).json()
 
     expect(boot.users.map((u) => u.username).sort()).toEqual(['demo', 'jordi', 'mar'])
     expect(boot.projects.map((p) => p.name)).toEqual(['Casa', 'Trabajo', 'Viaje a Lisboa', 'Huerto'])
@@ -24,7 +24,6 @@ describe('modo demo', () => {
     )
     expect(boot.tasks).toHaveLength(15)
 
-    // mezcla de columnas y de fechas (vencida / hoy / futura / sin fecha)
     const cols = new Set(boot.tasks.map((t) => t.column))
     expect(cols).toEqual(new Set(['nuevo', 'encurso', 'hecho']))
     const today = new Date()
@@ -35,21 +34,19 @@ describe('modo demo', () => {
     expect(dues.some((d) => d && d < todayStr)).toBe(true)
     expect(dues.some((d) => d && d > todayStr)).toBe(true)
 
-    // tareas con detalle completo: descripción + adjuntos + comentarios + eventos
     const t2 = boot.tasks.find((t) => t.title === 'Revisar presupuesto reforma baño')
     expect(t2.counts.comments).toBeGreaterThanOrEqual(3)
     expect(t2.counts.attachments).toBe(2)
     expect(t2.labels.map((l) => l.name).sort()).toEqual(['Admin', 'Urgente'])
     const detail = await (
-      await app.request(`/api/tasks/${t2.id}`, { headers: { cookie: demoCookie } })
+      await app.request(`/api/tasks/${t2.id}`, { headers: { cookie: demo.cookie } })
     ).json()
     expect(detail.task.description.length).toBeGreaterThan(50)
     expect(detail.activity.length).toBeGreaterThanOrEqual(5)
     expect(detail.activity.some((e) => e.type === 'moved' && e.data.from === 'nuevo')).toBe(true)
 
-    // producción sigue VACÍA (solo el admin bootstrap)
     const admin = await loginAdmin(app)
-    const prodBoot = await (await app.request('/api/bootstrap', { headers: { cookie: admin } })).json()
+    const prodBoot = await (await app.request('/api/bootstrap', { headers: { cookie: admin.cookie } })).json()
     expect(prodBoot.tasks).toHaveLength(0)
     expect(prodBoot.projects).toHaveLength(0)
     expect(prodBoot.users).toHaveLength(1)
@@ -74,7 +71,6 @@ describe('modo demo', () => {
     const { app } = await makeInstance()
     const admin = await loginAdmin(app)
 
-    // GET público para la pantalla de login
     const pub = await (await app.request('/api/settings/demo')).json()
     expect(pub.demo_enabled).toBe(true)
 
@@ -89,7 +85,6 @@ describe('modo demo', () => {
     const pub2 = await (await app.request('/api/settings/demo')).json()
     expect(pub2.demo_enabled).toBe(false)
 
-    // reactivar
     const on = await app.request('/api/settings/demo', jsonReq(admin, 'PUT', '', { enabled: true }))
     expect(on.status).toBe(200)
     const again = await app.request('/api/auth/demo', { method: 'POST' })
@@ -100,28 +95,23 @@ describe('modo demo', () => {
     const { app } = await makeInstance()
     const admin = await loginAdmin(app)
     await app.request('/api/users', jsonReq(admin, 'POST', '/api/users', { username: 'pepe', password: 'pepe123' }))
-    const login = await app.request('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: 'pepe', password: 'pepe123' }),
-    })
-    const pepe = login.headers.get('set-cookie').split(';')[0]
+    const pepe = await loginUser(app, 'pepe', 'pepe123')
     const res = await app.request('/api/settings/demo', jsonReq(pepe, 'PUT', '', { enabled: false }))
     expect(res.status).toBe(403)
   })
 
   it('las mutaciones en demo no tocan producción', async () => {
     const { app } = await makeInstance()
-    const demoCookie = await loginDemo(app)
-    const boot = await (await app.request('/api/bootstrap', { headers: { cookie: demoCookie } })).json()
+    const demo = await loginDemo(app)
+    const boot = await (await app.request('/api/bootstrap', { headers: { cookie: demo.cookie } })).json()
     const created = await app.request(
       '/api/tasks',
-      jsonReq(demoCookie, 'POST', '/api/tasks', { project_id: boot.projects[0].id, title: 'Solo en demo' })
+      jsonReq(demo, 'POST', '/api/tasks', { project_id: boot.projects[0].id, title: 'Solo en demo' })
     )
     expect(created.status).toBe(201)
 
     const admin = await loginAdmin(app)
-    const prodBoot = await (await app.request('/api/bootstrap', { headers: { cookie: admin } })).json()
+    const prodBoot = await (await app.request('/api/bootstrap', { headers: { cookie: admin.cookie } })).json()
     expect(prodBoot.tasks).toHaveLength(0)
   })
 })

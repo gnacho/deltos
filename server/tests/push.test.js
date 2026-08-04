@@ -41,15 +41,15 @@ afterEach(() => _resetForTests())
 
 describe('endpoints /api/push', () => {
   it('vapid-public-key sin configurar devuelve 503', async () => {
-    const cookie = await loginAdmin(inst.app)
-    const res = await inst.app.request('/api/push/vapid-public-key', jsonReq(cookie, 'GET'))
+    const auth = await loginAdmin(inst.app)
+    const res = await inst.app.request('/api/push/vapid-public-key', jsonReq(auth, 'GET'))
     expect(res.status).toBe(503)
   })
 
   it('vapid-public-key configurado devuelve la clave pública', async () => {
     configura()
-    const cookie = await loginAdmin(inst.app)
-    const res = await inst.app.request('/api/push/vapid-public-key', jsonReq(cookie, 'GET'))
+    const auth = await loginAdmin(inst.app)
+    const res = await inst.app.request('/api/push/vapid-public-key', jsonReq(auth, 'GET'))
     expect(res.status).toBe(200)
     expect((await res.json()).publicKey).toBe(KEYS.publicKey)
   })
@@ -61,36 +61,36 @@ describe('endpoints /api/push', () => {
 
   it('subscribe hace upsert por endpoint y unsubscribe borra solo lo propio', async () => {
     configura()
-    const cookie = await loginAdmin(inst.app)
+    const auth = await loginAdmin(inst.app)
     const adminId = inst.prod.prepare('SELECT id FROM users WHERE username = ?').get('admin').id
 
-    let res = await inst.app.request('/api/push/subscribe', jsonReq(cookie, 'POST', '/api/push/subscribe', SUB))
+    let res = await inst.app.request('/api/push/subscribe', jsonReq(auth, 'POST', '/api/push/subscribe', SUB))
     expect(res.status).toBe(201)
     // Re-suscripción con el mismo endpoint: UPDATE, no duplicado
-    res = await inst.app.request('/api/push/subscribe', jsonReq(cookie, 'POST', '/api/push/subscribe', SUB))
+    res = await inst.app.request('/api/push/subscribe', jsonReq(auth, 'POST', '/api/push/subscribe', SUB))
     expect(res.status).toBe(201)
     const filas = inst.prod.prepare('SELECT * FROM push_subscriptions WHERE endpoint = ?').all(SUB.endpoint)
     expect(filas).toHaveLength(1)
     expect(filas[0].user_id).toBe(adminId)
 
-    res = await inst.app.request('/api/push/unsubscribe', jsonReq(cookie, 'DELETE', '/api/push/unsubscribe', { endpoint: SUB.endpoint }))
+    res = await inst.app.request('/api/push/unsubscribe', jsonReq(auth, 'DELETE', '/api/push/unsubscribe', { endpoint: SUB.endpoint }))
     expect(res.status).toBe(204)
     expect(inst.prod.prepare('SELECT * FROM push_subscriptions').all()).toHaveLength(0)
   })
 
   it('subscribe valida el payload (422 sin keys)', async () => {
     configura()
-    const cookie = await loginAdmin(inst.app)
-    const res = await inst.app.request('/api/push/subscribe', jsonReq(cookie, 'POST', '/api/push/subscribe', { endpoint: SUB.endpoint }))
+    const auth = await loginAdmin(inst.app)
+    const res = await inst.app.request('/api/push/subscribe', jsonReq(auth, 'POST', '/api/push/subscribe', { endpoint: SUB.endpoint }))
     expect(res.status).toBe(422)
     expect((await res.json()).error.code).toBe('VALIDATION_FAILED')
   })
 
   it('en modo demo: clave devuelve {demo:true} y subscribe no persiste', async () => {
-    const cookie = await loginDemo(inst.app)
-    const res = await inst.app.request('/api/push/vapid-public-key', jsonReq(cookie, 'GET'))
+    const auth = await loginDemo(inst.app)
+    const res = await inst.app.request('/api/push/vapid-public-key', jsonReq(auth, 'GET'))
     expect((await res.json()).demo).toBe(true)
-    const res2 = await inst.app.request('/api/push/subscribe', jsonReq(cookie, 'POST', '/api/push/subscribe', SUB))
+    const res2 = await inst.app.request('/api/push/subscribe', jsonReq(auth, 'POST', '/api/push/subscribe', SUB))
     expect(res2.status).toBe(501)
     expect(inst.demo.prepare('SELECT * FROM push_subscriptions').all()).toHaveLength(0)
   })

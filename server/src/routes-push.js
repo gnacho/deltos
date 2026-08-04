@@ -1,7 +1,7 @@
 // routes-push.js — endpoints de suscripción Web Push.
-// Auth: la sesión viaja por cookie HttpOnly SameSite=Lax mismo-origen (como el
-// resto de mutaciones de la app; no hay cabecera CSRF separada en Deltos).
-// El endpoint push es una capability URL SECRETA: nunca se loguea.
+// Auth: cookie HttpOnly SameSite=Lax + CSRF token en cabecera x-csrf-token
+// (ver middleware CSRF en app.js). El endpoint push es una capability URL
+// SECRETA: nunca se loguea.
 // Convenciones api-stack: zValidator + envelope de errores vía httpError().
 import crypto from 'node:crypto'
 import { z } from 'zod'

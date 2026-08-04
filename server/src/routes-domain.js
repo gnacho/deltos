@@ -539,6 +539,21 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod }) {
   )
 
   // --- Adjuntos ---
+  const ALLOWED_MIME_TYPES = new Set([
+    'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml',
+    'application/pdf',
+    'text/plain', 'text/csv',
+    'application/json',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.oasis.opendocument.text',
+    'application/vnd.oasis.opendocument.spreadsheet',
+    'application/vnd.oasis.opendocument.presentation',
+    'application/zip', 'application/gzip',
+    'application/x-tar',
+  ])
   app.post(
     '/api/tasks/:id/attachments',
     zValidator('param', idParamSchema, validationHook),
@@ -556,6 +571,10 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod }) {
       if (file.size > c.get('maxUploadBytes')) {
         httpError(413, ERROR_CODES.UPLOAD_TOO_LARGE)
       }
+      const mime = String(file.type || 'application/octet-stream').slice(0, 100)
+      if (!ALLOWED_MIME_TYPES.has(mime)) {
+        httpError(415, ERROR_CODES.UPLOAD_INVALID_MIME)
+      }
       // Nombre aleatorio en disco; la extensión se sanea (solo alfanumérica, máx 10)
       const ext = path.extname(file.name || '').replace(/[^a-zA-Z0-9.]/g, '').slice(0, 10)
       const stored = `${crypto.randomUUID()}${ext}`
@@ -566,7 +585,6 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod }) {
       const id = crypto.randomUUID()
       const now = Date.now()
       const filename = String(file.name || 'adjunto').slice(0, 200)
-      const mime = String(file.type || 'application/octet-stream').slice(0, 100)
       const insert = db.transaction(() => {
         db.prepare(
           'INSERT INTO attachments (id, task_id, filename, stored_name, size, mime, uploaded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'

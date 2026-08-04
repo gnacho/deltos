@@ -43,6 +43,7 @@ servicio. En caso de duda, el código manda: `server/src/error-codes.js`,
 | `AUTH_FORBIDDEN` | 403 | Requiere rol admin |
 | `AUTH_WRONG_CURRENT_PASSWORD` | 400 | Cambio de contraseña: actual incorrecta |
 | `AUTH_DEMO_DISABLED` | 403 | Modo demo desactivado en Ajustes |
+| `CSRF_INVALID` | 403 | Token CSRF ausente o no coincide |
 | `DEMO_UNAVAILABLE` | 503 | BD demo sin usuario demo |
 | `USER_NOT_FOUND` | 404 | |
 | `USER_ALREADY_EXISTS` | 409 | username UNIQUE |
@@ -58,6 +59,7 @@ servicio. En caso de duda, el código manda: `server/src/error-codes.js`,
 | `ATTACHMENT_FILE_MISSING` | 404 | Fichero no está en disco |
 | `UPLOAD_FILE_REQUIRED` | 400 | Falta campo `file` en multipart |
 | `UPLOAD_TOO_LARGE` | 413 | Fichero > `MAX_UPLOAD_MB` |
+| `UPLOAD_INVALID_MIME` | 415 | Tipo MIME no permitido |
 | `SETTINGS_PROD_ONLY` | 403 | Ajuste solo desde sesión de producción |
 | `SSE_TOO_MANY_CLIENTS` | 429 | Hub SSE lleno (`MAX_SSE_CLIENTS`) |
 | `PUSH_NOT_CONFIGURED` | 503 | Sin claves VAPID |
@@ -67,7 +69,19 @@ servicio. En caso de duda, el código manda: `server/src/error-codes.js`,
 
 `zValidator` de `@hono/zod-validator` en **cada** ruta (`json` / `query` /
 `param` según corresponda) con hook que lanza el `ZodError` → 422 con
-envelope. Multipart (adjuntos) valida presencia/tamaño a mano (no es JSON).
+envelope. Multipart (adjuntos) valida presencia, tamaño y **whitelist MIME**
+a mano (no es JSON). Tipos permitidos: imágenes (jpeg/png/gif/webp/svg+xml),
+PDF, texto (plain/csv), JSON, documentos Office/ODF, y archivos comprimidos
+(zip/gzip/tar). Cualquier otro MIME → 415 `UPLOAD_INVALID_MIME`.
+
+### CSRF (token por sesión)
+
+Toda mutación autenticada (POST/PUT/PATCH/DELETE en `/api/*`) requiere la
+cabecera `x-csrf-token` con el token de la sesión. El token se obtiene en
+el cuerpo de `POST /api/auth/login`, `POST /api/auth/demo` y
+`GET /api/auth/me` (campo `csrfToken`). GET/HEAD/OPTIONS quedan exentos.
+Rutas públicas sin sesión (login/demo/logout) también quedan exentas.
+Token ausente o no coincide → **403 `CSRF_INVALID`**.
 
 ### Códigos de estado en mutaciones
 

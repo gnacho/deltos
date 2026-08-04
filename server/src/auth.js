@@ -59,10 +59,11 @@ export function clearCookie({ secure }) {
 
 export function createSession(db, userId, ua) {
   const id = crypto.randomUUID()
+  const csrfToken = crypto.randomBytes(32).toString('hex')
   const now = Date.now()
-  db.prepare('INSERT INTO sessions (id, user_id, created_at, expires_at, ua) VALUES (?, ?, ?, ?, ?)')
-    .run(id, userId, now, now + SESSION_TTL_MS, ua || null)
-  return id
+  db.prepare('INSERT INTO sessions (id, user_id, created_at, expires_at, ua, csrf_token) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(id, userId, now, now + SESSION_TTL_MS, ua || null, csrfToken)
+  return { id, csrfToken }
 }
 
 export function destroySession(db, sessionId) {
@@ -89,7 +90,7 @@ export function resolveSession({ prod, demo, secret }, cookieHeader) {
     const s = db.prepare('SELECT * FROM sessions WHERE id = ?').get(id)
     if (!s || s.expires_at <= now) continue
     const user = db.prepare(`SELECT ${USER_PUBLIC_COLS} FROM users WHERE id = ?`).get(s.user_id)
-    if (user) return { db, demo: isDemo, user, sessionId: id }
+    if (user) return { db, demo: isDemo, user, sessionId: id, csrfToken: s.csrf_token }
   }
   return null
 }
@@ -174,6 +175,10 @@ export async function changePassword(db, userId, current, next) {
   const hash = await bcrypt.hash(next, 10)
   db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, userId)
   return 'ok'
+}
+
+export function destroyOtherSessions(db, userId, currentSessionId) {
+  db.prepare('DELETE FROM sessions WHERE user_id = ? AND id != ?').run(userId, currentSessionId)
 }
 
 // Bootstrap: crea el admin inicial en users desde .env (idempotente).

@@ -35,7 +35,7 @@ export async function makeInstance({ adminPass = 'admin123', seedDemoData = true
   return { app, prod, demo, dir, uploadsDir, hub }
 }
 
-// Login como admin de producción; devuelve la cookie de sesión.
+// Login como admin de producción; devuelve { cookie, csrfToken }.
 export async function loginAdmin(app, password = 'admin123') {
   const res = await app.request('/api/auth/login', {
     method: 'POST',
@@ -43,20 +43,38 @@ export async function loginAdmin(app, password = 'admin123') {
     body: JSON.stringify({ username: 'admin', password }),
   })
   if (res.status !== 200) throw new Error(`login admin falló: ${res.status}`)
-  return res.headers.get('set-cookie').split(';')[0]
+  const body = await res.json()
+  return { cookie: res.headers.get('set-cookie').split(';')[0], csrfToken: body.csrfToken ?? null }
 }
 
 export async function loginDemo(app) {
   const res = await app.request('/api/auth/demo', { method: 'POST' })
   if (res.status !== 200) throw new Error(`login demo falló: ${res.status}`)
-  return res.headers.get('set-cookie').split(';')[0]
+  const body = await res.json()
+  return { cookie: res.headers.get('set-cookie').split(';')[0], csrfToken: body.csrfToken ?? null }
 }
 
-export function jsonReq(cookie, method, url, body) {
+export async function loginUser(app, username, password) {
+  const res = await app.request('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  })
+  if (res.status !== 200) return null
+  const body = await res.json()
+  return { cookie: res.headers.get('set-cookie').split(';')[0], csrfToken: body.csrfToken ?? null }
+}
+
+// session = { cookie, csrfToken } (de loginAdmin/loginUser) o string (solo cookie).
+export function jsonReq(session, method, url, body) {
+  const isObj = typeof session === 'object' && session !== null
+  const cookie = isObj ? session.cookie : session
+  const csrfToken = isObj ? session.csrfToken : null
   return {
     method,
     headers: {
       cookie,
+      ...(csrfToken ? { 'x-csrf-token': csrfToken } : {}),
       ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
     },
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
