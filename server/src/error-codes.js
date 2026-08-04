@@ -48,6 +48,8 @@ export const ERROR_CODES = {
 
   // Ajustes
   SETTINGS_PROD_ONLY: 'SETTINGS_PROD_ONLY', // 403, ajuste solo desde sesión prod
+  SETTINGS_BACKUP_FAILED: 'SETTINGS_BACKUP_FAILED', // 500, error al hacer backup
+  ATTACHMENTS_LIMIT_EXCEEDED: 'ATTACHMENTS_LIMIT_EXCEEDED', // 409, límite adjuntos por tarea
 
   // SSE / Push
   SSE_TOO_MANY_CLIENTS: 'SSE_TOO_MANY_CLIENTS', // 429, hub lleno
@@ -94,6 +96,8 @@ export const ERROR_MESSAGES_ES = {
   [ERROR_CODES.UPLOAD_INVALID_MIME]: 'El tipo de fichero no está permitido',
 
   [ERROR_CODES.SETTINGS_PROD_ONLY]: 'Ajuste solo disponible desde la sesión de producción',
+  [ERROR_CODES.SETTINGS_BACKUP_FAILED]: 'Error al realizar la copia de seguridad',
+  [ERROR_CODES.ATTACHMENTS_LIMIT_EXCEEDED]: 'Se ha alcanzado el límite de adjuntos para esta tarea',
 
   [ERROR_CODES.SSE_TOO_MANY_CLIENTS]: 'Demasiados clientes conectados',
   [ERROR_CODES.PUSH_NOT_CONFIGURED]: 'Push no configurado en el servidor',

@@ -357,6 +357,20 @@ if [ "$DRY_RUN" -eq 0 ]; then
     fi
 fi
 
+# -------------------------------------------------------- backup timer (daily) --
+BACKUP_SCRIPT="$OPT_DIR/current/deploy/deltos-backup.sh"
+if [ -f "$BACKUP_SCRIPT" ] && [ "$DRY_RUN" -eq 0 ]; then
+    run $SUDO cp "$OPT_DIR/current/deploy/deltos-backup.service" "/etc/systemd/system/${SERVICE_NAME}-backup.service"
+    run $SUDO cp "$OPT_DIR/current/deploy/deltos-backup.timer" "/etc/systemd/system/${SERVICE_NAME}-backup.timer"
+    run $SUDO sed -i "s|/opt/deltos|$OPT_DIR|g" "/etc/systemd/system/${SERVICE_NAME}-backup.service"
+    run $SUDO sed -i "s|/var/lib/deltos|$STATE_DIR|g" "/etc/systemd/system/${SERVICE_NAME}-backup.service"
+    run $SUDO systemctl daemon-reload
+    run $SUDO systemctl enable --now "${SERVICE_NAME}-backup.timer"
+    ok "backup timer enabled (daily)"
+elif [ "$DRY_RUN" -eq 1 ]; then
+    info "[dry-run] would install backup timer ${SERVICE_NAME}-backup.timer"
+fi
+
 # ------------------------------------------------------------------ summary --
 printf '\n%s================ %s installed ================%s\n' "$C_G" "$APP_NAME" "$C_0"
 printf 'Version:  %s%s\n' "$VERSION" "$( [ "$UPGRADING" -eq 1 ] && echo ' (upgrade)' || true)"

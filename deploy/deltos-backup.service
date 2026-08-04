@@ -1,0 +1,12 @@
+[Unit]
+Description=Deltos database backup
+ConditionPathExists=/opt/deltos
+
+[Service]
+Type=oneshot
+User=deltos
+ExecStart=/opt/deltos/current/deploy/deltos-backup.sh
+WorkingDirectory=/opt/deltos
+
+[Install]
+WantedBy=multi-user.target

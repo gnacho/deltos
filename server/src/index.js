@@ -57,6 +57,7 @@ const app = createApp({
   secret,
   hub,
   uploadsDir,
+  dataDir: config.DATA_DIR,
   config: {
     cookieSecure: config.COOKIE_SECURE,
     maxSseClients: config.MAX_SSE_CLIENTS,

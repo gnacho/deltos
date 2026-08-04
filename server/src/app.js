@@ -221,7 +221,7 @@ export function createApp(ctx) {
   app.get('/api/version', (c) =>
     c.json({ version: pkg.version, build: process.env.BUILD_SHA || pkg.version })
   )
-  registerDomainRoutes(app, { hub, uploadsDir: ctx.uploadsDir, prod })
+  registerDomainRoutes(app, { hub, uploadsDir: ctx.uploadsDir, prod, config, dataDir: ctx.dataDir })
   registerPushRoutes(app)
   registerHealth(app, { prod, demo })
 

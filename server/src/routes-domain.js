@@ -108,6 +108,12 @@ const userPasswordSchema = z.object({
 })
 const userLanguageSchema = z.object({ language: z.enum(['auto', 'es', 'en']) })
 
+const serverSettingsSchema = z.object({
+  backup_enabled: z.boolean(),
+  backup_retention_days: z.number().int().min(1).max(365),
+  max_attachments_per_task: z.number().int().min(5).max(50),
+})
+
 // Query del feed de actividad: keyset por cursor opaco (sin page/offset).
 const activityQuerySchema = z.object({
   cursor: z.string().max(200).optional(),
@@ -197,7 +203,7 @@ function removeAttachmentFiles(db, uploadsDir, taskId) {
 
 // --- Rutas ------------------------------------------------------------------
 
-export function registerDomainRoutes(app, { hub, uploadsDir, prod }) {
+export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataDir }) {
   // GET /api/bootstrap — UNA llamada para pintar el tablero
   app.get('/api/bootstrap', (c) => {
     const db = c.get('db')
@@ -575,6 +581,11 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod }) {
       if (!ALLOWED_MIME_TYPES.has(mime)) {
         httpError(415, ERROR_CODES.UPLOAD_INVALID_MIME)
       }
+      const maxAttachments = parseInt(kvGet(prod, 'max_attachments_per_task', '50'), 10)
+      const currentCount = db.prepare('SELECT COUNT(*) AS n FROM attachments WHERE task_id = ?').get(task.id).n
+      if (currentCount >= maxAttachments) {
+        httpError(409, ERROR_CODES.ATTACHMENTS_LIMIT_EXCEEDED)
+      }
       // Nombre aleatorio en disco; la extensión se sanea (solo alfanumérica, máx 10)
       const ext = path.extname(file.name || '').replace(/[^a-zA-Z0-9.]/g, '').slice(0, 10)
       const stored = `${crypto.randomUUID()}${ext}`
@@ -784,5 +795,42 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod }) {
     kvSet(prod, 'demo_enabled', data.enabled ? '1' : '0')
     hub.broadcast('settings')
     return c.json({ demo_enabled: data.enabled })
+  })
+
+  // --- Ajustes del servidor (admin): backup y adjuntos ---
+  app.get('/api/settings/server', (c) => {
+    requireAdmin(c)
+    return c.json({
+      backup_enabled: kvGet(prod, 'backup_enabled', '1') === '1',
+      backup_retention_days: parseInt(kvGet(prod, 'backup_retention_days', '7'), 10),
+      max_attachments_per_task: parseInt(kvGet(prod, 'max_attachments_per_task', '50'), 10),
+      backup_last_run: kvGet(prod, 'backup_last_run'),
+      backup_path: kvGet(prod, 'backup_path'),
+    })
+  })
+
+  app.put('/api/settings/server', zValidator('json', serverSettingsSchema, validationHook), (c) => {
+    requireAdmin(c)
+    if (c.get('demo')) httpError(403, ERROR_CODES.SETTINGS_PROD_ONLY)
+    const data = c.req.valid('json')
+    kvSet(prod, 'backup_enabled', data.backup_enabled ? '1' : '0')
+    kvSet(prod, 'backup_retention_days', String(data.backup_retention_days))
+    kvSet(prod, 'max_attachments_per_task', String(data.max_attachments_per_task))
+    hub.broadcast('settings')
+    return c.json({
+      backup_enabled: data.backup_enabled,
+      backup_retention_days: data.backup_retention_days,
+      max_attachments_per_task: data.max_attachments_per_task,
+    })
+  })
+
+  // Backup manual: ejecuta el script de backup y registra resultado
+  app.post('/api/settings/backup/run', async (c) => {
+    requireAdmin(c)
+    if (c.get('demo')) httpError(403, ERROR_CODES.SETTINGS_PROD_ONLY)
+    const { execBackup } = await import('./backup.js')
+    const result = await execBackup(prod, { DATA_DIR: dataDir })
+    if (!result.ok) httpError(500, ERROR_CODES.SETTINGS_BACKUP_FAILED)
+    return c.json({ ok: true, path: result.path, size: result.size })
   })
 }

@@ -25,6 +25,9 @@ import {
   FileText,
   Heart,
   ShieldCheck,
+  Database,
+  Paperclip,
+  HardDrive,
 } from 'lucide-react';
 import { z } from 'zod';
 import { apiFetch, apiPost, apiPut, apiDelete, dispatchUnauthorized, ApiError } from '@/data/api-client';
@@ -1324,6 +1327,179 @@ function AboutCard() {
   );
 }
 
+/* ---------------- Servidor (admin): backup + adjuntos ---------------- */
+interface ServerSettings {
+  backup_enabled: boolean;
+  backup_retention_days: number;
+  max_attachments_per_task: number;
+  backup_last_run: string | null;
+  backup_path: string | null;
+}
+
+function ServerSettingsCard() {
+  const { t } = useTranslation();
+  const [settings, setSettings] = useState<ServerSettings | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [backupBusy, setBackupBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch<ServerSettings>('/api/settings/server')
+      .then((res) => { if (!cancelled) setSettings(res); })
+      .catch(() => { if (!cancelled) setError(t('settings.server.saveError')); });
+    return () => { cancelled = true; };
+  }, [t]);
+
+  const save = async (patch: Partial<ServerSettings>) => {
+    if (!settings || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const updated = await apiPut<ServerSettings>('/api/settings/server', {
+        backup_enabled: patch.backup_enabled ?? settings.backup_enabled,
+        backup_retention_days: patch.backup_retention_days ?? settings.backup_retention_days,
+        max_attachments_per_task: patch.max_attachments_per_task ?? settings.max_attachments_per_task,
+      });
+      setSettings(updated);
+    } catch (err) {
+      setError(apiErrorText(err, t('settings.server.saveError')));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const runBackup = async () => {
+    if (backupBusy) return;
+    setBackupBusy(true);
+    setSuccess(null);
+    setError(null);
+    try {
+      await apiPost('/api/settings/backup/run');
+      setSuccess(t('settings.server.backupDone'));
+      const refreshed = await apiFetch<ServerSettings>('/api/settings/server');
+      setSettings(refreshed);
+    } catch (err) {
+      setError(apiErrorText(err, t('settings.server.backupError')));
+    } finally {
+      setBackupBusy(false);
+    }
+  };
+
+  if (!settings) return null;
+
+  return (
+    <Card>
+      <Heading icon={HardDrive}>{t('settings.server.title')}</Heading>
+      <p className="text-[13px] text-faint mb-4">{t('settings.server.subtitle')}</p>
+
+      {/* Backup */}
+      <div className="rounded-xl border border-app bg-surface2/50 p-4 space-y-3">
+        <div className="flex items-start gap-3">
+          <Database className="w-4.5 h-4.5 text-brand mt-0.5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+          <div className="flex-1 min-w-0">
+            <p className="text-[14px] font-semibold">{t('settings.server.backup')}</p>
+            <p className="text-[12px] text-faint mt-0.5">{t('settings.server.backupHint')}</p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={settings.backup_enabled}
+            aria-label={t('settings.server.backupEnabled')}
+            disabled={busy}
+            onClick={() => void save({ backup_enabled: !settings.backup_enabled })}
+            className={`relative w-12 h-7 rounded-full shrink-0 transition-colors disabled:opacity-50 ${
+              settings.backup_enabled ? 'bg-brand' : 'bg-surface2 border border-app'
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-white shadow transition-transform ${
+                settings.backup_enabled ? 'translate-x-5' : ''
+              }`}
+            />
+          </button>
+        </div>
+
+        <div className="flex items-center gap-3 pl-7.5">
+          <label className="text-[13px] text-muted whitespace-nowrap">
+            {t('settings.server.backupRetention')}
+          </label>
+          <input
+            type="number"
+            min={1}
+            max={365}
+            value={settings.backup_retention_days}
+            onChange={(e) => {
+              const v = Math.max(1, Math.min(365, parseInt(e.target.value) || 1));
+              setSettings({ ...settings, backup_retention_days: v });
+            }}
+            onBlur={() => void save({ backup_retention_days: settings.backup_retention_days })}
+            className="w-16 rounded-lg bg-surface border border-app px-2 py-1 text-[13px] text-center outline-none focus:border-brand"
+          />
+          <span className="text-[12px] text-faint">{t('settings.server.backupRetentionUnit')}</span>
+        </div>
+
+        <div className="pl-7.5 flex items-center justify-between gap-3">
+          <p className="text-[12px] text-faint">
+            {settings.backup_last_run
+              ? t('settings.server.backupLastRun', { date: new Date(settings.backup_last_run).toLocaleString() })
+              : t('settings.server.backupNever')}
+          </p>
+          <button
+            type="button"
+            onClick={() => void runBackup()}
+            disabled={backupBusy}
+            className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-brand px-3 text-[12px] font-semibold text-brandfg hover:brightness-110 disabled:opacity-50"
+          >
+            {backupBusy ? t('settings.server.backupRunning') : t('settings.server.backupRunNow')}
+          </button>
+        </div>
+      </div>
+
+      {/* Adjuntos */}
+      <div className="rounded-xl border border-app bg-surface2/50 p-4 space-y-3 mt-4">
+        <div className="flex items-start gap-3">
+          <Paperclip className="w-4.5 h-4.5 text-brand mt-0.5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+          <div className="flex-1 min-w-0">
+            <p className="text-[14px] font-semibold">{t('settings.server.attachments')}</p>
+            <p className="text-[12px] text-faint mt-0.5">{t('settings.server.attachmentsHint')}</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 pl-7.5">
+          <label className="text-[13px] text-muted whitespace-nowrap">
+            {t('settings.server.attachmentsLimit')}
+          </label>
+          <input
+            type="number"
+            min={5}
+            max={50}
+            value={settings.max_attachments_per_task}
+            onChange={(e) => {
+              const v = Math.max(5, Math.min(50, parseInt(e.target.value) || 50));
+              setSettings({ ...settings, max_attachments_per_task: v });
+            }}
+            onBlur={() => void save({ max_attachments_per_task: settings.max_attachments_per_task })}
+            className="w-16 rounded-lg bg-surface border border-app px-2 py-1 text-[13px] text-center outline-none focus:border-brand"
+          />
+        </div>
+      </div>
+
+      {error && (
+        <p role="alert" className="text-[13px] font-medium text-rose-600 dark:text-rose-400 mt-3">
+          {error}
+        </p>
+      )}
+      {success && (
+        <p role="status" className="text-[13px] font-medium text-ok mt-3">
+          {success}
+        </p>
+      )}
+    </Card>
+  );
+}
+
 /* ---------------- Página ---------------- */
 export default function SettingsPage() {
   const { t } = useTranslation();
@@ -1363,8 +1539,9 @@ export default function SettingsPage() {
             <div className="lg:col-span-7">
               <UsersCard />
             </div>
-            <div className="lg:col-span-5">
+            <div className="lg:col-span-5 space-y-4 md:space-y-5">
               <DemoCard />
+              <ServerSettingsCard />
             </div>
           </>
         )}

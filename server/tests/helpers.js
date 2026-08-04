@@ -25,6 +25,7 @@ export async function makeInstance({ adminPass = 'admin123', seedDemoData = true
     secret,
     hub,
     uploadsDir,
+    dataDir: dir,
     config: {
       cookieSecure: false,
       maxSseClients: 20,
