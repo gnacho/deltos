@@ -142,6 +142,18 @@ export async function apiFetch<T>(path: string, init?: ApiOptions): Promise<T> {
     handleUnauthorized();
   }
 
+  // CSRF_INVALID: la sesión sigue siendo válida pero el token de seguridad no
+  // coincide (sesión rotada en otra pestaña, token stale, etc.). Volvemos a
+  // login en lugar de dejar al usuario atascado con el mensaje de recargar.
+  if (res.status === 403) {
+    const body = (await res.json().catch(() => null)) as unknown;
+    const code = (body as ApiErrorEnvelope | null)?.error?.code;
+    if (code === 'CSRF_INVALID' && !noAuthEvent) {
+      dispatchUnauthorized();
+    }
+    throw toApiError(body, 403);
+  }
+
   const contentType = res.headers.get('content-type') ?? '';
   if (!contentType.includes('application/json')) {
     if (!res.ok) throw new ApiError(`Error HTTP ${res.status}`, res.status);
