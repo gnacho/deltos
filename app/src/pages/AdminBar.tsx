@@ -186,23 +186,23 @@ function DemoToggle() {
   );
 }
 
-/* ---------- 3. Respaldos + adjuntos ---------- */
-function ServerControls() {
+/* ---------- 3. Panel de respaldos ---------- */
+function BackupsPanel({ expanded }: { expanded: boolean }) {
   const { t, i18n } = useTranslation();
   const [settings, setSettings] = useState<ServerSettings | null>(null);
   const [busy, setBusy] = useState(false);
   const [backupBusy, setBackupBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [showBackups, setShowBackups] = useState(false);
 
   useEffect(() => {
+    if (!expanded) return;
     let cancelled = false;
     apiFetch<ServerSettings>('/api/settings/server')
       .then((res) => { if (!cancelled) setSettings(res); })
       .catch(() => { if (!cancelled) setError(t('settings.server.saveError')); });
     return () => { cancelled = true; };
-  }, [t]);
+  }, [expanded, t]);
 
   const save = async (patch: Partial<ServerSettings>) => {
     if (!settings || busy) return;
@@ -243,110 +243,63 @@ function ServerControls() {
     window.open('/api/export', '_blank');
   };
 
-  if (!settings) return null;
+  if (!expanded || !settings) return null;
 
   const locale = i18n.language === 'auto' ? navigator.language : i18n.language;
 
   return (
-    <>
-      <div className="flex flex-wrap items-center gap-2 min-w-0">
-        {/* Botón desplegable de respaldos */}
+    <div className="w-full mt-4 pt-4 border-t border-app">
+      <div className="flex flex-wrap items-start gap-4">
+        <CheckToggle
+          checked={settings.backup_enabled}
+          onChange={() => void save({ backup_enabled: !settings.backup_enabled })}
+          label={t('settings.admin.backup.title')}
+          icon={Database}
+          disabled={busy}
+          size="sm"
+          variant="switch"
+        />
+
         <button
           type="button"
-          aria-label={t('settings.admin.backup.title')}
-          aria-expanded={showBackups}
-          onClick={() => setShowBackups((v) => !v)}
-          className={[
-            'inline-flex h-9 items-center gap-1.5 rounded-xl border px-3 text-[13px] font-medium transition-colors shrink-0',
-            showBackups
-              ? 'border-brand bg-brand/10 text-brand'
-              : 'border-app bg-surface2 text-muted hover:bg-surface hover:text-text',
-          ].join(' ')}
+          onClick={() => void runBackup()}
+          disabled={backupBusy}
+          className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-brand px-3 text-[12px] font-semibold text-brandfg hover:brightness-110 disabled:opacity-50"
         >
-          <Database className="w-4 h-4 shrink-0" aria-hidden="true" />
-          <span className="hidden sm:inline">{t('settings.admin.backup.title')}</span>
-          <ChevronDown
-            className={`w-3.5 h-3.5 shrink-0 transition-transform ${showBackups ? 'rotate-180' : ''}`}
-            aria-hidden="true"
-          />
+          <HardDrive className="w-3.5 h-3.5" aria-hidden="true" />
+          {backupBusy ? t('settings.server.backupRunning') : t('settings.admin.backup.backupNow')}
         </button>
+
+        <button
+          type="button"
+          onClick={doExport}
+          className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-app bg-surface2 px-3 text-[12px] font-medium text-muted transition-colors hover:bg-surface hover:text-text"
+        >
+          <Download className="w-3.5 h-3.5" aria-hidden="true" />
+          {t('settings.admin.backup.export')}
+        </button>
+
+        <div className="flex flex-col gap-0.5 text-[11px] text-faint">
+          <span>
+            {t('settings.admin.backup.lastRun', { date: fmtDate(settings.backup_last_run, locale) })}
+          </span>
+          <span>
+            {t('settings.admin.backup.nextRun', {
+              when: settings.backup_timer_active
+                ? t('settings.admin.backup.tomorrow')
+                : t('settings.admin.backup.notScheduled'),
+            })}
+          </span>
+        </div>
       </div>
 
-      {/* Panel de respaldos */}
-      {showBackups && (
-        <div className="w-full mt-4 pt-4 border-t border-app">
-          <div className="flex flex-wrap items-start gap-4">
-            <CheckToggle
-              checked={settings.backup_enabled}
-              onChange={() => void save({ backup_enabled: !settings.backup_enabled })}
-              label={t('settings.admin.backup.title')}
-              icon={Database}
-              disabled={busy}
-              size="sm"
-              variant="switch"
-            />
-
-            <div className="flex items-center gap-2">
-              <label htmlFor="admin-retention" className="sr-only">{t('settings.server.backupRetention')}</label>
-              <input
-                id="admin-retention"
-                type="number"
-                inputMode="numeric"
-                min={1}
-                max={365}
-                value={settings.backup_retention_days}
-                onChange={(e) => {
-                  const v = Math.max(1, Math.min(365, parseInt(e.target.value) || 1));
-                  setSettings({ ...settings, backup_retention_days: v });
-                }}
-                onBlur={() => void save({ backup_retention_days: settings.backup_retention_days })}
-                className="w-14 rounded-lg bg-surface border border-app px-2 py-1.5 text-[13px] text-center outline-none focus:border-brand"
-              />
-              <span className="text-[12px] text-faint">{t('settings.admin.backup.retentionUnit')}</span>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => void runBackup()}
-              disabled={backupBusy}
-              className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-brand px-3 text-[12px] font-semibold text-brandfg hover:brightness-110 disabled:opacity-50"
-            >
-              <HardDrive className="w-3.5 h-3.5" aria-hidden="true" />
-              {backupBusy ? t('settings.server.backupRunning') : t('settings.admin.backup.backupNow')}
-            </button>
-
-            <button
-              type="button"
-              onClick={doExport}
-              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-app bg-surface2 px-3 text-[12px] font-medium text-muted transition-colors hover:bg-surface hover:text-text"
-            >
-              <Download className="w-3.5 h-3.5" aria-hidden="true" />
-              {t('settings.admin.backup.export')}
-            </button>
-
-            <div className="flex flex-col gap-0.5 text-[11px] text-faint">
-              <span>
-                {t('settings.admin.backup.lastRun', { date: fmtDate(settings.backup_last_run, locale) })}
-              </span>
-              <span>
-                {t('settings.admin.backup.nextRun', {
-                  when: settings.backup_timer_active
-                    ? t('settings.admin.backup.tomorrow')
-                    : t('settings.admin.backup.notScheduled'),
-                })}
-              </span>
-            </div>
-          </div>
-
-          {(error || success) && (
-            <div className="mt-3">
-              {error && <p role="alert" className="text-[13px] font-medium text-rose-600 dark:text-rose-400">{error}</p>}
-              {success && <p role="status" className="text-[13px] font-medium text-ok">{success}</p>}
-            </div>
-          )}
+      {(error || success) && (
+        <div className="mt-3">
+          {error && <p role="alert" className="text-[13px] font-medium text-rose-600 dark:text-rose-400">{error}</p>}
+          {success && <p role="status" className="text-[13px] font-medium text-ok">{success}</p>}
         </div>
       )}
-    </>
+    </div>
   );
 }
 
@@ -615,15 +568,19 @@ export default function AdminBar() {
   const { t } = useTranslation();
   const { user } = useSession();
   const upd = useAppUpdate(pkg.version, REPO_URL);
+  const [showBackups, setShowBackups] = useState(false);
   const [showUsers, setShowUsers] = useState(false);
 
   if (user.role !== 'admin') return null;
 
+  const activeBtnCls = 'border-brand bg-brand/10 text-brand';
+  const inactiveBtnCls = 'border-app bg-surface2 text-muted hover:bg-surface hover:text-text';
+
   return (
     <Card>
       {/* Fila horizontal */}
-      <div className="flex flex-wrap items-center gap-3 sm:gap-4 min-w-0">
-        <div className="flex items-center gap-2 shrink-0">
+      <div className="flex flex-wrap items-start gap-3 sm:gap-4 min-w-0">
+        <div className="flex items-center gap-2 shrink-0 h-9">
           <Shield className="w-5 h-5 text-brand" aria-hidden="true" />
           <h2 className="font-display font-semibold text-[15px]">{t('settings.admin.title')}</h2>
         </div>
@@ -632,21 +589,46 @@ export default function AdminBar() {
 
         <UpdateCheck upd={upd} />
         <DemoToggle />
-        <ServerControls />
+
+        <button
+          type="button"
+          aria-label={t('settings.admin.backup.button')}
+          aria-expanded={showBackups}
+          onClick={() => setShowBackups((v) => !v)}
+          className={[
+            'inline-flex h-9 items-center gap-1.5 rounded-xl border px-3 text-[13px] font-medium transition-colors shrink-0',
+            showBackups ? activeBtnCls : inactiveBtnCls,
+          ].join(' ')}
+        >
+          <Database className="w-4 h-4 shrink-0" aria-hidden="true" />
+          <span className="hidden sm:inline">{t('settings.admin.backup.button')}</span>
+          <ChevronDown
+            className={`w-3.5 h-3.5 shrink-0 transition-transform ${showBackups ? 'rotate-180' : ''}`}
+            aria-hidden="true"
+          />
+        </button>
 
         <button
           type="button"
           aria-label={t('settings.users.title')}
           aria-expanded={showUsers}
           onClick={() => setShowUsers((v) => !v)}
-          className="ml-auto inline-flex h-9 items-center gap-1.5 rounded-lg border border-app bg-surface2 px-3 text-[13px] font-medium text-muted transition-colors hover:bg-surface hover:text-text"
+          className={[
+            'ml-auto inline-flex h-9 items-center gap-1.5 rounded-xl border px-3 text-[13px] font-medium transition-colors shrink-0',
+            showUsers ? activeBtnCls : inactiveBtnCls,
+          ].join(' ')}
         >
           <Users className="w-4 h-4" aria-hidden="true" />
           <span className="hidden sm:inline">{t('settings.users.title')}</span>
+          <ChevronDown
+            className={`w-3.5 h-3.5 shrink-0 transition-transform ${showUsers ? 'rotate-180' : ''}`}
+            aria-hidden="true"
+          />
         </button>
       </div>
 
-      {/* Panel de usuarios desplegado */}
+      {/* Paneles desplegados */}
+      <BackupsPanel expanded={showBackups} />
       {showUsers && (
         <div className="mt-4 border-t border-app pt-4">
           <UsersPanel />

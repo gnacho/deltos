@@ -905,7 +905,7 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
     requireAdmin(c)
     return c.json({
       backup_enabled: kvGet(prod, 'backup_enabled', '1') === '1',
-      backup_retention_days: parseInt(kvGet(prod, 'backup_retention_days', '7'), 10),
+      backup_retention_days: parseInt(kvGet(prod, 'backup_retention_days', '3'), 10),
       max_attachments_per_task: parseInt(kvGet(prod, 'max_attachments_per_task', '50'), 10),
       backup_last_run: kvGet(prod, 'backup_last_run'),
       backup_path: kvGet(prod, 'backup_path'),

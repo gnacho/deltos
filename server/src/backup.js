@@ -53,7 +53,7 @@ export async function execBackup(prodDb, config) {
 }
 
 function pruneBackups(prodDb, backupsDir) {
-  const retentionDays = parseInt(kvGet(prodDb, 'backup_retention_days', '7'), 10)
+  const retentionDays = parseInt(kvGet(prodDb, 'backup_retention_days', '3'), 10)
   const cutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000
   const files = fs.readdirSync(backupsDir).filter((f) => f.startsWith('deltos-') && f.endsWith('.db'))
   let pruned = 0

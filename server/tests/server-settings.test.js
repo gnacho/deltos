@@ -12,7 +12,7 @@ describe('ajustes del servidor', () => {
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.backup_enabled).toBe(true)
-    expect(body.backup_retention_days).toBe(7)
+    expect(body.backup_retention_days).toBe(3)
     expect(body.max_attachments_per_task).toBe(50)
     expect(body.backup_last_run).toBeNull()
     expect(typeof body.backup_timer_active).toBe('boolean')

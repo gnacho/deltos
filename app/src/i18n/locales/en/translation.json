@@ -313,7 +313,8 @@
       "title": "Administration",
       "backup": {
         "timerInfo": "Scheduled at {{file}}",
-        "title": "Auto backups",
+        "button": "Backups",
+        "title": "Automatic backups",
         "retentionUnit": "days",
         "backupNow": "Back up now",
         "export": "Export",

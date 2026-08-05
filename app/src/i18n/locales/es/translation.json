@@ -313,7 +313,8 @@
       "title": "Administración",
       "backup": {
         "timerInfo": "Programado en {{file}}",
-        "title": "Respaldos auto",
+        "button": "Respaldos",
+        "title": "Respaldos automáticos",
         "retentionUnit": "días",
         "backupNow": "Respaldar ahora",
         "export": "Exportar",
