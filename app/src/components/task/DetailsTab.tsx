@@ -169,7 +169,7 @@ export function DetailsTab({ detail, onClose }: { detail: TaskDetail; onClose: (
       </section>
 
       <div className="grid grid-cols-2 gap-x-4 gap-y-5">
-        <div className="col-span-2">
+        <div>
           <FieldLabel>{t('task.project')}</FieldLabel>
           <div className="relative">
             <button
@@ -230,44 +230,6 @@ export function DetailsTab({ detail, onClose }: { detail: TaskDetail; onClose: (
         </div>
 
         <div>
-          <FieldLabel>{t('task.assignee')}</FieldLabel>
-          <div className="flex flex-wrap gap-1.5" role="group" aria-label={t('task.assignee')}>
-            {users.map((u) => {
-              const active = task.assignee_id === u.id;
-              return (
-                <button
-                  key={u.id}
-                  type="button"
-                  aria-pressed={active}
-                  onClick={() => void patch({ assignee_id: active ? null : u.id })}
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs ${
-                    active
-                      ? `${colorOf(u.color).chip} ring-1 ring-current font-medium`
-                      : 'bg-surface border border-app text-muted hover:bg-surface2'
-                  }`}
-                >
-                  <Avatar name={u.username} color={u.color} />
-                  {u.username}
-                </button>
-              );
-            })}
-            <button
-              type="button"
-              aria-pressed={task.assignee_id === null}
-              onClick={() => void patch({ assignee_id: null })}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs ${
-                task.assignee_id === null
-                  ? 'bg-slate-200/70 text-slate-600 dark:bg-slate-500/20 dark:text-slate-300 ring-1 ring-current font-medium'
-                  : 'bg-surface border border-app text-muted hover:bg-surface2'
-              }`}
-            >
-              <User className="w-3 h-3" aria-hidden="true" />
-              {t('filters.unassigned')}
-            </button>
-          </div>
-        </div>
-
-        <div>
           <FieldLabel>{t('task.priority')}</FieldLabel>
           <div className="flex flex-wrap gap-1.5" role="group" aria-label={t('task.priority')}>
             {PRIORITIES.map((pr) => {
@@ -306,6 +268,44 @@ export function DetailsTab({ detail, onClose }: { detail: TaskDetail; onClose: (
         </div>
 
         <div>
+          <FieldLabel>{t('task.assignee')}</FieldLabel>
+          <div className="flex flex-wrap gap-1.5" role="group" aria-label={t('task.assignee')}>
+            {users.map((u) => {
+              const active = task.assignee_id === u.id;
+              return (
+                <button
+                  key={u.id}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => void patch({ assignee_id: active ? null : u.id })}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs ${
+                    active
+                      ? `${colorOf(u.color).chip} ring-1 ring-current font-medium`
+                      : 'bg-surface border border-app text-muted hover:bg-surface2'
+                  }`}
+                >
+                  <Avatar name={u.username} color={u.color} />
+                  {u.username}
+                </button>
+              );
+            })}
+            <button
+              type="button"
+              aria-pressed={task.assignee_id === null}
+              onClick={() => void patch({ assignee_id: null })}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs ${
+                task.assignee_id === null
+                  ? 'bg-slate-200/70 text-slate-600 dark:bg-slate-500/20 dark:text-slate-300 ring-1 ring-current font-medium'
+                  : 'bg-surface border border-app text-muted hover:bg-surface2'
+              }`}
+            >
+              <User className="w-3 h-3" aria-hidden="true" />
+              {t('filters.unassigned')}
+            </button>
+          </div>
+        </div>
+
+        <div>
           <FieldLabel>{t('task.dueDate')}</FieldLabel>
           <input
             type="date"
@@ -316,8 +316,13 @@ export function DetailsTab({ detail, onClose }: { detail: TaskDetail; onClose: (
         </div>
 
         <div className="col-span-2">
-          <FieldLabel>{t('task.labels')}</FieldLabel>
-          {labels.length > 0 ? (
+          <div className="flex items-center justify-between">
+            <FieldLabel>{t('task.labels')}</FieldLabel>
+            {labels.length === 0 && (
+              <span className="text-[14px] text-faint">{t('task.noLabels')}</span>
+            )}
+          </div>
+          {labels.length > 0 && (
             <div className="flex flex-wrap gap-1.5" role="group" aria-label={t('task.labels')}>
               {labels.map((l) => {
                 const active = taskLabelIds.has(l.id);
@@ -343,8 +348,6 @@ export function DetailsTab({ detail, onClose }: { detail: TaskDetail; onClose: (
                 );
               })}
             </div>
-          ) : (
-            <span className="text-[14px] text-faint">{t('task.noLabels')}</span>
           )}
         </div>
       </div>
