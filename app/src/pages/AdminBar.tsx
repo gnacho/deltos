@@ -7,7 +7,6 @@ import {
   ExternalLink,
   HardDrive,
   KeyRound,
-  Paperclip,
   RefreshCw,
   Shield,
   Sparkles,
@@ -180,6 +179,7 @@ function DemoToggle() {
         label={t('settings.demoMode')}
         icon={Sparkles}
         disabled={busy}
+        variant="switch"
       />
       {error && <span role="alert" className="text-[12px] text-rose-600 dark:text-rose-400">{error}</span>}
     </div>
@@ -270,27 +270,6 @@ function ServerControls() {
             aria-hidden="true"
           />
         </button>
-
-        {/* Adjuntos (inline) */}
-        <div className="flex items-center gap-2 rounded-xl border border-app bg-surface2/50 px-3 py-2 shrink-0">
-          <Paperclip className="w-4 h-4 text-brand shrink-0" aria-hidden="true" />
-          <span className="hidden md:inline text-[13px] font-medium">{t('settings.server.attachments')}</span>
-          <label className="sr-only" htmlFor="admin-attachments">{t('settings.server.attachmentsLimit')}</label>
-          <input
-            id="admin-attachments"
-            type="number"
-            inputMode="numeric"
-            min={5}
-            max={50}
-            value={settings.max_attachments_per_task}
-            onChange={(e) => {
-              const v = Math.max(5, Math.min(50, parseInt(e.target.value) || 5));
-              setSettings({ ...settings, max_attachments_per_task: v });
-            }}
-            onBlur={() => void save({ max_attachments_per_task: settings.max_attachments_per_task })}
-            className="w-12 rounded-lg bg-surface border border-app px-1 py-1 text-[13px] text-center outline-none focus:border-brand"
-          />
-        </div>
       </div>
 
       {/* Panel de respaldos */}
@@ -304,6 +283,7 @@ function ServerControls() {
               icon={Database}
               disabled={busy}
               size="sm"
+              variant="switch"
             />
 
             <div className="flex items-center gap-2">

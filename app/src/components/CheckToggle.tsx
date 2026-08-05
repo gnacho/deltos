@@ -9,6 +9,7 @@ export interface CheckToggleProps {
   disabled?: boolean;
   className?: string;
   size?: 'sm' | 'md';
+  variant?: 'check' | 'switch';
 }
 
 export function CheckToggle({
@@ -19,8 +20,48 @@ export function CheckToggle({
   disabled,
   className,
   size = 'md',
+  variant = 'check',
 }: CheckToggleProps) {
   const height = size === 'sm' ? 'h-8' : 'h-10';
+
+  if (variant === 'switch') {
+    return (
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={label}
+        disabled={disabled}
+        onClick={() => onChange(!checked)}
+        className={[
+          'inline-flex items-center gap-2 rounded-xl border px-3 transition-colors shrink-0',
+          height,
+          checked
+            ? 'border-brand bg-brand/10 text-brand'
+            : 'border-app bg-surface2 text-muted hover:bg-surface hover:text-text',
+          disabled ? 'opacity-50 cursor-not-allowed' : '',
+          className ?? '',
+        ].join(' ')}
+      >
+        {Icon && <Icon className="w-4 h-4 shrink-0" aria-hidden="true" />}
+        <span className="text-[13px] font-medium">{label}</span>
+        <span
+          className={[
+            'relative ml-1 w-11 h-6 rounded-full shrink-0 transition-colors',
+            checked ? 'bg-brand' : 'bg-surface border border-app',
+          ].join(' ')}
+        >
+          <span
+            className={[
+              'absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform',
+              checked ? 'translate-x-[22px]' : 'translate-x-0.5',
+            ].join(' ')}
+          />
+        </span>
+      </button>
+    );
+  }
+
   return (
     <button
       type="button"
