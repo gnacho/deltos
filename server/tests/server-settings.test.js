@@ -15,6 +15,7 @@ describe('ajustes del servidor', () => {
     expect(body.backup_retention_days).toBe(7)
     expect(body.max_attachments_per_task).toBe(50)
     expect(body.backup_last_run).toBeNull()
+    expect(typeof body.backup_timer_active).toBe('boolean')
   })
 
   it('GET /api/settings/server → 403 para usuario no-admin', async () => {

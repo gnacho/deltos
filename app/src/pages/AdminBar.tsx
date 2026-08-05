@@ -1,16 +1,16 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  Check,
+  ChevronDown,
   Database,
   Download,
   ExternalLink,
   HardDrive,
-  Info,
   KeyRound,
   Paperclip,
   RefreshCw,
   Shield,
+  Sparkles,
   Trash2,
   UserPlus,
   Users,
@@ -19,11 +19,11 @@ import { useSession } from '@/auth/session-context';
 import { apiFetch, apiPost, apiPut, apiDelete } from '@/data/api-client';
 import { apiErrorText } from '@/lib/errors';
 import { Avatar } from '@/components/Avatar';
+import { CheckToggle } from '@/components/CheckToggle';
 import { useAppUpdate } from '@/hooks/useAppUpdate';
 import pkg from '../../package.json';
 
 const REPO_URL = 'https://github.com/gnacho/deltos';
-const BACKUP_TIMER_PATH = '/etc/systemd/system/deltos-backup.timer';
 
 interface AdminUser {
   id: string;
@@ -39,6 +39,7 @@ interface ServerSettings {
   max_attachments_per_task: number;
   backup_last_run: string | null;
   backup_path: string | null;
+  backup_timer_active: boolean;
 }
 
 function Card({ children, className }: { children: ReactNode; className?: string }) {
@@ -47,6 +48,22 @@ function Card({ children, className }: { children: ReactNode; className?: string
       {children}
     </section>
   );
+}
+
+function fmtDate(iso: string | null, locale: string) {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    return new Intl.DateTimeFormat(locale, {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(d);
+  } catch {
+    return iso;
+  }
 }
 
 /* ---------- 1. Comprobar actualizaciones (1 vez por semana) ---------- */
@@ -67,7 +84,7 @@ function UpdateCheck({ upd }: { upd: ReturnType<typeof useAppUpdate> }) {
   if (!upd.supported) return null;
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-col gap-1">
       {upd.swWaiting ? (
         <button
           type="button"
@@ -96,29 +113,23 @@ function UpdateCheck({ upd }: { upd: ReturnType<typeof useAppUpdate> }) {
         </button>
       )}
       {upd.state === 'up-to-date' && (
-        <span role="status" className="inline-flex items-center gap-1 text-[12px] font-medium text-ok">
-          <Check className="w-3.5 h-3.5" aria-hidden="true" />
-          {t('settings.about.upToDate', { version: pkg.version })}
+        <span className="text-[10px] font-medium text-ok">
+          {t('settings.admin.update.upToDateShort')}
         </span>
       )}
       {upd.state === 'available' && upd.latest && (
-        <span className="flex items-center gap-2">
-          <span role="status" className="text-[12px] font-medium text-ok">
-            {t('settings.about.updateAvailable', { version: upd.latest.version })}
-          </span>
-          <a
-            href={upd.latest.url}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex h-8 items-center gap-1 rounded-md border border-ok/40 bg-ok/10 px-2 text-[12px] font-medium text-ok transition-colors hover:border-ok"
-          >
-            <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" />
-            <span className="hidden sm:inline">{t('settings.about.viewRelease')}</span>
-          </a>
-        </span>
+        <a
+          href={upd.latest.url}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1 text-[10px] font-medium text-ok"
+        >
+          <ExternalLink className="w-3 h-3" aria-hidden="true" />
+          {t('settings.about.updateAvailable', { version: upd.latest.version })}
+        </a>
       )}
       {upd.state === 'error' && (
-        <span role="alert" className="text-[12px] font-medium text-rose-600 dark:text-rose-400">
+        <span role="alert" className="text-[10px] font-medium text-rose-600 dark:text-rose-400">
           {t('settings.about.updateError')}
         </span>
       )}
@@ -126,7 +137,7 @@ function UpdateCheck({ upd }: { upd: ReturnType<typeof useAppUpdate> }) {
   );
 }
 
-/* ---------- 2. Modo demo (solo muestra/oculta botón; no toca datos) ---------- */
+/* ---------- 2. Modo demo (check estilo Helios) ---------- */
 function DemoToggle() {
   const { t } = useTranslation();
   const [enabled, setEnabled] = useState<boolean | null>(null);
@@ -155,26 +166,21 @@ function DemoToggle() {
     }
   };
 
+  if (enabled === null) {
+    return (
+      <div className="h-9 w-20 animate-pulse rounded-xl border border-app bg-surface2" aria-busy="true" />
+    );
+  }
+
   return (
     <div className="flex items-center gap-2">
-      <button
-        type="button"
-        role="switch"
-        aria-checked={enabled === true}
-        aria-label={t('settings.demoMode')}
-        disabled={enabled === null || busy}
-        onClick={() => void toggle()}
-        className={`relative w-12 h-7 rounded-full shrink-0 transition-colors disabled:opacity-50 ${
-          enabled ? 'bg-brand' : 'bg-surface2 border border-app'
-        }`}
-      >
-        <span
-          className={`absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-white shadow transition-transform ${
-            enabled ? 'translate-x-5' : ''
-          }`}
-        />
-      </button>
-      <span className="hidden sm:inline text-[13px] font-medium text-text">{t('settings.demoMode')}</span>
+      <CheckToggle
+        checked={enabled}
+        onChange={() => void toggle()}
+        label={t('settings.demoMode')}
+        icon={Sparkles}
+        disabled={busy}
+      />
       {error && <span role="alert" className="text-[12px] text-rose-600 dark:text-rose-400">{error}</span>}
     </div>
   );
@@ -182,12 +188,13 @@ function DemoToggle() {
 
 /* ---------- 3. Respaldos + adjuntos ---------- */
 function ServerControls() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [settings, setSettings] = useState<ServerSettings | null>(null);
   const [busy, setBusy] = useState(false);
   const [backupBusy, setBackupBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [showBackups, setShowBackups] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -232,97 +239,134 @@ function ServerControls() {
     }
   };
 
+  const doExport = () => {
+    window.open('/api/export', '_blank');
+  };
+
   if (!settings) return null;
 
+  const locale = i18n.language === 'auto' ? navigator.language : i18n.language;
+
   return (
-    <div className="flex flex-wrap items-center gap-3 min-w-0">
-      {/* Respaldos */}
-      <div className="flex items-center gap-2 rounded-xl border border-app bg-surface2/50 px-3 py-2">
-        <Database className="w-4 h-4 text-brand shrink-0" aria-hidden="true" />
-        <span className="hidden md:inline text-[13px] font-medium">{t('settings.server.backup')}</span>
+    <>
+      <div className="flex flex-wrap items-center gap-2 min-w-0">
+        {/* Botón desplegable de respaldos */}
         <button
           type="button"
-          role="switch"
-          aria-checked={settings.backup_enabled}
-          aria-label={t('settings.server.backupEnabled')}
-          disabled={busy}
-          onClick={() => void save({ backup_enabled: !settings.backup_enabled })}
-          className={`relative w-11 h-6 rounded-full shrink-0 transition-colors disabled:opacity-50 ${
-            settings.backup_enabled ? 'bg-brand' : 'bg-surface border border-app'
-          }`}
+          aria-label={t('settings.admin.backup.title')}
+          aria-expanded={showBackups}
+          onClick={() => setShowBackups((v) => !v)}
+          className={[
+            'inline-flex h-9 items-center gap-1.5 rounded-xl border px-3 text-[13px] font-medium transition-colors shrink-0',
+            showBackups
+              ? 'border-brand bg-brand/10 text-brand'
+              : 'border-app bg-surface2 text-muted hover:bg-surface hover:text-text',
+          ].join(' ')}
         >
-          <span
-            className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
-              settings.backup_enabled ? 'translate-x-5' : ''
-            }`}
+          <Database className="w-4 h-4 shrink-0" aria-hidden="true" />
+          <span className="hidden sm:inline">{t('settings.admin.backup.title')}</span>
+          <ChevronDown
+            className={`w-3.5 h-3.5 shrink-0 transition-transform ${showBackups ? 'rotate-180' : ''}`}
+            aria-hidden="true"
           />
         </button>
-        {settings.backup_enabled && (
-          <>
-            <label className="sr-only" htmlFor="admin-retention">{t('settings.server.backupRetention')}</label>
-            <input
-              id="admin-retention"
-              type="number"
-              min={1}
-              max={365}
-              value={settings.backup_retention_days}
-              onChange={(e) => {
-                const v = Math.max(1, Math.min(365, parseInt(e.target.value) || 1));
-                setSettings({ ...settings, backup_retention_days: v });
-              }}
-              onBlur={() => void save({ backup_retention_days: settings.backup_retention_days })}
-              className="w-14 rounded-lg bg-surface border border-app px-1 py-1 text-[13px] text-center outline-none focus:border-brand"
+
+        {/* Adjuntos (inline) */}
+        <div className="flex items-center gap-2 rounded-xl border border-app bg-surface2/50 px-3 py-2 shrink-0">
+          <Paperclip className="w-4 h-4 text-brand shrink-0" aria-hidden="true" />
+          <span className="hidden md:inline text-[13px] font-medium">{t('settings.server.attachments')}</span>
+          <label className="sr-only" htmlFor="admin-attachments">{t('settings.server.attachmentsLimit')}</label>
+          <input
+            id="admin-attachments"
+            type="number"
+            inputMode="numeric"
+            min={5}
+            max={50}
+            value={settings.max_attachments_per_task}
+            onChange={(e) => {
+              const v = Math.max(5, Math.min(50, parseInt(e.target.value) || 5));
+              setSettings({ ...settings, max_attachments_per_task: v });
+            }}
+            onBlur={() => void save({ max_attachments_per_task: settings.max_attachments_per_task })}
+            className="w-12 rounded-lg bg-surface border border-app px-1 py-1 text-[13px] text-center outline-none focus:border-brand"
+          />
+        </div>
+      </div>
+
+      {/* Panel de respaldos */}
+      {showBackups && (
+        <div className="w-full mt-4 pt-4 border-t border-app">
+          <div className="flex flex-wrap items-start gap-4">
+            <CheckToggle
+              checked={settings.backup_enabled}
+              onChange={() => void save({ backup_enabled: !settings.backup_enabled })}
+              label={t('settings.admin.backup.title')}
+              icon={Database}
+              disabled={busy}
+              size="sm"
             />
-            <span className="text-[12px] text-faint">{t('settings.server.backupRetentionUnit')}</span>
+
+            <div className="flex items-center gap-2">
+              <label htmlFor="admin-retention" className="sr-only">{t('settings.server.backupRetention')}</label>
+              <input
+                id="admin-retention"
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={365}
+                value={settings.backup_retention_days}
+                onChange={(e) => {
+                  const v = Math.max(1, Math.min(365, parseInt(e.target.value) || 1));
+                  setSettings({ ...settings, backup_retention_days: v });
+                }}
+                onBlur={() => void save({ backup_retention_days: settings.backup_retention_days })}
+                className="w-14 rounded-lg bg-surface border border-app px-2 py-1.5 text-[13px] text-center outline-none focus:border-brand"
+              />
+              <span className="text-[12px] text-faint">{t('settings.admin.backup.retentionUnit')}</span>
+            </div>
+
             <button
               type="button"
               onClick={() => void runBackup()}
               disabled={backupBusy}
-              title={backupBusy ? t('settings.server.backupRunning') : t('settings.server.backupRunNow')}
-              className="inline-flex h-7 items-center gap-1 rounded-md bg-brand px-2 text-[12px] font-semibold text-brandfg hover:brightness-110 disabled:opacity-50"
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-brand px-3 text-[12px] font-semibold text-brandfg hover:brightness-110 disabled:opacity-50"
             >
               <HardDrive className="w-3.5 h-3.5" aria-hidden="true" />
-              <span className="hidden sm:inline">{backupBusy ? t('settings.server.backupRunning') : t('settings.server.backupRunNow')}</span>
+              {backupBusy ? t('settings.server.backupRunning') : t('settings.admin.backup.backupNow')}
             </button>
-          </>
-        )}
-      </div>
 
-      <div
-        className="group relative flex items-center gap-1 text-[12px] text-faint"
-        title={t('settings.admin.backup.timerInfo', { file: BACKUP_TIMER_PATH })}
-      >
-        <Info className="w-3.5 h-3.5" aria-hidden="true" />
-        <span className="hidden lg:inline">{t('settings.admin.backup.timerInfo', { file: BACKUP_TIMER_PATH })}</span>
-      </div>
+            <button
+              type="button"
+              onClick={doExport}
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-app bg-surface2 px-3 text-[12px] font-medium text-muted transition-colors hover:bg-surface hover:text-text"
+            >
+              <Download className="w-3.5 h-3.5" aria-hidden="true" />
+              {t('settings.admin.backup.export')}
+            </button>
 
-      {/* Adjuntos */}
-      <div className="flex items-center gap-2 rounded-xl border border-app bg-surface2/50 px-3 py-2">
-        <Paperclip className="w-4 h-4 text-brand shrink-0" aria-hidden="true" />
-        <span className="hidden md:inline text-[13px] font-medium">{t('settings.server.attachments')}</span>
-        <label className="sr-only" htmlFor="admin-attachments">{t('settings.server.attachmentsLimit')}</label>
-        <input
-          id="admin-attachments"
-          type="number"
-          min={5}
-          max={50}
-          value={settings.max_attachments_per_task}
-          onChange={(e) => {
-            const v = Math.max(5, Math.min(50, parseInt(e.target.value) || 5));
-            setSettings({ ...settings, max_attachments_per_task: v });
-          }}
-          onBlur={() => void save({ max_attachments_per_task: settings.max_attachments_per_task })}
-          className="w-14 rounded-lg bg-surface border border-app px-1 py-1 text-[13px] text-center outline-none focus:border-brand"
-        />
-      </div>
+            <div className="flex flex-col gap-0.5 text-[11px] text-faint">
+              <span>
+                {t('settings.admin.backup.lastRun', { date: fmtDate(settings.backup_last_run, locale) })}
+              </span>
+              <span>
+                {t('settings.admin.backup.nextRun', {
+                  when: settings.backup_timer_active
+                    ? t('settings.admin.backup.tomorrow')
+                    : t('settings.admin.backup.notScheduled'),
+                })}
+              </span>
+            </div>
+          </div>
 
-      {(error || success) && (
-        <div className="w-full">
-          {error && <p role="alert" className="text-[13px] font-medium text-rose-600 dark:text-rose-400">{error}</p>}
-          {success && <p role="status" className="text-[13px] font-medium text-ok">{success}</p>}
+          {(error || success) && (
+            <div className="mt-3">
+              {error && <p role="alert" className="text-[13px] font-medium text-rose-600 dark:text-rose-400">{error}</p>}
+              {success && <p role="status" className="text-[13px] font-medium text-ok">{success}</p>}
+            </div>
+          )}
         </div>
       )}
-    </div>
+    </>
   );
 }
 

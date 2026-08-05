@@ -312,7 +312,18 @@
     "admin": {
       "title": "Administración",
       "backup": {
-        "timerInfo": "Programado en {{file}}"
+        "timerInfo": "Programado en {{file}}",
+        "title": "Respaldos auto",
+        "retentionUnit": "días",
+        "backupNow": "Respaldar ahora",
+        "export": "Exportar",
+        "lastRun": "Último: {{date}}",
+        "nextRun": "Próximo: {{when}}",
+        "notScheduled": "no programado",
+        "tomorrow": "mañana"
+      },
+      "update": {
+        "upToDateShort": "Estás en la última versión"
       }
     },
     "about": {

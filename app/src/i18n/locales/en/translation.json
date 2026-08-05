@@ -312,7 +312,18 @@
     "admin": {
       "title": "Administration",
       "backup": {
-        "timerInfo": "Scheduled at {{file}}"
+        "timerInfo": "Scheduled at {{file}}",
+        "title": "Auto backups",
+        "retentionUnit": "days",
+        "backupNow": "Back up now",
+        "export": "Export",
+        "lastRun": "Last: {{date}}",
+        "nextRun": "Next: {{when}}",
+        "notScheduled": "not scheduled",
+        "tomorrow": "tomorrow"
+      },
+      "update": {
+        "upToDateShort": "You're on the latest version"
       }
     },
     "about": {

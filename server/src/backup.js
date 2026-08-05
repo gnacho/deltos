@@ -3,11 +3,23 @@
 // Los backups se guardan en DATA_DIR/backups/ con timestamp.
 import fs from 'node:fs'
 import path from 'node:path'
-import { execFileSync } from 'node:child_process'
+import { execFileSync, execFile } from 'node:child_process'
+import { promisify } from 'node:util'
 import { kvGet, kvSet } from './db.js'
 import { logger } from './logger.js'
 
+const execFileAsync = promisify(execFile)
+
 const log = logger.child({ component: 'backup' })
+
+export async function isBackupTimerActive() {
+  try {
+    const { stdout } = await execFileAsync('systemctl', ['is-active', 'deltos-backup.timer'])
+    return stdout.trim() === 'active'
+  } catch {
+    return false
+  }
+}
 
 export async function execBackup(prodDb, config) {
   const dataDir = config.DATA_DIR

@@ -18,6 +18,7 @@ import { httpError, validationHook } from './errors.js'
 import { ERROR_CODES } from './error-codes.js'
 import { decodeCursor, keysetPage } from './pagination.js'
 import { logger } from './logger.js'
+import { isBackupTimerActive } from './backup.js'
 
 const log = logger.child({ component: 'domain' })
 
@@ -900,7 +901,7 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
   })
 
   // --- Ajustes del servidor (admin): backup y adjuntos ---
-  app.get('/api/settings/server', (c) => {
+  app.get('/api/settings/server', async (c) => {
     requireAdmin(c)
     return c.json({
       backup_enabled: kvGet(prod, 'backup_enabled', '1') === '1',
@@ -908,6 +909,7 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
       max_attachments_per_task: parseInt(kvGet(prod, 'max_attachments_per_task', '50'), 10),
       backup_last_run: kvGet(prod, 'backup_last_run'),
       backup_path: kvGet(prod, 'backup_path'),
+      backup_timer_active: await isBackupTimerActive(),
     })
   })
 
