@@ -7,7 +7,6 @@ import {
   Sun,
   Moon,
   Monitor,
-  Globe,
   Download,
   Sparkles,
   KeyRound,
@@ -28,6 +27,7 @@ import {
   Database,
   Paperclip,
   HardDrive,
+  Mail,
 } from 'lucide-react';
 import { z } from 'zod';
 import { apiFetch, apiPost, apiPut, apiDelete, dispatchUnauthorized, ApiError } from '@/data/api-client';
@@ -70,90 +70,197 @@ const inputCls =
   'w-full bg-surface2 border border-app rounded-xl px-3.5 py-2.5 text-[15px] outline-none focus:border-brand';
 const labelCls = 'block text-[13px] font-medium mb-1.5';
 
-/* ---------------- Perfil ---------------- */
-function ProfileCard() {
+/* ---------------- Mi perfil (canónico: avatar + nombre + email + idioma + contraseña + notificaciones + logout) ---------------- */
+function MiPerfilCard() {
   const { t } = useTranslation();
-  const { user, setUser } = useSession();
-  const [email, setEmail] = useState(user.email ?? '');
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const { user, setUser, demo } = useSession();
+  const [showPwd, setShowPwd] = useState(false);
+  const [showNotif, setShowNotif] = useState(false);
+  const [langError, setLangError] = useState<string | null>(null);
 
-  const save = async (e: FormEvent) => {
-    e.preventDefault();
-    setBusy(true);
-    setMsg(null);
+  const changeLanguage = async (lang: Language) => {
+    setLangError(null);
+    applyUserLanguage(lang);
     try {
-      const res = await apiPut<{ ok: boolean; user: SessionUser }>('/api/auth/profile', {
-        email: email.trim() === '' ? null : email.trim(),
-      });
+      const res = await apiPut<{ ok: boolean; user: SessionUser }>('/api/auth/profile', { language: lang });
       setUser(res.user);
-      setMsg({ ok: true, text: t('settings.profileSaved') });
-    } catch (err) {
-      setMsg({
-        ok: false,
-        text: apiErrorText(err, t('settings.profileError')),
-      });
-    } finally {
-      setBusy(false);
+    } catch {
+      setLangError(t('settings.profileError'));
+      applyUserLanguage(user.language ?? 'auto');
     }
   };
 
+  const logout = async () => {
+    try {
+      await apiPost('/api/auth/logout', undefined, { noAuthEvent: true });
+    } catch {
+      /* la sesión local se limpia igual */
+    }
+    dispatchUnauthorized();
+  };
+
+  const btnCls =
+    'inline-flex h-9 items-center gap-1.5 rounded-lg border border-app bg-surface2 px-3 text-[13px] font-medium text-muted transition-colors hover:bg-surface hover:text-text-primary';
+  const btnIconCls = 'inline-flex h-9 w-9 items-center justify-center rounded-lg border border-app bg-surface2 text-muted transition-colors hover:bg-surface hover:text-text-primary sm:hidden';
+
   return (
     <Card>
-      <Heading icon={User}>{t('settings.profile')}</Heading>
-      <div className="flex items-center gap-3.5 mb-5">
+      <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+        {/* Avatar + nombre */}
         <Avatar name={user.username} color={user.color} size="xl" />
-        <div className="min-w-0">
-          <p className="text-[16px] font-semibold leading-tight">{user.username}</p>
-          <p className="text-[13px] text-faint leading-tight mt-0.5">
-            {t(`settings.role.${user.role}`)}
-          </p>
+        <div className="min-w-0 flex-1">
+          <p className="text-[16px] font-semibold leading-tight truncate">{user.username}</p>
+          <p className="text-[13px] text-faint leading-tight mt-0.5">{t(`settings.role.${user.role}`)}</p>
         </div>
-      </div>
-      <form onSubmit={save} className="space-y-4">
-        <div>
-          <label htmlFor="pf-username" className={labelCls}>
-            {t('settings.username')}
-          </label>
-          <input
-            id="pf-username"
-            type="text"
-            value={user.username}
-            disabled
-            className={`${inputCls} opacity-60`}
-          />
-        </div>
-        <div>
-          <label htmlFor="pf-email" className={labelCls}>
-            {t('settings.email')}
-          </label>
-          <input
-            id="pf-email"
-            type="email"
-            value={email}
-            maxLength={120}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder={t('settings.emailPlaceholder')}
-            className={inputCls}
-          />
-        </div>
-        {msg && (
-          <p
-            role="status"
-            className={`text-[13px] font-medium ${msg.ok ? 'text-ok' : 'text-rose-600 dark:text-rose-400'}`}
-          >
-            {msg.text}
-          </p>
-        )}
-        <button
-          type="submit"
-          disabled={busy}
-          className="px-5 h-11 rounded-xl bg-brand text-brandfg text-[14px] font-semibold hover:brightness-110 disabled:opacity-60"
+
+        {/* Icono email (decorativo, no funcional todavía) */}
+        <span
+          className="hidden sm:inline-flex h-9 w-9 items-center justify-center rounded-full bg-amber-500/10 text-amber-500"
+          aria-hidden="true"
+          title={t('settings.email')}
         >
-          {busy ? t('common.saving') : t('common.save')}
+          <Mail className="w-4 h-4" />
+        </span>
+
+        {/* Idioma */}
+        <label htmlFor="mp-lang" className="sr-only">{t('settings.language')}</label>
+        <select
+          id="mp-lang"
+          value={user.language ?? 'auto'}
+          onChange={(e) => void changeLanguage(e.target.value as Language)}
+          className="h-9 w-[120px] shrink-0 rounded-lg border border-app bg-elevated px-2 text-[13px] text-text-primary outline-none focus:border-brand"
+        >
+          <option value="auto">🌐 {t('settings.langAuto')}</option>
+          <option value="es">🇪🇸 Español</option>
+          <option value="en">🇬🇧 English</option>
+        </select>
+
+        {/* Contraseña */}
+        {!demo && (
+          <>
+            <button
+              type="button"
+              aria-expanded={showPwd}
+              onClick={() => setShowPwd((v) => !v)}
+              className={btnCls}
+            >
+              <KeyRound className="w-4 h-4" aria-hidden="true" />
+              <span className="hidden sm:inline">{t('settings.changePassword')}</span>
+            </button>
+            <button
+              type="button"
+              aria-expanded={showPwd}
+              onClick={() => setShowPwd((v) => !v)}
+              className={btnIconCls}
+              aria-label={t('settings.changePassword')}
+            >
+              <KeyRound className="w-4 h-4" />
+            </button>
+          </>
+        )}
+
+        {/* Notificaciones */}
+        <button
+          type="button"
+          aria-expanded={showNotif}
+          onClick={() => setShowNotif((v) => !v)}
+          className={btnCls}
+        >
+          <Bell className="w-4 h-4" aria-hidden="true" />
+          <span className="hidden sm:inline">{t('settings.notifications')}</span>
         </button>
-      </form>
+        <button
+          type="button"
+          aria-expanded={showNotif}
+          onClick={() => setShowNotif((v) => !v)}
+          className={btnIconCls}
+          aria-label={t('settings.notifications')}
+        >
+          <Bell className="w-4 h-4" />
+        </button>
+
+        {/* Cerrar sesión */}
+        <button
+          type="button"
+          onClick={() => void logout()}
+          className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-danger/30 bg-danger/10 px-3 text-[13px] font-medium text-danger transition-colors hover:bg-danger/15"
+        >
+          <LogOut className="w-4 h-4" aria-hidden="true" />
+          {demo ? t('demo.exit') : t('settings.logout')}
+        </button>
+      </div>
+
+      {langError && (
+        <p role="alert" className="text-[13px] font-medium text-rose-600 dark:text-rose-400 mt-3">
+          {langError}
+        </p>
+      )}
+
+      {showPwd && !demo && (
+        <div className="mt-4 border-t border-app pt-4">
+          <PasswordForm />
+        </div>
+      )}
+
+      {showNotif && (
+        <div className="mt-4 border-t border-app pt-4">
+          <NotificationsInline />
+        </div>
+      )}
     </Card>
+  );
+}
+
+/* ---------------- Notificaciones push (inline dentro de Mi perfil) ---------------- */
+function NotificationsInline() {
+  const { t } = useTranslation();
+  const { soporte, estado, activar, desactivar } = usePush();
+
+  return (
+    <div className="space-y-3">
+      <p className="text-[13px] text-faint">{t('settings.notifHint')}</p>
+      {estado.cargando ? null : (
+        <>
+          {soporte === 'requiere-https' && <p className="text-[13px] text-faint">{t('settings.notifHttps')}</p>}
+          {soporte === 'no-soportado' && <p className="text-[13px] text-faint">{t('settings.notifUnsupported')}</p>}
+          {soporte === 'no-configurado' && <p className="text-[13px] text-faint">{t('settings.notifNotConfigured')}</p>}
+          {soporte === 'demo' && <p className="text-[13px] text-faint">{t('settings.notifDemo')}</p>}
+          {soporte === 'ios-necesita-instalacion' && <p className="text-[13px] text-faint">{t('settings.notifIos')}</p>}
+          {soporte === 'ok' && estado.permiso === 'denied' && (
+            <p role="alert" className="text-[13px] font-medium text-rose-600 dark:text-rose-400">
+              {t('settings.notifBlocked')}
+            </p>
+          )}
+          {soporte === 'ok' && estado.permiso !== 'denied' && (
+            <div className="flex items-center justify-between gap-4">
+              {estado.suscrito && (
+                <span className="inline-flex items-center gap-1.5 text-[13px] font-medium text-ok">
+                  <Check className="w-3.5 h-3.5" aria-hidden="true" />
+                  {t('settings.notifEnabled')}
+                </span>
+              )}
+              <button
+                type="button"
+                disabled={estado.cargando}
+                onClick={() => void (estado.suscrito ? desactivar() : activar())}
+                className={`${estado.suscrito ? '' : 'ml-auto '}rounded-xl px-4 py-2 text-[13px] font-semibold border transition-colors disabled:opacity-50 ${
+                  estado.suscrito
+                    ? 'border-app text-faint hover:text-app hover:border-strong'
+                    : 'bg-brand border-brand text-brandfg hover:brightness-110'
+                }`}
+              >
+                {estado.suscrito ? t('settings.notifDisable') : t('settings.notifEnable')}
+              </button>
+            </div>
+          )}
+          {estado.error && (
+            <p role="alert" className="text-[13px] font-medium text-rose-600 dark:text-rose-400">
+              {estado.error}
+            </p>
+          )}
+        </>
+      )}
+    </div>
   );
 }
 
@@ -313,50 +420,6 @@ function AppearanceCard() {
   );
 }
 
-/* ---------------- Idioma ---------------- */
-function LanguageCard() {
-  const { t } = useTranslation();
-  const { user, setUser } = useSession();
-  const [error, setError] = useState<string | null>(null);
-
-  const change = async (lang: Language) => {
-    setError(null);
-    applyUserLanguage(lang); // inmediato en la UI
-    try {
-      const res = await apiPut<{ ok: boolean; user: SessionUser }>('/api/auth/profile', {
-        language: lang,
-      });
-      setUser(res.user);
-    } catch {
-      setError(t('settings.profileError'));
-      applyUserLanguage(user.language ?? 'auto'); // revertir
-    }
-  };
-
-  return (
-    <Card>
-      <Heading icon={Globe}>{t('settings.language')}</Heading>
-      <p className="text-[13px] text-faint mb-3">{t('settings.langHint')}</p>
-      <label className="sr-only" htmlFor="lang-select">{t('settings.language')}</label>
-      <select
-        id="lang-select"
-        value={user.language ?? 'auto'}
-        onChange={(e) => void change(e.target.value as Language)}
-        className={inputCls}
-      >
-        <option value="auto">🌐 {t('settings.langAuto')}</option>
-        <option value="es">🇪🇸 Español</option>
-        <option value="en">🇬🇧 English</option>
-      </select>
-      {error && (
-        <p role="alert" className="text-[13px] font-medium text-rose-600 dark:text-rose-400 mt-2">
-          {error}
-        </p>
-      )}
-    </Card>
-  );
-}
-
 /* ---------------- Instalar (solo si el navegador lo soporta) ---------------- */
 function InstallCard({
   state,
@@ -455,71 +518,6 @@ function DemoCard() {
         <p role="alert" className="text-[13px] font-medium text-rose-600 dark:text-rose-400 mt-2">
           {error}
         </p>
-      )}
-    </Card>
-  );
-}
-
-/* ---------------- Notificaciones push ---------------- */
-function NotificationsCard() {
-  const { t } = useTranslation();
-  const { soporte, estado, activar, desactivar } = usePush();
-
-  return (
-    <Card>
-      <Heading icon={Bell}>{t('settings.notifications')}</Heading>
-      <p className="text-[13px] text-faint mb-3">{t('settings.notifHint')}</p>
-
-      {estado.cargando ? null : (
-        <>
-          {soporte === 'requiere-https' && (
-            <p className="text-[13px] text-faint">{t('settings.notifHttps')}</p>
-          )}
-          {soporte === 'no-soportado' && (
-            <p className="text-[13px] text-faint">{t('settings.notifUnsupported')}</p>
-          )}
-          {soporte === 'no-configurado' && (
-            <p className="text-[13px] text-faint">{t('settings.notifNotConfigured')}</p>
-          )}
-          {soporte === 'demo' && (
-            <p className="text-[13px] text-faint">{t('settings.notifDemo')}</p>
-          )}
-          {soporte === 'ios-necesita-instalacion' && (
-            <p className="text-[13px] text-faint">{t('settings.notifIos')}</p>
-          )}
-          {soporte === 'ok' && estado.permiso === 'denied' && (
-            <p role="alert" className="text-[13px] font-medium text-rose-600 dark:text-rose-400">
-              {t('settings.notifBlocked')}
-            </p>
-          )}
-          {soporte === 'ok' && estado.permiso !== 'denied' && (
-            <div className="flex items-center justify-between gap-4">
-              {estado.suscrito && (
-                <span className="inline-flex items-center gap-1.5 text-[13px] font-medium text-ok">
-                  <Check className="w-3.5 h-3.5" aria-hidden="true" />
-                  {t('settings.notifEnabled')}
-                </span>
-              )}
-              <button
-                type="button"
-                disabled={estado.cargando}
-                onClick={() => void (estado.suscrito ? desactivar() : activar())}
-                className={`${estado.suscrito ? '' : 'ml-auto '}rounded-xl px-4 py-2 text-[13px] font-semibold border transition-colors disabled:opacity-50 ${
-                  estado.suscrito
-                    ? 'border-app text-faint hover:text-app hover:border-strong'
-                    : 'bg-brand border-brand text-brandfg hover:brightness-110'
-                }`}
-              >
-                {estado.suscrito ? t('settings.notifDisable') : t('settings.notifEnable')}
-              </button>
-            </div>
-          )}
-          {estado.error && (
-            <p role="alert" className="text-[13px] font-medium text-rose-600 dark:text-rose-400 mt-2">
-              {estado.error}
-            </p>
-          )}
-        </>
       )}
     </Card>
   );
@@ -1164,55 +1162,6 @@ function LabelsCard() {
   );
 }
 
-/* ---------------- Mi sesión (patrón easyzfs: 2 botones) ---------------- */
-function SessionCard() {
-  const { t } = useTranslation();
-  const { demo } = useSession();
-  const [showPwd, setShowPwd] = useState(false);
-
-  const logout = async () => {
-    try {
-      await apiPost('/api/auth/logout', undefined, { noAuthEvent: true });
-    } catch {
-      /* aunque falle la red, la sesión local se limpia igual */
-    }
-    /* Contrato: el logout despacha el MISMO evento unauthorized */
-    dispatchUnauthorized();
-  };
-
-  return (
-    <Card>
-      <Heading icon={LogOut}>{t('settings.session')}</Heading>
-      <div className="flex flex-wrap gap-2.5">
-        {!demo && (
-          <button
-            type="button"
-            aria-expanded={showPwd}
-            onClick={() => setShowPwd((v) => !v)}
-            className="inline-flex h-11 items-center gap-2 rounded-xl border border-app bg-surface2 px-5 text-[14px] font-semibold hover:bg-surface"
-          >
-            <KeyRound className="w-4 h-4" aria-hidden="true" />
-            {t('settings.changePassword')}
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={() => void logout()}
-          className="inline-flex h-11 items-center gap-2 rounded-xl bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300 px-5 text-[14px] font-semibold hover:bg-rose-200/70 dark:hover:bg-rose-500/25"
-        >
-          <LogOut className="w-4 h-4" aria-hidden="true" />
-          {demo ? t('demo.exit') : t('settings.logout')}
-        </button>
-      </div>
-      {showPwd && !demo && (
-        <div className="mt-4 border-t border-app pt-4">
-          <PasswordForm />
-        </div>
-      )}
-    </Card>
-  );
-}
-
 /* ---------------- Acerca de ---------------- */
 const REPO_URL = 'https://github.com/gnacho/deltos';
 
@@ -1521,18 +1470,14 @@ export default function SettingsPage() {
 
       {/* Layout canónico (patrón NetPulse): grid 12 col, spans 7/5/12 */}
       <div className="grid grid-cols-1 gap-4 md:gap-5 lg:grid-cols-12 lg:items-start">
-        <div className="lg:col-span-7">
-          <AppearanceCard />
+        <div className="lg:col-span-12">
+          <MiPerfilCard />
         </div>
         <div className="lg:col-span-5">
-          <ProfileCard />
+          <AppearanceCard />
         </div>
         <div className="lg:col-span-7">
           <LabelsCard />
-        </div>
-        <div className="lg:col-span-5 space-y-4 md:space-y-5">
-          <LanguageCard />
-          <NotificationsCard />
         </div>
         {isAdmin && (
           <>
@@ -1545,11 +1490,8 @@ export default function SettingsPage() {
             </div>
           </>
         )}
-        <div className={installVisible ? 'lg:col-span-7' : 'lg:col-span-12'}>
-          <SessionCard />
-        </div>
         {installVisible && (
-          <div className="lg:col-span-5">
+          <div className="lg:col-span-12">
             <InstallCard state={installState} install={install} />
           </div>
         )}
