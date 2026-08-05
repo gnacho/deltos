@@ -588,7 +588,6 @@ export default function AdminBar() {
         <div className="hidden sm:block h-6 w-px bg-app" />
 
         <UpdateCheck upd={upd} />
-        <DemoToggle />
 
         <button
           type="button"
@@ -614,7 +613,7 @@ export default function AdminBar() {
           aria-expanded={showUsers}
           onClick={() => setShowUsers((v) => !v)}
           className={[
-            'ml-auto inline-flex h-9 items-center gap-1.5 rounded-xl border px-3 text-[13px] font-medium transition-colors shrink-0',
+            'inline-flex h-9 items-center gap-1.5 rounded-xl border px-3 text-[13px] font-medium transition-colors shrink-0',
             showUsers ? activeBtnCls : inactiveBtnCls,
           ].join(' ')}
         >
@@ -625,6 +624,10 @@ export default function AdminBar() {
             aria-hidden="true"
           />
         </button>
+
+        <div className="ml-auto">
+          <DemoToggle />
+        </div>
       </div>
 
       {/* Paneles desplegados */}
