@@ -308,7 +308,7 @@
     },
     "about": {
       "title": "About",
-      "desc": "Couple task manager. 100% local, no cloud.",
+      "desc": "Task manager with a kanban view for simple projects, for personal use or small teams.",
       "version": "Deltos v{{version}}",
       "checkUpdates": "Check for updates",
       "checking": "Checking…",

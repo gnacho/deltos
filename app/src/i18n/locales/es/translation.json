@@ -308,7 +308,7 @@
     },
     "about": {
       "title": "Acerca de",
-      "desc": "Tareas en pareja. 100% local, sin nube.",
+      "desc": "Gestor de tareas con vista kanban para proyectos sencillos, de uso individual o pequeños equipos.",
       "version": "Deltos v{{version}}",
       "checkUpdates": "Comprobar actualizaciones",
       "checking": "Comprobando…",
