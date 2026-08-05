@@ -22,7 +22,7 @@ export function CheckToggle({
   size = 'md',
   variant = 'check',
 }: CheckToggleProps) {
-  const height = size === 'sm' ? 'h-8' : 'h-10';
+  const height = size === 'sm' ? 'h-8' : 'h-9';
 
   if (variant === 'switch') {
     return (
