@@ -577,7 +577,7 @@ export default function AdminBar() {
   const inactiveBtnCls = 'border-app bg-surface2 text-muted hover:bg-surface hover:text-text';
 
   return (
-    <Card>
+    <Card className="border-l-4 border-l-brand bg-brand/[0.03]">
       {/* Fila horizontal */}
       <div className="flex flex-wrap items-start gap-3 sm:gap-4 min-w-0">
         <div className="flex items-center gap-2 shrink-0 h-9">

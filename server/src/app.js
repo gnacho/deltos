@@ -229,7 +229,12 @@ export function createApp(ctx) {
   // Versión del PROPIO servidor: el banner anti pantalla-negra del front la
   // sondea (poll 10 min) y avisa cuando cambia tras un despliegue.
   app.get('/api/version', (c) =>
-    c.json({ version: pkg.version, build: process.env.BUILD_SHA || pkg.version })
+    c.json({
+      version: pkg.version,
+      build: process.env.BUILD_SHA || pkg.version,
+      node: process.version,
+      uptime: process.uptime(),
+    })
   )
   registerDomainRoutes(app, { hub, uploadsDir: ctx.uploadsDir, prod, config, dataDir: ctx.dataDir })
   registerPushRoutes(app)

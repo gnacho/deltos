@@ -330,6 +330,11 @@
     "about": {
       "title": "About",
       "desc": "Task manager with a kanban view for simple projects, for personal use or small teams.",
+      "release": "Release",
+      "license": "License",
+      "node": "Node",
+      "react": "React",
+      "uptime": "Uptime",
       "version": "Deltos v{{version}}",
       "checkUpdates": "Check for updates",
       "checking": "Checking…",

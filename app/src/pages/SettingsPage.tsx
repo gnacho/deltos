@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { FormEvent } from 'react';
+import * as React from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   User,
@@ -23,7 +24,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { z } from 'zod';
-import { apiPost, apiPut, dispatchUnauthorized, ApiError } from '@/data/api-client';
+import { apiFetch, apiPost, apiPut, dispatchUnauthorized, ApiError } from '@/data/api-client';
 import { apiErrorText, fieldErrors } from '@/lib/errors';
 import type { Label, Language, SessionUser } from '@/data/types';
 import { useSession } from '@/auth/session-context';
@@ -945,9 +946,27 @@ function LabelsCard() {
 
 /* ---------------- Acerca de ---------------- */
 const REPO_URL = 'https://github.com/gnacho/deltos';
+const LICENSE = 'AGPL-3.0';
+
+function formatUptime(totalSeconds: number) {
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  if (days > 0) return `${days}d ${hours}h ${minutes}m`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
+}
 
 function AboutCard() {
   const { t } = useTranslation();
+  const [serverInfo, setServerInfo] = useState<{ version: string; node: string; uptime: number } | null>(null);
+
+  useEffect(() => {
+    apiFetch<{ version: string; node: string; uptime: number }>('/api/version')
+      .then((res) => setServerInfo(res))
+      .catch(() => setServerInfo(null));
+  }, []);
+
   const tiles: { icon: typeof Github; label: string; href?: string }[] = [
     { icon: Github, label: t('settings.about.code'), href: REPO_URL },
     { icon: FileText, label: t('settings.about.changelog'), href: `${REPO_URL}/commits/main` },
@@ -956,19 +975,37 @@ function AboutCard() {
   ];
   const tileCls =
     'flex items-center gap-2.5 rounded-xl border border-app px-3.5 py-2.5 text-[13px] font-medium text-muted transition-colors duration-150 hover:border-brand/50 hover:text-brand';
+
+  const stats = [
+    { label: t('settings.about.release'), value: `v${pkg.version}` },
+    { label: t('settings.about.license'), value: LICENSE },
+    { label: t('settings.about.node'), value: serverInfo?.node ?? '—' },
+    { label: t('settings.about.react'), value: `v${React.version}` },
+    { label: t('settings.about.uptime'), value: serverInfo ? formatUptime(serverInfo.uptime) : '—' },
+  ];
+
   return (
     <Card>
       <Heading icon={Info}>{t('settings.about.title')}</Heading>
       <div className="grid gap-6 md:grid-cols-2">
-        {/* Izquierda: logo + nombre + versión + descripción */}
+        {/* Izquierda: logo + nombre + versión + descripción + stats */}
         <div className="flex items-start gap-3.5">
           <LogoMark size={48} />
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="font-display font-bold text-[17px] leading-tight">{t('common.appName')}</p>
-            <p className="tnum text-[12px] text-faint leading-tight mt-0.5">
-              {t('settings.about.version', { version: pkg.version })}
-            </p>
-            <p className="text-[13px] text-faint mt-2.5 leading-relaxed">{t('settings.about.desc')}</p>
+            <p className="text-[13px] text-faint leading-relaxed mt-2.5">{t('settings.about.desc')}</p>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              {stats.map((s) => (
+                <div
+                  key={s.label}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-app bg-surface2 px-2.5 py-1.5 text-[12px]"
+                >
+                  <span className="text-faint">{s.label}</span>
+                  <span className="font-medium text-text tnum">{s.value}</span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
         {/* Derecha: tiles de enlaces (canónicos: código, cambios, ko-fi, privacidad) */}
@@ -988,10 +1025,6 @@ function AboutCard() {
           )}
         </div>
       </div>
-
-      <p className="mt-5 border-t border-app pt-3 font-mono text-[12px] text-faint">
-        {t('settings.about.stack')}
-      </p>
     </Card>
   );
 }
@@ -1017,9 +1050,6 @@ export default function SettingsPage() {
 
       {/* Layout canónico (patrón NetPulse): grid 12 col, spans 7/5/12 */}
       <div className="grid grid-cols-1 gap-4 md:gap-5 lg:grid-cols-12 lg:items-start">
-        <div className="lg:col-span-12">
-          <MiPerfilCard />
-        </div>
         <div className="lg:col-span-12 grid grid-cols-1 gap-4 md:gap-5 lg:grid-cols-2 lg:items-stretch">
           <div className="h-full">
             <AppearanceCard />
@@ -1027,6 +1057,9 @@ export default function SettingsPage() {
           <div className="h-full">
             <LabelsCard />
           </div>
+        </div>
+        <div className="lg:col-span-12">
+          <MiPerfilCard />
         </div>
         {isAdmin && (
           <div className="lg:col-span-12">
