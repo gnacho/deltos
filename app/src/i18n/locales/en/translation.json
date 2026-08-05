@@ -120,7 +120,8 @@
     "deleting": "Deleting…",
     "loading": "Loading task…",
     "notFound": "Task not found",
-    "openDetail": "Open details of {{title}}"
+    "openDetail": "Open details of {{title}}",
+    "noProject": "No project"
   },
   "attachments": {
     "empty": "No attachments.",
@@ -182,8 +183,10 @@
       "assigned": "<strong>{{user}}</strong> assigned \"{{task}}\" to {{value}}",
       "unassigned": "<strong>{{user}}</strong> unassigned \"{{task}}\"",
       "moved": "<strong>{{user}}</strong> moved \"{{task}}\" from {{from}} to {{to}}",
-      "attachment": "<strong>{{user}}</strong> attached {{value}} to \"{{task}}\""
-    }
+      "attachment": "<strong>{{user}}</strong> attached {{value}} to \"{{task}}\"",
+      "project": "<strong>{{user}}</strong> moved \"{{task}}\" to project {{to}}"
+    },
+    "project": "<strong>{{user}}</strong> moved the card to project {{to}}"
   },
   "newTask": {
     "title": "New task",

@@ -8,7 +8,7 @@ import { COLUMNS, PRIORITIES, PRIORITY_BADGE } from '@/lib/constants';
 import { colorOf } from '@/lib/colors';
 import { Avatar } from '@/components/Avatar';
 import { announce } from '@/lib/announce';
-import { ArrowUp, ArrowRight, ArrowDown, User } from 'lucide-react';
+import { ArrowUp, ArrowRight, ArrowDown, ChevronDown, User } from 'lucide-react';
 
 const titleSchema = z.string().trim().min(1).max(200);
 
@@ -34,6 +34,7 @@ export function DetailsTab({ detail, onClose }: { detail: TaskDetail; onClose: (
   const [saveState, setSaveState] = useState<'idle' | 'saved' | 'error'>('idle');
   const [deleteArmed, setDeleteArmed] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [projectOpen, setProjectOpen] = useState(false);
   const deleteTimer = useRef<number | null>(null);
 
   /* Sincroniza campos si la tarea cambia por SSE/refresco */
@@ -92,6 +93,7 @@ export function DetailsTab({ detail, onClose }: { detail: TaskDetail; onClose: (
 
   const users = data.getUsers();
   const labels = data.getLabels();
+  const projects = data.getProjects();
   const project = data.getProject(task.project_id);
   const taskLabelIds = new Set(task.labels.map((l) => l.id));
 
@@ -118,18 +120,113 @@ export function DetailsTab({ detail, onClose }: { detail: TaskDetail; onClose: (
             </p>
           )}
         </div>
+      </div>
 
-        <div>
+      <section>
+        <div className="flex flex-wrap gap-2" role="group" aria-label={t('task.moveToGroup')}>
+          {COLUMNS.map((c) => {
+            const current = task.column === c.id;
+            return (
+              <button
+                key={c.id}
+                type="button"
+                disabled={current}
+                aria-pressed={current}
+                aria-label={
+                  current
+                    ? t('task.moveToCurrentAria', { column: t(`columns.${c.id}`) })
+                    : t('task.moveToAria', { column: t(`columns.${c.id}`) })
+                }
+                onClick={() => {
+                  const position = data
+                    .getTasks()
+                    .filter((tk) => tk.column === c.id && tk.id !== task.id).length;
+                  void data
+                    .moveTask(task.id, c.id, position)
+                    .then(() =>
+                      announce(
+                        t('board.movedTo', { title: task.title, column: t(`columns.${c.id}`) }),
+                      ),
+                    )
+                    .catch(() => setSaveState('error'));
+                }}
+                className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[13px] font-medium ${
+                  current
+                    ? `${colorOf(c.color).chip} ring-1 ring-current cursor-default`
+                    : 'bg-surface border border-app text-muted hover:bg-surface2'
+                }`}
+              >
+                <span
+                  className={`w-2 h-2 rounded-full ${colorOf(c.color).dot}`}
+                  aria-hidden="true"
+                />
+                {t(`columns.${c.id}`)}
+                {current ? ` · ${t('task.current')}` : ''}
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      <div className="grid grid-cols-2 gap-x-4 gap-y-5">
+        <div className="col-span-2">
           <FieldLabel>{t('task.project')}</FieldLabel>
-          {project && (
-            <span className="inline-flex items-center gap-1.5 text-[14px]">
+          <div className="relative">
+            <button
+              type="button"
+              aria-haspopup="listbox"
+              aria-expanded={projectOpen}
+              onClick={() => setProjectOpen((o) => !o)}
+              className="w-full inline-flex items-center gap-2 bg-surface2 border border-app rounded-xl px-3.5 py-2.5 text-[14px] font-medium outline-none focus:border-brand"
+            >
               <span
-                className={`w-2 h-2 rounded-full shrink-0 ${colorOf(project.color).dot}`}
+                className={`w-2 h-2 rounded-full shrink-0 ${project ? colorOf(project.color).dot : 'bg-faint/40'}`}
                 aria-hidden="true"
               />
-              {project.name}
-            </span>
-          )}
+              <span className="flex-1 text-left">{project?.name ?? t('task.noProject')}</span>
+              <ChevronDown
+                className={`w-4 h-4 text-faint transition-transform duration-200 ${projectOpen ? 'rotate-180' : ''}`}
+                aria-hidden="true"
+              />
+            </button>
+            {projectOpen && (
+              <>
+                <div className="fixed inset-0 z-20" onClick={() => setProjectOpen(false)} aria-hidden="true" />
+                <ul
+                  role="listbox"
+                  aria-label={t('task.project')}
+                  className="absolute z-30 left-0 right-0 mt-1.5 max-h-64 overflow-y-auto nice-scroll rounded-xl bg-surface border border-app shadow-2xl py-1"
+                >
+                  {projects.map((p) => {
+                    const active = p.id === task.project_id;
+                    return (
+                      <li key={p.id} role="option" aria-selected={active}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setProjectOpen(false);
+                            if (!active) void patch({ project_id: p.id });
+                          }}
+                          className={`w-full flex items-center gap-2 px-3.5 py-2 text-[14px] text-left hover:bg-surface2 ${
+                            active ? 'font-medium text-brand' : ''
+                          }`}
+                        >
+                          <span
+                            className={`w-2 h-2 rounded-full shrink-0 ${colorOf(p.color).dot}`}
+                            aria-hidden="true"
+                          />
+                          <span className="flex-1">{p.name}</span>
+                          {active && (
+                            <span className="text-[12px] font-semibold">{t('task.current')}</span>
+                          )}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </>
+            )}
+          </div>
         </div>
 
         <div>
@@ -263,53 +360,6 @@ export function DetailsTab({ detail, onClose }: { detail: TaskDetail; onClose: (
           onBlur={saveDescription}
           className="w-full bg-surface2 border border-app rounded-xl px-3.5 py-2.5 text-[15px] leading-relaxed outline-none focus:border-brand resize-y"
         />
-      </section>
-
-      <section>
-        <h3 className="font-display font-semibold text-[14px] mb-2">{t('task.moveTo')}</h3>
-        <div className="flex flex-wrap gap-2" role="group" aria-label={t('task.moveToGroup')}>
-          {COLUMNS.map((c) => {
-            const current = task.column === c.id;
-            return (
-              <button
-                key={c.id}
-                type="button"
-                disabled={current}
-                aria-pressed={current}
-                aria-label={
-                  current
-                    ? t('task.moveToCurrentAria', { column: t(`columns.${c.id}`) })
-                    : t('task.moveToAria', { column: t(`columns.${c.id}`) })
-                }
-                onClick={() => {
-                  const position = data
-                    .getTasks()
-                    .filter((tk) => tk.column === c.id && tk.id !== task.id).length;
-                  void data
-                    .moveTask(task.id, c.id, position)
-                    .then(() =>
-                      announce(
-                        t('board.movedTo', { title: task.title, column: t(`columns.${c.id}`) }),
-                      ),
-                    )
-                    .catch(() => setSaveState('error'));
-                }}
-                className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[13px] font-medium ${
-                  current
-                    ? `${colorOf(c.color).chip} ring-1 ring-current cursor-default`
-                    : 'bg-surface border border-app text-muted hover:bg-surface2'
-                }`}
-              >
-                <span
-                  className={`w-2 h-2 rounded-full ${colorOf(c.color).dot}`}
-                  aria-hidden="true"
-                />
-                {t(`columns.${c.id}`)}
-                {current ? ` · ${t('task.current')}` : ''}
-              </button>
-            );
-          })}
-        </div>
       </section>
 
       <div className="flex items-center justify-between gap-3 pt-2 border-t border-app">

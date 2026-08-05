@@ -82,6 +82,7 @@ const taskPatchSchema = z
     due_date: dateSchema.nullable(),
     assignee_id: z.string().max(64).nullable(),
     labels: z.array(z.string().max(64)).max(20),
+    project_id: z.string().min(1).max(64),
   })
   .partial()
 
@@ -401,6 +402,13 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
         if (data.title !== undefined && data.title !== task.title) {
           db.prepare('UPDATE tasks SET title = ? WHERE id = ?').run(data.title, task.id)
           addEvent(db, task.id, user.id, 'title', { from: task.title, to: data.title })
+        }
+        if (data.project_id !== undefined && data.project_id !== task.project_id) {
+          if (!db.prepare('SELECT id FROM projects WHERE id = ?').get(data.project_id)) {
+            httpError(404, ERROR_CODES.PROJECT_NOT_FOUND)
+          }
+          db.prepare('UPDATE tasks SET project_id = ? WHERE id = ?').run(data.project_id, task.id)
+          addEvent(db, task.id, user.id, 'project', { from: task.project_id, to: data.project_id })
         }
         if (data.description !== undefined && data.description !== task.description) {
           db.prepare('UPDATE tasks SET description = ? WHERE id = ?').run(data.description, task.id)

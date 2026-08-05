@@ -155,6 +155,33 @@ describe('tasks', () => {
     expect(bad.status).toBe(404)
   })
 
+  it('PATCH cambia el proyecto y registra evento project; proyecto inexistente → 404', async () => {
+    const { app, auth, project } = await setup()
+    const other = (
+      await (await app.request('/api/projects', jsonReq(auth, 'POST', '/api/projects', { name: 'Oficina', emoji: '🏢', color: 'violet' }))).json()
+    ).project
+    const t = await createTask(app, auth, project.id, 'Viajar')
+
+    const res = await app.request(
+      `/api/tasks/${t.id}`,
+      jsonReq(auth, 'PATCH', '', { project_id: other.id })
+    )
+    expect(res.status).toBe(200)
+    const task = (await res.json()).task
+    expect(task.project_id).toBe(other.id)
+
+    const detail = await (await app.request(`/api/tasks/${t.id}`, { headers: { cookie: auth.cookie } })).json()
+    const ev = detail.activity.find((e) => e.type === 'project')
+    expect(ev).toBeDefined()
+    expect(ev.data).toEqual({ from: project.id, to: other.id })
+
+    const bad = await app.request(
+      `/api/tasks/${t.id}`,
+      jsonReq(auth, 'PATCH', '', { project_id: 'no-existe' })
+    )
+    expect(bad.status).toBe(404)
+  })
+
   it('DELETE elimina la tarea y compacta la columna', async () => {
     const { app, auth, project } = await setup()
     const a = await createTask(app, auth, project.id, 'A')
