@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { Plus, Move, Paperclip, Flag, Calendar, User, FileText, Type } from 'lucide-react';
+import { Plus, Move, Paperclip, Flag, Calendar, User, FileText, Type, Folder } from 'lucide-react';
 import type { ActivityEventType, TaskDetail } from '@/data/types';
 import { EventText } from '@/components/task/EventText';
 import { relTime } from '@/i18n';
@@ -13,6 +13,7 @@ const EVENT_ICON: Record<ActivityEventType, typeof Plus> = {
   assigned: User,
   moved: Move,
   attachment: Paperclip,
+  project: Folder,
 };
 
 /** Pestaña Actividad: timeline de eventos reales (activity_events). */

@@ -90,7 +90,15 @@ export interface Comment {
 }
 
 export type ActivityEventType =
-  'created' | 'title' | 'description' | 'priority' | 'due' | 'assigned' | 'moved' | 'attachment';
+  | 'created'
+  | 'title'
+  | 'description'
+  | 'priority'
+  | 'due'
+  | 'assigned'
+  | 'moved'
+  | 'attachment'
+  | 'project';
 
 export interface ActivityEvent {
   id: string;
@@ -141,4 +149,5 @@ export interface TaskPatch {
   due_date?: string | null;
   assignee_id?: string | null;
   labels?: string[];
+  project_id?: string;
 }

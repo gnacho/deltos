@@ -10,6 +10,7 @@ import {
   User,
   FileText,
   Type,
+  Folder,
 } from 'lucide-react';
 import { apiFetch } from '@/data/api-client';
 import { apiErrorText } from '@/lib/errors';
@@ -29,6 +30,7 @@ const EVENT_ICON: Record<ActivityEventType, typeof Plus> = {
   assigned: User,
   moved: Move,
   attachment: Paperclip,
+  project: Folder,
 };
 
 const PAGE_SIZE = 30;
