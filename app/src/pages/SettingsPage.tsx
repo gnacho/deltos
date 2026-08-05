@@ -48,9 +48,9 @@ import { useAppUpdate } from '@/hooks/useAppUpdate';
 import { usePush } from '@/hooks/usePush';
 import pkg from '../../package.json';
 
-function Card({ children }: { children: React.ReactNode }) {
+function Card({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <section className="settings-card rounded-2xl bg-surface border border-app shadow-soft p-5">
+    <section className={`settings-card rounded-2xl bg-surface border border-app shadow-soft p-5 ${className ?? ''}`}>
       {children}
     </section>
   );
@@ -486,7 +486,7 @@ function AppearanceCard() {
     { m: 'dark', icon: Moon, label: t('settings.themeDark') },
   ];
   return (
-    <Card>
+    <Card className="h-full">
       <Heading icon={Sun}>{t('settings.appearance')}</Heading>
       <div
         className="grid grid-cols-3 gap-1 rounded-xl bg-surface2 p-1"
@@ -1169,7 +1169,7 @@ function LabelsCard() {
   };
 
   return (
-    <Card>
+    <Card className="h-full">
       <Heading icon={Tag}>{t('settings.labels.title')}</Heading>
       <p className="text-[13px] text-faint mb-4">{t('settings.labels.subtitle')}</p>
 
@@ -1619,11 +1619,13 @@ export default function SettingsPage() {
         <div className="lg:col-span-12">
           <MiPerfilCard />
         </div>
-        <div className="lg:col-span-5">
-          <AppearanceCard />
-        </div>
-        <div className="lg:col-span-7">
-          <LabelsCard />
+        <div className="lg:col-span-12 grid grid-cols-1 gap-4 md:gap-5 lg:grid-cols-2 lg:items-stretch">
+          <div className="h-full">
+            <AppearanceCard />
+          </div>
+          <div className="h-full">
+            <LabelsCard />
+          </div>
         </div>
         {isAdmin && (
           <>

@@ -71,6 +71,20 @@ function ThemeToggleButton({ mobile }: { mobile?: boolean }) {
   );
 }
 
+function AmbientGlow() {
+  const { dark } = useTheme();
+  return (
+    <div
+      aria-hidden="true"
+      className="fixed inset-0 -z-10 pointer-events-none"
+      style={{
+        background: `radial-gradient(circle at 50% -10%, rgba(var(--accent-rgb), ${dark ? 0.08 : 0.04}) 0%, rgba(var(--accent-rgb), 0) 55%), var(--bg)`,
+        transition: 'background 0.45s ease',
+      }}
+    />
+  );
+}
+
 /** Item de navegación solo-icono con tooltip (raíl md y sidebar colapsado). */
 function IconNavLink({
   to,
@@ -255,6 +269,7 @@ export default function Layout() {
 
   return (
     <ModalContext.Provider value={modalApi}>
+      <AmbientGlow />
       {/* ============ SIDEBAR (lg+, colapsable) ============ */}
       {collapsed ? (
         <aside className="hidden lg:flex fixed inset-y-0 left-0 w-16 flex-col items-center bg-surface border-r border-app z-40 py-3">
