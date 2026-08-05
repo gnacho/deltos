@@ -974,56 +974,45 @@ function AboutCard() {
     { icon: ShieldCheck, label: t('settings.about.privacy') },
   ];
   const tileCls =
-    'flex items-center gap-2.5 rounded-xl border border-app px-3.5 py-2.5 text-[13px] font-medium text-muted transition-colors duration-150 hover:border-brand/50 hover:text-brand';
+    'flex items-center gap-2 rounded-lg border border-app px-2.5 py-1 text-[12px] font-medium text-muted transition-colors duration-150 hover:border-brand/50 hover:text-brand';
 
-  const stats = [
-    { label: t('settings.about.release'), value: `v${pkg.version}` },
-    { label: t('settings.about.license'), value: LICENSE },
-    { label: t('settings.about.node'), value: serverInfo?.node ?? '—' },
-    { label: t('settings.about.react'), value: `v${React.version}` },
-    { label: t('settings.about.uptime'), value: serverInfo ? formatUptime(serverInfo.uptime) : '—' },
-  ];
+  const releaseLine = `v${pkg.version} · ${LICENSE}`;
+  const runtimeLine = `Node ${serverInfo?.node ?? '—'} · React v${React.version} · ${
+    t('settings.about.uptime')
+  } ${serverInfo ? formatUptime(serverInfo.uptime) : '—'}`;
 
   return (
     <Card>
       <Heading icon={Info}>{t('settings.about.title')}</Heading>
-      <div className="grid gap-6 md:grid-cols-2">
-        {/* Izquierda: logo + nombre + versión + descripción + stats */}
-        <div className="flex items-start gap-3.5">
-          <LogoMark size={48} />
-          <div className="min-w-0 flex-1">
-            <p className="font-display font-bold text-[17px] leading-tight">{t('common.appName')}</p>
-            <p className="text-[13px] text-faint leading-relaxed mt-2.5">{t('settings.about.desc')}</p>
-
-            <div className="mt-4 flex flex-wrap gap-2">
-              {stats.map((s) => (
-                <div
-                  key={s.label}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-app bg-surface2 px-2.5 py-1.5 text-[12px]"
-                >
-                  <span className="text-faint">{s.label}</span>
-                  <span className="font-medium text-text tnum">{s.value}</span>
-                </div>
-              ))}
+      <div className="space-y-5">
+        {/* Fila 1: logo + nombre + descripción a la izquierda, enlaces a la derecha */}
+        <div className="grid gap-5 md:grid-cols-2">
+          <div className="flex items-start gap-3.5">
+            <LogoMark size={40} />
+            <div className="min-w-0 flex-1">
+              <p className="font-display font-bold text-[16px] leading-tight">{t('common.appName')}</p>
+              <p className="text-[13px] text-faint leading-relaxed mt-1.5">{t('settings.about.desc')}</p>
             </div>
           </div>
+          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+            {tiles.map((item) =>
+              item.href ? (
+                <a key={item.label} href={item.href} target="_blank" rel="noreferrer" className={tileCls}>
+                  <item.icon className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                  <span className="leading-snug">{item.label}</span>
+                </a>
+              ) : (
+                <div key={item.label} className={tileCls}>
+                  <item.icon className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                  <span className="leading-snug">{item.label}</span>
+                </div>
+              ),
+            )}
+          </div>
         </div>
-        {/* Derecha: tiles de enlaces (canónicos: código, cambios, ko-fi, privacidad) */}
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          {tiles.map((item) =>
-            item.href ? (
-              <a key={item.label} href={item.href} target="_blank" rel="noreferrer" className={tileCls}>
-                <item.icon className="w-4 h-4 shrink-0" aria-hidden="true" />
-                <span className="leading-snug">{item.label}</span>
-              </a>
-            ) : (
-              <div key={item.label} className={tileCls}>
-                <item.icon className="w-4 h-4 shrink-0" aria-hidden="true" />
-                <span className="leading-snug">{item.label}</span>
-              </div>
-            ),
-          )}
-        </div>
+        {/* Fila 2: versión, licencia y runtime en una misma línea sin recuadros,
+            alineada con la descripción (tras el logo) en escritorio */}
+        <p className="md:pl-[54px] text-[11px] text-faint tnum">{releaseLine} · {runtimeLine}</p>
       </div>
     </Card>
   );
