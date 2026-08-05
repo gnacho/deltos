@@ -12,6 +12,7 @@ import {
   KeyRound,
   LogOut,
   Check,
+  X,
   UserPlus,
   Info,
   ExternalLink,
@@ -70,13 +71,25 @@ const inputCls =
   'w-full bg-surface2 border border-app rounded-xl px-3.5 py-2.5 text-[15px] outline-none focus:border-brand';
 const labelCls = 'block text-[13px] font-medium mb-1.5';
 
-/* ---------------- Mi perfil (canónico: avatar + nombre + email + idioma + contraseña + notificaciones + logout) ---------------- */
+/* ---------------- Mi perfil (canónico: avatar + nombre editable + email editable + idioma + contraseña + notificaciones + logout) ---------------- */
 function MiPerfilCard() {
   const { t } = useTranslation();
   const { user, setUser, demo } = useSession();
   const [showPwd, setShowPwd] = useState(false);
   const [showNotif, setShowNotif] = useState(false);
   const [langError, setLangError] = useState<string | null>(null);
+
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState(user.display_name || user.username);
+  const [nameBusy, setNameBusy] = useState(false);
+  const [nameError, setNameError] = useState<string | null>(null);
+
+  const [editingEmail, setEditingEmail] = useState(false);
+  const [emailDraft, setEmailDraft] = useState(user.email || '');
+  const [emailBusy, setEmailBusy] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
+
+  const displayName = user.display_name || user.username;
 
   const changeLanguage = async (lang: Language) => {
     setLangError(null);
@@ -90,6 +103,60 @@ function MiPerfilCard() {
     }
   };
 
+  const saveName = async () => {
+    const value = nameDraft.trim();
+    if (value === (user.display_name || '')) {
+      setEditingName(false);
+      return;
+    }
+    setNameBusy(true);
+    setNameError(null);
+    try {
+      const res = await apiPut<{ ok: boolean; user: SessionUser }>('/api/auth/profile', {
+        display_name: value || null,
+      });
+      setUser(res.user);
+      setEditingName(false);
+    } catch (err) {
+      setNameError(apiErrorText(err, t('settings.profileError')));
+    } finally {
+      setNameBusy(false);
+    }
+  };
+
+  const saveEmail = async () => {
+    const value = emailDraft.trim();
+    if (value === (user.email || '')) {
+      setEditingEmail(false);
+      return;
+    }
+    setEmailBusy(true);
+    setEmailError(null);
+    try {
+      const res = await apiPut<{ ok: boolean; user: SessionUser }>('/api/auth/profile', {
+        email: value || null,
+      });
+      setUser(res.user);
+      setEditingEmail(false);
+    } catch (err) {
+      setEmailError(apiErrorText(err, t('settings.profileError')));
+    } finally {
+      setEmailBusy(false);
+    }
+  };
+
+  const cancelName = () => {
+    setNameDraft(user.display_name || user.username);
+    setNameError(null);
+    setEditingName(false);
+  };
+
+  const cancelEmail = () => {
+    setEmailDraft(user.email || '');
+    setEmailError(null);
+    setEditingEmail(false);
+  };
+
   const logout = async () => {
     try {
       await apiPost('/api/auth/logout', undefined, { noAuthEvent: true });
@@ -99,96 +166,175 @@ function MiPerfilCard() {
     dispatchUnauthorized();
   };
 
-  const btnCls =
-    'inline-flex h-9 items-center gap-1.5 rounded-lg border border-app bg-surface2 px-3 text-[13px] font-medium text-muted transition-colors hover:bg-surface hover:text-text-primary';
-  const btnIconCls = 'inline-flex h-9 w-9 items-center justify-center rounded-lg border border-app bg-surface2 text-muted transition-colors hover:bg-surface hover:text-text-primary sm:hidden';
+  const actionBtnCls =
+    'inline-flex h-9 items-center gap-1.5 rounded-lg border border-app bg-surface2 px-2.5 sm:px-3 text-[13px] font-medium text-muted transition-colors hover:bg-surface hover:text-text-primary';
+  const actionTextCls = 'hidden sm:inline';
 
   return (
     <Card>
       <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-        {/* Avatar + nombre */}
+        {/* Avatar */}
         <Avatar name={user.username} color={user.color} size="xl" />
+
+        {/* Nombre + privilegios */}
         <div className="min-w-0 flex-1">
-          <p className="text-[16px] font-semibold leading-tight truncate">{user.username}</p>
+          {editingName ? (
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={nameDraft}
+                onChange={(e) => setNameDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void saveName();
+                  if (e.key === 'Escape') cancelName();
+                }}
+                disabled={nameBusy}
+                className={inputCls + ' h-9 py-1 text-[15px]'}
+                placeholder={user.username}
+                autoFocus
+              />
+              <button
+                type="button"
+                onClick={() => void saveName()}
+                disabled={nameBusy}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-brand text-brandfg transition-colors hover:brightness-110 disabled:opacity-50"
+                aria-label={t('common.save')}
+              >
+                <Check className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={cancelName}
+                disabled={nameBusy}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-app bg-surface2 text-muted transition-colors hover:bg-surface hover:text-text-primary"
+                aria-label={t('common.cancel')}
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setEditingName(true)}
+              className="group flex items-center gap-1.5 min-w-0"
+              title={t('settings.editName')}
+            >
+              <p className="text-[16px] font-semibold leading-tight truncate">{displayName}</p>
+              <Pencil className="w-3.5 h-3.5 text-faint opacity-0 group-hover:opacity-100 transition-opacity" aria-hidden="true" />
+            </button>
+          )}
           <p className="text-[13px] text-faint leading-tight mt-0.5">{t(`settings.role.${user.role}`)}</p>
+          {nameError && <p role="alert" className="text-[12px] text-rose-600 dark:text-rose-400 mt-1">{nameError}</p>}
         </div>
 
-        {/* Icono email (decorativo, no funcional todavía) */}
-        <span
-          className="hidden sm:inline-flex h-9 w-9 items-center justify-center rounded-full bg-amber-500/10 text-amber-500"
-          aria-hidden="true"
-          title={t('settings.email')}
-        >
-          <Mail className="w-4 h-4" />
-        </span>
+        {/* Email + acciones agrupadas a la izquierda */}
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          {editingEmail ? (
+            <div className="flex items-center gap-2">
+              <input
+                type="email"
+                value={emailDraft}
+                onChange={(e) => setEmailDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void saveEmail();
+                  if (e.key === 'Escape') cancelEmail();
+                }}
+                disabled={emailBusy}
+                className={inputCls + ' h-9 py-1 text-[13px] w-[180px] sm:w-[220px]'}
+                placeholder={t('settings.emailPlaceholder')}
+                autoFocus
+              />
+              <button
+                type="button"
+                onClick={() => void saveEmail()}
+                disabled={emailBusy}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-brand text-brandfg transition-colors hover:brightness-110 disabled:opacity-50"
+                aria-label={t('common.save')}
+              >
+                <Check className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={cancelEmail}
+                disabled={emailBusy}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-app bg-surface2 text-muted transition-colors hover:bg-surface hover:text-text-primary"
+                aria-label={t('common.cancel')}
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setEditingEmail(true)}
+              className={`inline-flex h-9 w-9 items-center justify-center rounded-full transition-colors ${
+                user.email
+                  ? 'bg-amber-500/10 text-amber-500 hover:bg-amber-500/20'
+                  : 'bg-surface2 text-faint border border-app hover:bg-surface hover:text-text-primary'
+              }`}
+              title={user.email ? user.email : t('settings.addEmail')}
+              aria-label={user.email ? t('settings.editEmail') : t('settings.addEmail')}
+            >
+              <Mail className="w-4 h-4" />
+            </button>
+          )}
 
-        {/* Idioma */}
-        <label htmlFor="mp-lang" className="sr-only">{t('settings.language')}</label>
-        <select
-          id="mp-lang"
-          value={user.language ?? 'auto'}
-          onChange={(e) => void changeLanguage(e.target.value as Language)}
-          className="h-9 w-[120px] shrink-0 rounded-lg border border-app bg-elevated px-2 text-[13px] text-text-primary outline-none focus:border-brand"
-        >
-          <option value="auto">🌐 {t('settings.langAuto')}</option>
-          <option value="es">🇪🇸 Español</option>
-          <option value="en">🇬🇧 English</option>
-        </select>
+          {/* Idioma */}
+          <label htmlFor="mp-lang" className="sr-only">{t('settings.language')}</label>
+          <select
+            id="mp-lang"
+            value={user.language ?? 'auto'}
+            onChange={(e) => void changeLanguage(e.target.value as Language)}
+            className="h-9 w-[120px] shrink-0 rounded-lg border border-app bg-elevated px-2 text-[13px] text-text-primary outline-none focus:border-brand"
+          >
+            <option value="auto">🌐 {t('settings.langAuto')}</option>
+            <option value="es">🇪🇸 Español</option>
+            <option value="en">🇬🇧 English</option>
+          </select>
 
-        {/* Contraseña */}
-        {!demo && (
-          <>
+          {/* Contraseña */}
+          {!demo && (
             <button
               type="button"
               aria-expanded={showPwd}
               onClick={() => setShowPwd((v) => !v)}
-              className={btnCls}
+              className={actionBtnCls}
+              title={t('settings.password')}
             >
               <KeyRound className="w-4 h-4" aria-hidden="true" />
-              <span className="hidden sm:inline">{t('settings.changePassword')}</span>
+              <span className={actionTextCls}>{t('settings.password')}</span>
             </button>
-            <button
-              type="button"
-              aria-expanded={showPwd}
-              onClick={() => setShowPwd((v) => !v)}
-              className={btnIconCls}
-              aria-label={t('settings.changePassword')}
-            >
-              <KeyRound className="w-4 h-4" />
-            </button>
-          </>
-        )}
+          )}
 
-        {/* Notificaciones */}
-        <button
-          type="button"
-          aria-expanded={showNotif}
-          onClick={() => setShowNotif((v) => !v)}
-          className={btnCls}
-        >
-          <Bell className="w-4 h-4" aria-hidden="true" />
-          <span className="hidden sm:inline">{t('settings.notifications')}</span>
-        </button>
-        <button
-          type="button"
-          aria-expanded={showNotif}
-          onClick={() => setShowNotif((v) => !v)}
-          className={btnIconCls}
-          aria-label={t('settings.notifications')}
-        >
-          <Bell className="w-4 h-4" />
-        </button>
+          {/* Notificaciones */}
+          <button
+            type="button"
+            aria-expanded={showNotif}
+            onClick={() => setShowNotif((v) => !v)}
+            className={actionBtnCls}
+            title={t('settings.notifications')}
+          >
+            <Bell className="w-4 h-4" aria-hidden="true" />
+            <span className={actionTextCls}>{t('settings.notifications')}</span>
+          </button>
+        </div>
 
-        {/* Cerrar sesión */}
+        {/* Cerrar sesión — siempre a la derecha, con texto y rojo */}
         <button
           type="button"
           onClick={() => void logout()}
-          className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-danger/30 bg-danger/10 px-3 text-[13px] font-medium text-danger transition-colors hover:bg-danger/15"
+          className="ml-auto inline-flex h-9 items-center gap-1.5 rounded-lg border border-danger/30 bg-danger/10 px-3 text-[13px] font-medium text-danger transition-colors hover:bg-danger/15 shrink-0"
         >
           <LogOut className="w-4 h-4" aria-hidden="true" />
           {demo ? t('demo.exit') : t('settings.logout')}
         </button>
       </div>
+
+      {emailError && (
+        <p role="alert" className="text-[13px] font-medium text-rose-600 dark:text-rose-400 mt-3">
+          {emailError}
+        </p>
+      )}
 
       {langError && (
         <p role="alert" className="text-[13px] font-medium text-rose-600 dark:text-rose-400 mt-3">

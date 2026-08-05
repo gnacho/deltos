@@ -124,7 +124,7 @@ function countAdmins(db) {
   return db.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'admin'").get().n
 }
 
-const USER_COLS = 'id, username, email, phone, color, language, role, created_at'
+const USER_COLS = 'id, username, display_name, email, phone, color, language, role, created_at'
 
 // --- Helpers ----------------------------------------------------------------
 

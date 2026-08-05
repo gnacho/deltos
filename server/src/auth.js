@@ -70,7 +70,7 @@ export function destroySession(db, sessionId) {
   db.prepare('DELETE FROM sessions WHERE id = ?').run(sessionId)
 }
 
-const USER_PUBLIC_COLS = 'id, username, email, phone, color, language, role, created_at'
+const USER_PUBLIC_COLS = 'id, username, display_name, email, phone, color, language, role, created_at'
 
 // Resuelve la cookie de sesión contra la BD de producción y, si no está,
 // contra la BD demo. Devuelve { db, demo, user, sessionId } o null.
@@ -151,15 +151,15 @@ export async function registerUser(db, username, password, { color = 'slate', la
   const hash = await bcrypt.hash(password, 10)
   const id = crypto.randomUUID()
   db.prepare(
-    'INSERT INTO users (id, username, password_hash, color, language, role, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
-  ).run(id, username, hash, color, language, role, Date.now())
+    'INSERT INTO users (id, username, display_name, password_hash, color, language, role, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(id, username, username, hash, color, language, role, Date.now())
   return db.prepare(`SELECT ${USER_PUBLIC_COLS} FROM users WHERE id = ?`).get(id)
 }
 
 export function updateUser(db, id, updates) {
   const fields = []
   const values = []
-  for (const key of ['email', 'phone', 'language', 'color']) {
+  for (const key of ['display_name', 'email', 'phone', 'language', 'color']) {
     if (updates[key] !== undefined) {
       fields.push(`${key} = ?`)
       values.push(updates[key])
@@ -195,8 +195,8 @@ export async function ensureBootstrapAdmin(db, username, password) {
   if (existing) return false
   const hash = await bcrypt.hash(password, 10)
   db.prepare(
-    "INSERT INTO users (id, username, password_hash, color, language, role, created_at) VALUES (?, ?, ?, 'violet', 'auto', 'admin', ?)"
-  ).run(crypto.randomUUID(), username, hash, Date.now())
+    "INSERT INTO users (id, username, display_name, password_hash, color, language, role, created_at) VALUES (?, ?, ?, ?, 'violet', 'auto', 'admin', ?)"
+  ).run(crypto.randomUUID(), username, username, hash, Date.now())
   log.info('bootstrap_admin_created', { username })
   return true
 }

@@ -55,11 +55,11 @@ export function seedDemo(db, uploadsDir) {
   const tx = db.transaction(() => {
     // --- Usuarios: Mar / Jordi + demo (sin contraseña usable) ---
     const insUser = db.prepare(
-      'INSERT INTO users (id, username, password_hash, color, language, role, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO users (id, username, display_name, password_hash, color, language, role, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
     )
-    insUser.run('mar', 'mar', hash, 'violet', 'auto', 'admin', now - 30 * DAY)
-    insUser.run('jordi', 'jordi', hash, 'teal', 'auto', 'user', now - 30 * DAY)
-    insUser.run('demo', 'demo', '!sin-contraseña', 'slate', 'auto', 'user', now - 30 * DAY)
+    insUser.run('mar', 'mar', 'Mar', hash, 'violet', 'auto', 'admin', now - 30 * DAY)
+    insUser.run('jordi', 'jordi', 'Jordi', hash, 'teal', 'auto', 'user', now - 30 * DAY)
+    insUser.run('demo', 'demo', 'Demo', '!sin-contraseña', 'slate', 'auto', 'user', now - 30 * DAY)
 
     // --- Proyectos (4, del mockup) ---
     const insProject = db.prepare(

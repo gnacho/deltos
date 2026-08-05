@@ -36,6 +36,7 @@ const loginSchema = z.object({
 
 const profileSchema = z
   .object({
+    display_name: z.string().trim().max(50).nullable(),
     email: z.string().email().max(120).nullable(),
     phone: z.string().max(30).nullable(),
     language: z.enum(['auto', 'es', 'en']),
@@ -176,6 +177,7 @@ export function createApp(ctx) {
 
   app.put('/api/auth/profile', zValidator('json', profileSchema, validationHook), (c) => {
     const data = c.req.valid('json')
+    if (data.display_name === '') data.display_name = null
     const updated = auth.updateUser(c.get('db'), c.get('user').id, data)
     if (!updated) httpError(400, ERROR_CODES.BAD_REQUEST)
     hub.broadcast('users')

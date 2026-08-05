@@ -8,6 +8,7 @@ export type Role = 'admin' | 'user';
 export interface SessionUser {
   id: string;
   username: string;
+  display_name: string | null;
   email: string | null;
   phone: string | null;
   color: string;

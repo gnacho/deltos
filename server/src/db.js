@@ -13,6 +13,7 @@ const SCHEMA = `
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   username TEXT UNIQUE NOT NULL,
+  display_name TEXT,
   password_hash TEXT NOT NULL,
   email TEXT,
   phone TEXT,
@@ -203,6 +204,10 @@ export function openDb(file) {
 // las migraciones verifican y añaden columnas al arrancar.
 export function migrateSchema(db) {
   const userCols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name)
+  if (!userCols.includes('display_name')) {
+    db.exec('ALTER TABLE users ADD COLUMN display_name TEXT')
+    log.info('schema_migrated', { table: 'users', column: 'display_name' })
+  }
   if (!userCols.includes('color')) {
     db.exec("ALTER TABLE users ADD COLUMN color TEXT DEFAULT 'slate'")
     log.info('schema_migrated', { table: 'users', column: 'color' })
