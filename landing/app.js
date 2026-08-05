@@ -1,4 +1,4 @@
-/* Deltos landing — interactividad: idioma, tema, slider, contadores, reveal, copiar */
+/* Deltos landing — interactividad: idioma, tema, capturas por idioma/tema, post-its, reveal, copiar */
 (function () {
   'use strict';
 
@@ -7,15 +7,13 @@
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const root = document.documentElement;
 
-  /* Capturas: orden de las vistas + alt por idioma */
-  const SLIDES = ['board', 'project', 'projects', 'activity', 'settings'];
-  const SHOT_ALT = {
-    board: { es: 'Tablero de Deltos: todas las tareas en columnas Nuevo, En curso y Hecho, con proyectos y etiquetas', en: 'Deltos board: all tasks in New, In progress and Done columns, with projects and labels' },
-    project: { es: 'Tablero del proyecto Casa con sus tarjetas, etiquetas y responsables', en: 'Home project board with its cards, labels and assignees' },
-    projects: { es: 'Listado de proyectos de Deltos con su progreso', en: 'Deltos project list with its progress' },
-    activity: { es: 'Feed de actividad de Deltos: quién movió cada tarjeta y cuándo', en: 'Deltos activity feed: who moved each card and when' },
-    settings: { es: 'Página de ajustes de Deltos con apariencia, etiquetas, perfil y sesión', en: 'Deltos settings page with appearance, labels, profile and session' }
-  };
+  /* Capturas por idioma/tema: la clave id se mapea a ficheros shot-<id>-<lang>-<theme>.webp */
+  const SHOTS = [
+    { id: 'board', el: document.getElementById('heroShot') },
+    { id: 'casa', el: document.getElementById('shotCasa') },
+    { id: 'viaje', el: document.getElementById('shotViaje') },
+    { id: 'trabajo', el: document.getElementById('shotTrabajo') },
+  ];
 
   /* ---------- Idioma ---------- */
   function applyLang(lang) {
@@ -65,7 +63,7 @@
     root.setAttribute('data-theme', theme);
     if (themeIcon) themeIcon.innerHTML = iconPath(theme);
     const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute('content', theme === 'dark' ? '#17150f' : '#f7f5f0');
+    if (meta) meta.setAttribute('content', theme === 'dark' ? '#1b140c' : '#f6f1e8');
     try { localStorage.setItem(THEME_KEY, theme); } catch (e) { /* noop */ }
     applyShots();
   }
@@ -79,65 +77,30 @@
 
   function themeNow() { return root.getAttribute('data-theme') || 'light'; }
   function langNow() { return root.lang || 'es'; }
-  const mobileMq = window.matchMedia('(max-width: 767px)');
-  function shotUrl(view) {
-    const prefix = mobileMq.matches ? 'shot-m-' : 'shot-';
-    return 'assets/' + prefix + view + '-' + langNow() + '-' + themeNow() + '.webp';
+  function shotUrl(id) {
+    return 'assets/shot-' + id + '-' + langNow() + '-' + themeNow() + '.webp';
   }
 
-  /* ---------- Slider de capturas ---------- */
-  const shotImg = document.getElementById('shotImg');
-  const shotCaption = document.getElementById('shotCaption');
-  let shotIndex = 0;
-
+  /* ---------- Capturas por idioma/tema ---------- */
   function applyShots() {
-    document.querySelectorAll('.thumb img').forEach(function (img) {
-      img.src = shotUrl(img.dataset.view);
-    });
-    renderShot(shotIndex);
-  }
-
-  function renderShot(i) {
-    shotIndex = (i + SLIDES.length) % SLIDES.length;
-    const view = SLIDES[shotIndex];
-    shotImg.src = shotUrl(view);
-    shotImg.alt = SHOT_ALT[view][langNow()];
-    const dict = I18N[langNow()] || I18N.es;
-    shotCaption.textContent = dict['shots.s' + (shotIndex + 1)] || '';
-    document.querySelectorAll('.thumb').forEach(function (th, idx) {
-      th.classList.toggle('active', idx === shotIndex);
+    SHOTS.forEach(function (s) {
+      if (s.el) s.el.src = shotUrl(s.id);
     });
   }
 
-  const shotPrev = document.getElementById('shotPrev');
-  const shotNext = document.getElementById('shotNext');
-  if (shotPrev) shotPrev.addEventListener('click', function () { renderShot(shotIndex - 1); });
-  if (shotNext) shotNext.addEventListener('click', function () { renderShot(shotIndex + 1); });
-  document.querySelectorAll('.thumb').forEach(function (th) {
-    th.addEventListener('click', function () { renderShot(parseInt(th.dataset.slide, 10)); });
-  });
-  if (mobileMq.addEventListener) mobileMq.addEventListener('change', applyShots);
-
-  /* ---------- Lightbox ---------- */
+  /* ---------- Lightbox: zoom de cualquier captura ---------- */
   const lightbox = document.getElementById('shotLightbox');
   const lightboxImg = document.getElementById('lightboxImg');
   const lightboxCaption = document.getElementById('lightboxCaption');
   const lightboxClose = document.getElementById('lightboxClose');
-  const lightboxPrev = document.getElementById('lightboxPrev');
-  const lightboxNext = document.getElementById('lightboxNext');
 
-  function syncLightbox() {
-    if (!lightbox || lightbox.hidden) return;
-    lightboxImg.src = shotImg.src;
-    lightboxImg.alt = shotImg.alt;
-    lightboxCaption.textContent = shotCaption.textContent;
-  }
-
-  function openLightbox() {
+  function openLightbox(img) {
     if (!lightbox) return;
+    lightboxImg.src = img.src;
+    lightboxImg.alt = img.alt || '';
+    lightboxCaption.textContent = '';
     lightbox.hidden = false;
     lightbox.setAttribute('aria-hidden', 'false');
-    syncLightbox();
     if (lightboxClose) lightboxClose.focus();
     document.body.style.overflow = 'hidden';
   }
@@ -147,57 +110,51 @@
     lightbox.hidden = true;
     lightbox.setAttribute('aria-hidden', 'true');
     document.body.style.overflow = '';
-    if (shotImg) shotImg.focus();
   }
 
-  if (shotImg) shotImg.addEventListener('click', openLightbox);
+  document.querySelectorAll('.taped img, .scene-shot img').forEach(function (img) {
+    img.addEventListener('click', function () { openLightbox(img); });
+    img.setAttribute('tabindex', '0');
+    img.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openLightbox(img); }
+    });
+  });
   if (lightboxClose) lightboxClose.addEventListener('click', closeLightbox);
-  if (lightboxPrev) lightboxPrev.addEventListener('click', function () { renderShot(shotIndex - 1); syncLightbox(); });
-  if (lightboxNext) lightboxNext.addEventListener('click', function () { renderShot(shotIndex + 1); syncLightbox(); });
   if (lightbox) {
     lightbox.addEventListener('click', function (e) { if (e.target === lightbox) closeLightbox(); });
     document.addEventListener('keydown', function (e) {
       if (lightbox.hidden) return;
       if (e.key === 'Escape') closeLightbox();
-      else if (e.key === 'ArrowLeft') { renderShot(shotIndex - 1); syncLightbox(); }
-      else if (e.key === 'ArrowRight') { renderShot(shotIndex + 1); syncLightbox(); }
     });
   }
 
-  /* ---------- Contadores ---------- */
-  function animateCount(el) {
-    const target = parseFloat(el.getAttribute('data-count')) || 0;
-    const decimals = parseInt(el.getAttribute('data-decimals') || '0', 10);
-    const suffix = el.getAttribute('data-suffix') || '';
-    if (reduceMotion) {
-      el.textContent = (decimals ? target.toFixed(decimals) : String(target)) + suffix;
-      return;
+  /* ---------- Post-its del hero: se "pegan" con giro ---------- */
+  const heroStickies = Array.prototype.slice.call(document.querySelectorAll('.hero-stickies .sticky, .hero-note'));
+  const tapeWiggle = [-2, 1.5, -1];
+  heroStickies.forEach(function (el, i) {
+    el.style.setProperty('--tape', tapeWiggle[i % tapeWiggle.length] + 'deg');
+    if (!reduceMotion) {
+      el.style.opacity = '0';
+      el.style.transform = 'rotate(' + (tapeWiggle[i % tapeWiggle.length] - 6) + 'deg) scale(0.9)';
     }
-    const dur = 900;
-    const start = performance.now();
-    function tick(now) {
-      const t = Math.min((now - start) / dur, 1);
-      const eased = 1 - Math.pow(1 - t, 3);
-      const v = target * eased;
-      el.textContent = (decimals ? v.toFixed(decimals) : String(Math.round(v))) + suffix;
-      if (t < 1) requestAnimationFrame(tick);
-    }
-    requestAnimationFrame(tick);
+  });
+  function stickNotes() {
+    heroStickies.forEach(function (el, i) {
+      el.style.transition = 'transform 420ms var(--ease-out), opacity 420ms var(--ease-out)';
+      el.style.opacity = '1';
+      el.style.transform = 'rotate(var(--tape)) scale(1)';
+      setTimeout(function () { el.style.transition = ''; }, 450);
+    });
   }
-
-  const counters = Array.prototype.slice.call(document.querySelectorAll('.mini-stat [data-count]'));
-  if ('IntersectionObserver' in window) {
-    const co = new IntersectionObserver(function (entries) {
-      entries.forEach(function (entry) {
-        if (entry.isIntersecting) {
-          animateCount(entry.target);
-          co.unobserve(entry.target);
-        }
+  if (heroStickies.length && 'IntersectionObserver' in window && !reduceMotion) {
+    const so = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) { stickNotes(); so.disconnect(); }
       });
-    }, { threshold: 0.4 });
-    counters.forEach(function (c) { co.observe(c); });
+    }, { threshold: 0.2 });
+    so.observe(document.getElementById('heroBoard') || document.body);
   } else {
-    counters.forEach(animateCount);
+    heroStickies.forEach(function (el) { el.style.opacity = '1'; el.style.transform = 'rotate(var(--tape)) scale(1)'; });
   }
 
   /* ---------- Reveal al hacer scroll ---------- */
@@ -252,7 +209,6 @@
   /* ---------- Arranque ---------- */
   applyTheme(initialTheme());
   applyLang(initialLang());
-  renderShot(0);
 
   function initialTheme() {
     try {
