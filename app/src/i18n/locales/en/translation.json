@@ -309,6 +309,12 @@
       "deleteUser": "Delete user",
       "updateError": "Could not update user"
     },
+    "admin": {
+      "title": "Administration",
+      "backup": {
+        "timerInfo": "Scheduled at {{file}}"
+      }
+    },
     "about": {
       "title": "About",
       "desc": "Task manager with a kanban view for simple projects, for personal use or small teams.",

@@ -1,23 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   User,
-  Users,
   Sun,
   Moon,
   Monitor,
   Download,
-  Sparkles,
   KeyRound,
   LogOut,
   Check,
   X,
-  UserPlus,
   Info,
-  ExternalLink,
-  RefreshCw,
-  Trash2,
   Bell,
   Tag,
   Pencil,
@@ -25,13 +19,11 @@ import {
   FileText,
   Heart,
   ShieldCheck,
-  Database,
-  Paperclip,
-  HardDrive,
   Mail,
+  Trash2,
 } from 'lucide-react';
 import { z } from 'zod';
-import { apiFetch, apiPost, apiPut, apiDelete, dispatchUnauthorized, ApiError } from '@/data/api-client';
+import { apiPost, apiPut, dispatchUnauthorized, ApiError } from '@/data/api-client';
 import { apiErrorText, fieldErrors } from '@/lib/errors';
 import type { Label, Language, SessionUser } from '@/data/types';
 import { useSession } from '@/auth/session-context';
@@ -44,8 +36,8 @@ import { applyUserLanguage } from '@/i18n';
 import { Avatar } from '@/components/Avatar';
 import { LogoMark } from '@/components/Logo';
 import { useInstallPrompt } from '@/hooks/useInstallPrompt';
-import { useAppUpdate } from '@/hooks/useAppUpdate';
 import { usePush } from '@/hooks/usePush';
+import AdminBar from './AdminBar';
 import pkg from '../../package.json';
 
 function Card({ children, className }: { children: React.ReactNode; className?: string }) {
@@ -601,74 +593,6 @@ function InstallCard({
 }
 
 /* ---------------- Modo demo (solo admin de producción) ---------------- */
-function DemoCard() {
-  const { t } = useTranslation();
-  const [enabled, setEnabled] = useState<boolean | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    apiFetch<{ demo_enabled: boolean }>('/api/settings/demo')
-      .then((res) => {
-        if (!cancelled) setEnabled(res.demo_enabled);
-      })
-      .catch(() => {
-        if (!cancelled) setError(t('settings.demoError'));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [t]);
-
-  const toggle = async () => {
-    if (enabled === null || busy) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await apiPut<{ demo_enabled: boolean }>('/api/settings/demo', {
-        enabled: !enabled,
-      });
-      setEnabled(res.demo_enabled);
-    } catch (err) {
-      setError(apiErrorText(err, t('settings.demoError')));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <Card>
-      <Heading icon={Sparkles}>{t('settings.demoMode')}</Heading>
-      <div className="flex items-center justify-between gap-4">
-        <p className="text-[13px] text-faint flex-1">{t('settings.demoHint')}</p>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={enabled === true}
-          aria-label={t('settings.demoMode')}
-          disabled={enabled === null || busy}
-          onClick={() => void toggle()}
-          className={`relative w-12 h-7 rounded-full shrink-0 transition-colors disabled:opacity-50 ${
-            enabled ? 'bg-brand' : 'bg-surface2 border border-app'
-          }`}
-        >
-          <span
-            className={`absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-white shadow transition-transform ${
-              enabled ? 'translate-x-5' : ''
-            }`}
-          />
-        </button>
-      </div>
-      {error && (
-        <p role="alert" className="text-[13px] font-medium text-rose-600 dark:text-rose-400 mt-2">
-          {error}
-        </p>
-      )}
-    </Card>
-  );
-}
-
 /* ---------------- Contraseña ---------------- */
 const pwSchema = z.object({
   current: z.string().min(1),
@@ -767,295 +691,6 @@ function PasswordForm() {
     </form>
   );
 }
-
-/* ---------------- Usuarios (solo admin) ---------------- */
-interface AdminUser {
-  id: string;
-  username: string;
-  language: string;
-  role: 'user' | 'admin';
-  color?: string | null;
-}
-
-function UsersCard() {
-  const { t } = useTranslation();
-  const { user: me } = useSession();
-  const [users, setUsers] = useState<AdminUser[]>([]);
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [language, setLanguage] = useState('es');
-  const [role, setRole] = useState<'user' | 'admin'>('user');
-  const [pwdFor, setPwdFor] = useState<string | null>(null);
-  const [newPwd, setNewPwd] = useState('');
-  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [showCreate, setShowCreate] = useState(false);
-
-  const reload = () =>
-    apiFetch<{ users?: AdminUser[] }>('/api/users').then((d) => setUsers(d.users ?? []));
-
-  useEffect(() => {
-    reload().catch(() => setUsers([]));
-  }, []);
-
-  const create = async (e: FormEvent) => {
-    e.preventDefault();
-    if (busy || !username || !password) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await apiPost<{ user: AdminUser }>('/api/users', { username, password, language, role });
-      setUsers((us) => [...us, res.user]);
-      setUsername('');
-      setPassword('');
-      setLanguage('es');
-      setRole('user');
-      setShowCreate(false);
-    } catch (err) {
-      setError(apiErrorText(err, t('settings.users.createError')));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const changeRole = async (id: string, r: string) => {
-    setError(null);
-    try {
-      await apiPut(`/api/users/${id}/role`, { role: r });
-      await reload();
-    } catch (err) {
-      setError(apiErrorText(err, t('settings.users.updateError')));
-      await reload();
-    }
-  };
-
-  const changeLanguage = async (id: string, l: string) => {
-    setError(null);
-    try {
-      await apiPut(`/api/users/${id}/language`, { language: l });
-      await reload();
-    } catch (err) {
-      setError(apiErrorText(err, t('settings.users.updateError')));
-      await reload();
-    }
-  };
-
-  const resetPassword = async (id: string) => {
-    if (newPwd.length < 6) return;
-    setError(null);
-    try {
-      await apiPut(`/api/users/${id}/password`, { password: newPwd });
-      setPwdFor(null);
-      setNewPwd('');
-    } catch (err) {
-      setError(apiErrorText(err, t('settings.users.updateError')));
-    }
-  };
-
-  const remove = async (id: string) => {
-    setError(null);
-    try {
-      await apiDelete(`/api/users/${id}`);
-      setConfirmDelete(null);
-      setUsers((us) => us.filter((u) => u.id !== id));
-    } catch (err) {
-      setError(apiErrorText(err, t('settings.users.updateError')));
-      setConfirmDelete(null);
-    }
-  };
-
-  const selectCls = `${inputCls} !w-auto !py-1.5 text-[13px]`;
-  const iconBtnCls =
-    'inline-flex h-9 w-9 items-center justify-center rounded-xl border border-app bg-surface2 text-muted hover:text-text';
-
-  return (
-    <Card>
-      <Heading icon={Users}>{t('settings.users.title')}</Heading>
-      <p className="text-[13px] text-faint mb-4">{t('settings.users.subtitle')}</p>
-      <ul className="space-y-2 mb-4">
-        {users.map((u) => (
-          <li key={u.id} className="rounded-xl border border-app bg-surface2 px-3.5 py-2.5">
-            <div className="flex flex-wrap items-center gap-2">
-              <Avatar name={u.username} color={u.color ?? null} size="md" />
-              <div className="min-w-0 flex-1">
-                <p className="text-[14px] font-medium leading-tight truncate">
-                  {u.username}
-                  {u.id === me.id && (
-                    <span className="ml-1.5 text-[12px] font-normal text-faint">
-                      ({t('settings.users.you')})
-                    </span>
-                  )}
-                </p>
-                <p className="text-[12px] text-faint leading-tight">
-                  {u.role === 'admin' ? t('settings.users.roleAdmin') : t('settings.users.roleUser')}
-                </p>
-              </div>
-              <select
-                aria-label={t('settings.users.language')}
-                value={u.language ?? 'auto'}
-                onChange={(e) => void changeLanguage(u.id, e.target.value)}
-                className={selectCls}
-              >
-                <option value="auto">🌐 Auto</option>
-                <option value="es">🇪🇸 Español</option>
-                <option value="en">🇬🇧 English</option>
-              </select>
-              {u.id !== me.id && (
-                <>
-                  <select
-                    aria-label={t('settings.users.role')}
-                    value={u.role}
-                    onChange={(e) => void changeRole(u.id, e.target.value)}
-                    className={selectCls}
-                  >
-                    <option value="user">{t('settings.users.roleUser')}</option>
-                    <option value="admin">{t('settings.users.roleAdmin')}</option>
-                  </select>
-                  <button
-                    type="button"
-                    aria-label={t('settings.users.resetPassword')}
-                    title={t('settings.users.resetPassword')}
-                    className={iconBtnCls}
-                    onClick={() => {
-                      setPwdFor(pwdFor === u.id ? null : u.id);
-                      setNewPwd('');
-                    }}
-                  >
-                    <KeyRound className="w-4 h-4" aria-hidden="true" />
-                  </button>
-                  {confirmDelete === u.id ? (
-                    <span className="flex gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => void remove(u.id)}
-                        className="h-9 rounded-xl bg-rose-600 px-3 text-[13px] font-semibold text-white"
-                      >
-                        {t('common.confirm')}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setConfirmDelete(null)}
-                        className="h-9 rounded-xl border border-app px-3 text-[13px] text-muted"
-                      >
-                        {t('common.cancel')}
-                      </button>
-                    </span>
-                  ) : (
-                    <button
-                      type="button"
-                      aria-label={t('settings.users.deleteUser')}
-                      title={t('settings.users.deleteUser')}
-                      className={`${iconBtnCls} hover:text-rose-600 dark:hover:text-rose-400`}
-                      onClick={() => setConfirmDelete(u.id)}
-                    >
-                      <Trash2 className="w-4 h-4" aria-hidden="true" />
-                    </button>
-                  )}
-                </>
-              )}
-            </div>
-            {pwdFor === u.id && (
-              <form
-                className="mt-3 flex items-end gap-2"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  void resetPassword(u.id);
-                }}
-              >
-                <input
-                  type="password"
-                  autoComplete="new-password"
-                  minLength={6}
-                  value={newPwd}
-                  onChange={(e) => setNewPwd(e.target.value)}
-                  placeholder={t('settings.users.newPassword')}
-                  className={`${inputCls} flex-1`}
-                />
-                <button
-                  type="submit"
-                  disabled={newPwd.length < 6}
-                  className="h-[42px] rounded-xl bg-brand px-4 text-[13px] font-semibold text-brandfg hover:brightness-110 disabled:opacity-60"
-                >
-                  {t('common.save')}
-                </button>
-              </form>
-            )}
-          </li>
-        ))}
-      </ul>
-      {error && (
-        <p role="alert" className="mb-4 text-[13px] font-medium text-rose-600 dark:text-rose-400">
-          {error}
-        </p>
-      )}
-
-      {!showCreate ? (
-        <button
-          type="button"
-          onClick={() => setShowCreate(true)}
-          className="inline-flex h-11 items-center gap-2 rounded-xl border border-app bg-surface2 px-5 text-[14px] font-semibold hover:bg-surface"
-        >
-          <UserPlus className="w-4 h-4" aria-hidden="true" />
-          {t('settings.users.create')}
-        </button>
-      ) : (
-        <form onSubmit={create} className="space-y-4 border-t border-app pt-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <label htmlFor="nu-username" className={labelCls}>{t('settings.users.username')}</label>
-              <input id="nu-username" autoComplete="off" value={username} onChange={(e) => setUsername(e.target.value)} className={inputCls} />
-            </div>
-            <div>
-              <label htmlFor="nu-password" className={labelCls}>{t('settings.users.password')}</label>
-              <input id="nu-password" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} className={inputCls} />
-            </div>
-            <div>
-              <label htmlFor="nu-lang" className={labelCls}>{t('settings.users.language')}</label>
-              <select id="nu-lang" value={language} onChange={(e) => setLanguage(e.target.value)} className={inputCls}>
-                <option value="es">🇪🇸 Español</option>
-                <option value="en">🇬🇧 English</option>
-              </select>
-            </div>
-            <div>
-              <label htmlFor="nu-role" className={labelCls}>{t('settings.users.role')}</label>
-              <select id="nu-role" value={role} onChange={(e) => setRole(e.target.value as 'user' | 'admin')} className={inputCls}>
-                <option value="user">{t('settings.users.roleUser')}</option>
-                <option value="admin">{t('settings.users.roleAdmin')}</option>
-              </select>
-            </div>
-          </div>
-          {error && (
-            <p role="alert" className="text-[13px] font-medium text-rose-600 dark:text-rose-400">
-              {error}
-            </p>
-          )}
-          <div className="flex gap-2">
-            <button
-              type="submit"
-              disabled={busy || !username || !password}
-              className="inline-flex h-11 items-center gap-2 rounded-xl bg-brand px-5 text-[14px] font-semibold text-brandfg hover:brightness-110 disabled:opacity-60"
-            >
-              <UserPlus className="w-4 h-4" aria-hidden="true" />
-              {busy ? t('settings.users.creating') : t('settings.users.create')}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setShowCreate(false);
-                setError(null);
-              }}
-              className="h-11 rounded-xl border border-app px-5 text-[14px] text-muted hover:bg-surface2"
-            >
-              {t('common.cancel')}
-            </button>
-          </div>
-        </form>
-      )}
-    </Card>
-  );
-}
-
 
 /* ---------------- Etiquetas (todos los usuarios) ---------------- */
 function ColorSwatches({
@@ -1313,7 +948,6 @@ const REPO_URL = 'https://github.com/gnacho/deltos';
 
 function AboutCard() {
   const { t } = useTranslation();
-  const upd = useAppUpdate(pkg.version, REPO_URL);
   const tiles: { icon: typeof Github; label: string; href?: string }[] = [
     { icon: Github, label: t('settings.about.code'), href: REPO_URL },
     { icon: FileText, label: t('settings.about.changelog'), href: `${REPO_URL}/commits/main` },
@@ -1355,242 +989,9 @@ function AboutCard() {
         </div>
       </div>
 
-      {/* Comprobar actualizaciones: nada si no hay repo ni service worker */}
-      {upd.supported && (
-        <div className="mt-3 flex flex-wrap items-center gap-2.5">
-          {upd.swWaiting ? (
-            <button
-              type="button"
-              onClick={upd.applySw}
-              className="inline-flex h-10 items-center gap-2 rounded-xl bg-brand px-4 text-[14px] font-semibold text-brandfg hover:brightness-110"
-            >
-              <Download className="w-4 h-4" aria-hidden="true" />
-              {t('settings.about.updateNow')}
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => void upd.check()}
-              disabled={upd.state === 'checking'}
-              className="inline-flex h-10 items-center gap-2 rounded-xl border border-app bg-surface2 px-4 text-[14px] font-semibold hover:bg-surface disabled:opacity-60"
-            >
-              <RefreshCw
-                className={`w-4 h-4 ${upd.state === 'checking' ? 'animate-spin' : ''}`}
-                aria-hidden="true"
-              />
-              {upd.state === 'checking'
-                ? t('settings.about.checking')
-                : t('settings.about.checkUpdates')}
-            </button>
-          )}
-          {upd.state === 'up-to-date' && (
-            <span
-              role="status"
-              className="inline-flex items-center gap-1.5 text-[13px] font-medium text-ok"
-            >
-              <Check className="w-4 h-4" aria-hidden="true" />
-              {t('settings.about.upToDate', { version: pkg.version })}
-            </span>
-          )}
-          {upd.state === 'available' && upd.latest && (
-            <>
-              <span role="status" className="text-[13px] font-medium text-ok">
-                {t('settings.about.updateAvailable', { version: upd.latest.version })}
-              </span>
-              <a
-                href={upd.latest.url}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-ok/40 bg-ok/10 px-3 text-[13px] font-medium text-ok"
-              >
-                <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" />
-                {t('settings.about.viewRelease')}
-              </a>
-            </>
-          )}
-          {upd.state === 'error' && (
-            <span role="alert" className="text-[13px] font-medium text-rose-600 dark:text-rose-400">
-              {t('settings.about.updateError')}
-            </span>
-          )}
-        </div>
-      )}
       <p className="mt-5 border-t border-app pt-3 font-mono text-[12px] text-faint">
         {t('settings.about.stack')}
       </p>
-    </Card>
-  );
-}
-
-/* ---------------- Servidor (admin): backup + adjuntos ---------------- */
-interface ServerSettings {
-  backup_enabled: boolean;
-  backup_retention_days: number;
-  max_attachments_per_task: number;
-  backup_last_run: string | null;
-  backup_path: string | null;
-}
-
-function ServerSettingsCard() {
-  const { t } = useTranslation();
-  const [settings, setSettings] = useState<ServerSettings | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [backupBusy, setBackupBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    apiFetch<ServerSettings>('/api/settings/server')
-      .then((res) => { if (!cancelled) setSettings(res); })
-      .catch(() => { if (!cancelled) setError(t('settings.server.saveError')); });
-    return () => { cancelled = true; };
-  }, [t]);
-
-  const save = async (patch: Partial<ServerSettings>) => {
-    if (!settings || busy) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const updated = await apiPut<ServerSettings>('/api/settings/server', {
-        backup_enabled: patch.backup_enabled ?? settings.backup_enabled,
-        backup_retention_days: patch.backup_retention_days ?? settings.backup_retention_days,
-        max_attachments_per_task: patch.max_attachments_per_task ?? settings.max_attachments_per_task,
-      });
-      setSettings(updated);
-    } catch (err) {
-      setError(apiErrorText(err, t('settings.server.saveError')));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const runBackup = async () => {
-    if (backupBusy) return;
-    setBackupBusy(true);
-    setSuccess(null);
-    setError(null);
-    try {
-      await apiPost('/api/settings/backup/run');
-      setSuccess(t('settings.server.backupDone'));
-      const refreshed = await apiFetch<ServerSettings>('/api/settings/server');
-      setSettings(refreshed);
-    } catch (err) {
-      setError(apiErrorText(err, t('settings.server.backupError')));
-    } finally {
-      setBackupBusy(false);
-    }
-  };
-
-  if (!settings) return null;
-
-  return (
-    <Card>
-      <Heading icon={HardDrive}>{t('settings.server.title')}</Heading>
-      <p className="text-[13px] text-faint mb-4">{t('settings.server.subtitle')}</p>
-
-      {/* Backup */}
-      <div className="rounded-xl border border-app bg-surface2/50 p-4 space-y-3">
-        <div className="flex items-start gap-3">
-          <Database className="w-4.5 h-4.5 text-brand mt-0.5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
-          <div className="flex-1 min-w-0">
-            <p className="text-[14px] font-semibold">{t('settings.server.backup')}</p>
-            <p className="text-[12px] text-faint mt-0.5">{t('settings.server.backupHint')}</p>
-          </div>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={settings.backup_enabled}
-            aria-label={t('settings.server.backupEnabled')}
-            disabled={busy}
-            onClick={() => void save({ backup_enabled: !settings.backup_enabled })}
-            className={`relative w-12 h-7 rounded-full shrink-0 transition-colors disabled:opacity-50 ${
-              settings.backup_enabled ? 'bg-brand' : 'bg-surface2 border border-app'
-            }`}
-          >
-            <span
-              className={`absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-white shadow transition-transform ${
-                settings.backup_enabled ? 'translate-x-5' : ''
-              }`}
-            />
-          </button>
-        </div>
-
-        <div className="flex items-center gap-3 pl-7.5">
-          <label className="text-[13px] text-muted whitespace-nowrap">
-            {t('settings.server.backupRetention')}
-          </label>
-          <input
-            type="number"
-            min={1}
-            max={365}
-            value={settings.backup_retention_days}
-            onChange={(e) => {
-              const v = Math.max(1, Math.min(365, parseInt(e.target.value) || 1));
-              setSettings({ ...settings, backup_retention_days: v });
-            }}
-            onBlur={() => void save({ backup_retention_days: settings.backup_retention_days })}
-            className="w-16 rounded-lg bg-surface border border-app px-2 py-1 text-[13px] text-center outline-none focus:border-brand"
-          />
-          <span className="text-[12px] text-faint">{t('settings.server.backupRetentionUnit')}</span>
-        </div>
-
-        <div className="pl-7.5 flex items-center justify-between gap-3">
-          <p className="text-[12px] text-faint">
-            {settings.backup_last_run
-              ? t('settings.server.backupLastRun', { date: new Date(settings.backup_last_run).toLocaleString() })
-              : t('settings.server.backupNever')}
-          </p>
-          <button
-            type="button"
-            onClick={() => void runBackup()}
-            disabled={backupBusy}
-            className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-brand px-3 text-[12px] font-semibold text-brandfg hover:brightness-110 disabled:opacity-50"
-          >
-            {backupBusy ? t('settings.server.backupRunning') : t('settings.server.backupRunNow')}
-          </button>
-        </div>
-      </div>
-
-      {/* Adjuntos */}
-      <div className="rounded-xl border border-app bg-surface2/50 p-4 space-y-3 mt-4">
-        <div className="flex items-start gap-3">
-          <Paperclip className="w-4.5 h-4.5 text-brand mt-0.5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
-          <div className="flex-1 min-w-0">
-            <p className="text-[14px] font-semibold">{t('settings.server.attachments')}</p>
-            <p className="text-[12px] text-faint mt-0.5">{t('settings.server.attachmentsHint')}</p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3 pl-7.5">
-          <label className="text-[13px] text-muted whitespace-nowrap">
-            {t('settings.server.attachmentsLimit')}
-          </label>
-          <input
-            type="number"
-            min={5}
-            max={50}
-            value={settings.max_attachments_per_task}
-            onChange={(e) => {
-              const v = Math.max(5, Math.min(50, parseInt(e.target.value) || 50));
-              setSettings({ ...settings, max_attachments_per_task: v });
-            }}
-            onBlur={() => void save({ max_attachments_per_task: settings.max_attachments_per_task })}
-            className="w-16 rounded-lg bg-surface border border-app px-2 py-1 text-[13px] text-center outline-none focus:border-brand"
-          />
-        </div>
-      </div>
-
-      {error && (
-        <p role="alert" className="text-[13px] font-medium text-rose-600 dark:text-rose-400 mt-3">
-          {error}
-        </p>
-      )}
-      {success && (
-        <p role="status" className="text-[13px] font-medium text-ok mt-3">
-          {success}
-        </p>
-      )}
     </Card>
   );
 }
@@ -1628,15 +1029,9 @@ export default function SettingsPage() {
           </div>
         </div>
         {isAdmin && (
-          <>
-            <div className="lg:col-span-7">
-              <UsersCard />
-            </div>
-            <div className="lg:col-span-5 space-y-4 md:space-y-5">
-              <DemoCard />
-              <ServerSettingsCard />
-            </div>
-          </>
+          <div className="lg:col-span-12">
+            <AdminBar />
+          </div>
         )}
         {installVisible && (
           <div className="lg:col-span-12">

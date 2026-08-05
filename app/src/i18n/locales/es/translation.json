@@ -309,6 +309,12 @@
       "deleteUser": "Eliminar usuario",
       "updateError": "No se pudo actualizar el usuario"
     },
+    "admin": {
+      "title": "Administración",
+      "backup": {
+        "timerInfo": "Programado en {{file}}"
+      }
+    },
     "about": {
       "title": "Acerca de",
       "desc": "Gestor de tareas con vista kanban para proyectos sencillos, de uso individual o pequeños equipos.",
