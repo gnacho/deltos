@@ -28,6 +28,10 @@ export function EventText({
       values.from = t(`columns.${String(event.data.from)}`);
       values.to = t(`columns.${String(event.data.to)}`);
       break;
+    case 'project':
+      values.from = data.getProject(String(event.data.from))?.name ?? '?';
+      values.to = data.getProject(String(event.data.to))?.name ?? '?';
+      break;
     case 'priority':
       if (event.data.to === null || event.data.to === undefined) {
         key = 'priorityRemoved';

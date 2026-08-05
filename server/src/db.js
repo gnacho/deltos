@@ -106,7 +106,7 @@ CREATE TABLE IF NOT EXISTS activity_events (
   task_id TEXT REFERENCES tasks(id) ON DELETE CASCADE,
   user_id TEXT REFERENCES users(id),
   type TEXT NOT NULL CHECK (type IN
-    ('created','moved','priority','due','assigned','attachment','title','description')),
+    ('created','moved','priority','due','assigned','attachment','title','description','project')),
   data TEXT DEFAULT '{}',  -- JSON; 'moved' guarda {from, to}
   created_at INTEGER NOT NULL
 );
@@ -221,6 +221,29 @@ export function migrateSchema(db) {
   if (!taskCols.includes('deleted_at')) {
     db.exec('ALTER TABLE tasks ADD COLUMN deleted_at INTEGER')
     log.info('schema_migrated', { table: 'tasks', column: 'deleted_at' })
+  }
+  // v2: activity_events.type gana el valor 'project' (cambiar proyecto desde el detalle).
+  // SQLite no permite ALTER de CHECK → reconstrucción por tabla temporal.
+  const evSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='activity_events'").get()
+  if (evSql && !evSql.sql.includes("'project'")) {
+    db.exec(`
+      ALTER TABLE activity_events RENAME TO activity_events_old;
+      CREATE TABLE activity_events (
+        id TEXT PRIMARY KEY,
+        task_id TEXT REFERENCES tasks(id) ON DELETE CASCADE,
+        user_id TEXT REFERENCES users(id),
+        type TEXT NOT NULL CHECK (type IN
+          ('created','moved','priority','due','assigned','attachment','title','description','project')),
+        data TEXT DEFAULT '{}',
+        created_at INTEGER NOT NULL
+      );
+      INSERT INTO activity_events (id, task_id, user_id, type, data, created_at)
+        SELECT id, task_id, user_id, type, data, created_at FROM activity_events_old;
+      DROP TABLE activity_events_old;
+    `)
+    db.exec('CREATE INDEX IF NOT EXISTS idx_activity_task ON activity_events(task_id, created_at)')
+    db.exec('CREATE INDEX IF NOT EXISTS idx_activity_created ON activity_events(created_at)')
+    log.info('schema_migrated', { table: 'activity_events', change: 'type CHECK + project' })
   }
 }
 

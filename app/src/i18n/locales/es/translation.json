@@ -120,7 +120,8 @@
     "deleting": "Eliminando…",
     "loading": "Cargando tarea…",
     "notFound": "No se ha encontrado la tarea",
-    "openDetail": "Abrir detalle de {{title}}"
+    "openDetail": "Abrir detalle de {{title}}",
+    "noProject": "Sin proyecto"
   },
   "attachments": {
     "empty": "Sin adjuntos.",
@@ -182,8 +183,10 @@
       "assigned": "<strong>{{user}}</strong> asignó «{{task}}» a {{value}}",
       "unassigned": "<strong>{{user}}</strong> dejó «{{task}}» sin asignar",
       "moved": "<strong>{{user}}</strong> movió «{{task}}» de {{from}} a {{to}}",
-      "attachment": "<strong>{{user}}</strong> adjuntó {{value}} en «{{task}}»"
-    }
+      "attachment": "<strong>{{user}}</strong> adjuntó {{value}} en «{{task}}»",
+      "project": "<strong>{{user}}</strong> movió «{{task}}» al proyecto {{to}}"
+    },
+    "project": "<strong>{{user}}</strong> movió la tarjeta al proyecto {{to}}"
   },
   "newTask": {
     "title": "Nueva tarea",
