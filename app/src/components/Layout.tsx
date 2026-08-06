@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { NavLink, Link, Outlet, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { NavLink, Link, Outlet, useLocation, useNavigate, useParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import {
   LayoutGrid,

@@ -1,5 +1,5 @@
 import { Suspense } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { ThemeProvider } from '@/theme/ThemeProvider';
 import AuthGate from '@/auth/AuthGate';

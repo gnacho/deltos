@@ -1,8 +1,28 @@
 @import './fonts.css';
+@import 'tailwindcss';
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@custom-variant dark (&:is(.dark *));
+
+/* Tokens de tema v4 (antes tailwind.config.js theme.extend) */
+@theme {
+  --font-display: 'Space Grotesk', sans-serif;
+  --font-sans: Inter, system-ui, sans-serif;
+
+  --color-canvas: rgb(var(--canvas-rgb));
+  --color-elevated: rgb(var(--elevated-rgb));
+  --color-hover: rgb(var(--hover-rgb));
+  --color-border-strong: rgb(var(--border-strong-rgb));
+  --color-text-primary: rgb(var(--text-primary-rgb));
+  --color-text-secondary: rgb(var(--text-secondary-rgb));
+  --color-text-muted-c: rgb(var(--text-muted-rgb));
+  --color-brand: rgb(var(--accent-rgb));
+  --color-brand-soft: rgb(var(--accent-soft-rgb));
+  --color-brand-fg: rgb(var(--accent-fg-rgb));
+  --color-ok: rgb(var(--ok-rgb));
+  --color-warn: rgb(var(--warn-rgb));
+  --color-danger: rgb(var(--danger-rgb));
+  --color-info: rgb(var(--info-rgb));
+}
 
 /* Tokens (mockup aprobado). --text-faint ajustado a contraste AA (>=4.5:1 sobre surface) */
 /* .light permite forzar el tema claro en previews dentro de páginas oscuras */
