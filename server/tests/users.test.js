@@ -4,7 +4,7 @@ import { makeInstance, loginAdmin, loginUser, jsonReq } from './helpers.js'
 
 async function createUser(app, auth, username = 'pepe', role = 'user') {
   const res = await app.request('/api/users', jsonReq(auth, 'POST', '/api/users', {
-    username, password: 'pepe123', role,
+    username, password: 'pepe1234567', role,
   }))
   expect(res.status).toBe(201)
   return (await res.json()).user
@@ -24,7 +24,7 @@ describe('users admin', () => {
     const { app } = await makeInstance()
     const admin = await loginAdmin(app)
     const u = await createUser(app, admin)
-    const pepe = await loginUser(app, 'pepe', 'pepe123')
+    const pepe = await loginUser(app, 'pepe', 'pepe1234567')
     const patch = await app.request(`/api/users/${u.id}/role`, jsonReq(pepe, 'PUT', `/api/users/${u.id}/role`, { role: 'admin' }))
     expect(patch.status).toBe(403)
     const del = await app.request(`/api/users/${u.id}`, jsonReq(pepe, 'DELETE', ''))
@@ -52,7 +52,7 @@ describe('users admin', () => {
     const { app } = await makeInstance()
     const admin = await loginAdmin(app)
     const u = await createUser(app, admin)
-    const pepe = await loginUser(app, 'pepe', 'pepe123')
+    const pepe = await loginUser(app, 'pepe', 'pepe1234567')
     expect(pepe).toBeTruthy()
     const res = await app.request(`/api/users/${u.id}`, jsonReq(admin, 'DELETE', `/api/users/${u.id}`))
     expect(res.status).toBe(204)
@@ -73,12 +73,12 @@ describe('users admin', () => {
     const { app } = await makeInstance()
     const admin = await loginAdmin(app)
     const u = await createUser(app, admin)
-    const pepe = await loginUser(app, 'pepe', 'pepe123')
+    const pepe = await loginUser(app, 'pepe', 'pepe1234567')
     const res = await app.request(`/api/users/${u.id}/password`, jsonReq(admin, 'PUT', `/api/users/${u.id}/password`, { password: 'nueva-pass-1' }))
     expect(res.status).toBe(200)
     const meRes = await app.request('/api/auth/me', { headers: { cookie: pepe.cookie } })
     expect(meRes.status).toBe(401)
-    expect(await loginUser(app, 'pepe', 'pepe123')).toBeNull()
+    expect(await loginUser(app, 'pepe', 'pepe1234567')).toBeNull()
     expect(await loginUser(app, 'pepe', 'nueva-pass-1')).toBeTruthy()
   })
 

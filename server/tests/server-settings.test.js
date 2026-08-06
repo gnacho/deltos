@@ -21,8 +21,8 @@ describe('ajustes del servidor', () => {
   it('GET /api/settings/server → 403 para usuario no-admin', async () => {
     const { app } = await makeInstance()
     const auth = await loginAdmin(app)
-    await app.request('/api/users', jsonReq(auth, 'POST', '/api/users', { username: 'pepe', password: 'pepe123' }))
-    const pepe = await loginUser(app, 'pepe', 'pepe123')
+    await app.request('/api/users', jsonReq(auth, 'POST', '/api/users', { username: 'pepe', password: 'pepe1234567' }))
+    const pepe = await loginUser(app, 'pepe', 'pepe1234567')
     const res = await app.request('/api/settings/server', { headers: { cookie: pepe.cookie } })
     expect(res.status).toBe(403)
   })

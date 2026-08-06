@@ -6,6 +6,7 @@ import { Hono } from 'hono'
 import { serveStatic } from '@hono/node-server/serve-static'
 import { streamSSE } from 'hono/streaming'
 import { zValidator } from '@hono/zod-validator'
+import { bodyLimit } from 'hono/body-limit'
 import fs from 'node:fs'
 import path from 'node:path'
 import { z } from 'zod'
@@ -24,7 +25,7 @@ const pkg = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.ur
 
 const registerSchema = z.object({
   username: z.string().min(1).max(50),
-  password: z.string().min(6, 'la contraseña debe tener al menos 6 caracteres').max(100),
+  password: z.string().min(10, 'la contraseña debe tener al menos 10 caracteres').max(100),
   color: z.string().regex(/^[a-z]{2,20}$/).default('slate'),
   language: z.enum(['auto', 'es', 'en']).default('auto'),
 })
@@ -46,7 +47,7 @@ const profileSchema = z
 
 const passwordSchema = z.object({
   current: z.string().min(1, 'indica la contraseña actual'),
-  next: z.string().min(6, 'la nueva contraseña debe tener al menos 6 caracteres').max(100),
+  next: z.string().min(10, 'la nueva contraseña debe tener al menos 10 caracteres').max(100),
 })
 
 // ctx: { prod, demo, secret, config: { cookieSecure, maxSseClients, maxUploadBytes, staticDir }, hub, uploadsDir }
@@ -76,6 +77,9 @@ export function createApp(ctx) {
   })
 
   // --- Límite de tamaño de petición (adjuntos ≤ 10 MB + margen multipart) ---
+  // bodyLimit real de Hono: cubre también bodies chunked (sin Content-Length),
+  // que el check de cabecera anterior dejaba pasar (auditoría).
+  app.use('/api/*', bodyLimit({ maxSize: config.maxUploadBytes + 1024 * 1024 }))
   app.use('/api/*', async (c, next) => {
     const len = parseInt(c.req.header('content-length') || '0', 10)
     if (len > config.maxUploadBytes + 1024 * 1024) {

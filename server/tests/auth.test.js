@@ -49,7 +49,7 @@ describe('auth', () => {
     for (let i = 0; i < 5; i++) {
       expect((await attempt('mal')).status).toBe(401)
     }
-    const blocked = await attempt('admin123')
+    const blocked = await attempt('admin1234567')
     expect(blocked.status).toBe(429)
     const body = await blocked.json()
     expect(body.error.code).toBe('AUTH_RATE_LIMITED')
@@ -61,7 +61,7 @@ describe('auth', () => {
     const res = await app.request('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', cookie: auth1.cookie },
-      body: JSON.stringify({ username: 'admin', password: 'admin123' }),
+      body: JSON.stringify({ username: 'admin', password: 'admin1234567' }),
     })
     expect(res.status).toBe(200)
     const cookie2 = res.headers.get('set-cookie').split(';')[0]
@@ -87,28 +87,28 @@ describe('auth', () => {
 
     const wrong = await app.request(
       '/api/auth/password',
-      jsonReq(auth, 'PUT', '/api/auth/password', { current: 'no-es', next: 'nueva123' })
+      jsonReq(auth, 'PUT', '/api/auth/password', { current: 'no-es', next: 'nueva1234567' })
     )
     expect(wrong.status).toBe(400)
     expect((await wrong.json()).error.code).toBe('AUTH_WRONG_CURRENT_PASSWORD')
 
     const short = await app.request(
       '/api/auth/password',
-      jsonReq(auth, 'PUT', '/api/auth/password', { current: 'admin123', next: '123' })
+      jsonReq(auth, 'PUT', '/api/auth/password', { current: 'admin1234567', next: '123' })
     )
     expect(short.status).toBe(422)
     expect((await short.json()).error.code).toBe('VALIDATION_FAILED')
 
     const ok = await app.request(
       '/api/auth/password',
-      jsonReq(auth, 'PUT', '/api/auth/password', { current: 'admin123', next: 'nueva123' })
+      jsonReq(auth, 'PUT', '/api/auth/password', { current: 'admin1234567', next: 'nueva1234567' })
     )
     expect(ok.status).toBe(200)
 
     const relogin = await app.request('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: 'admin', password: 'nueva123' }),
+      body: JSON.stringify({ username: 'admin', password: 'nueva1234567' }),
     })
     expect(relogin.status).toBe(200)
   })
@@ -132,7 +132,7 @@ describe('auth', () => {
     const anon = await app.request('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: 'lucia', password: 'secreta1' }),
+      body: JSON.stringify({ username: 'lucia', password: 'secreta12345' }),
     })
     expect(anon.status).toBe(401)
 
@@ -140,7 +140,7 @@ describe('auth', () => {
     const res = await app.request('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', cookie: auth.cookie, 'x-csrf-token': auth.csrfToken },
-      body: JSON.stringify({ username: 'lucia', password: 'secreta1' }),
+      body: JSON.stringify({ username: 'lucia', password: 'secreta12345' }),
     })
     expect(res.status).toBe(201)
     expect((await res.json()).user.role).toBe('user')
@@ -148,7 +148,7 @@ describe('auth', () => {
     const dup = await app.request('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', cookie: auth.cookie, 'x-csrf-token': auth.csrfToken },
-      body: JSON.stringify({ username: 'lucia', password: 'secreta1' }),
+      body: JSON.stringify({ username: 'lucia', password: 'secreta12345' }),
     })
     expect(dup.status).toBe(409)
 
@@ -165,14 +165,14 @@ describe('auth', () => {
     const admin = await loginAdmin(app)
     const created = await app.request(
       '/api/users',
-      jsonReq(admin, 'POST', '/api/users', { username: 'pepe', password: 'pepe123', color: 'teal' })
+      jsonReq(admin, 'POST', '/api/users', { username: 'pepe', password: 'pepe1234567', color: 'teal' })
     )
     expect(created.status).toBe(201)
 
     const pepeLogin = await app.request('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: 'pepe', password: 'pepe123' }),
+      body: JSON.stringify({ username: 'pepe', password: 'pepe1234567' }),
     })
     const pepeCookie = pepeLogin.headers.get('set-cookie').split(';')[0]
     const denied = await app.request('/api/users', { headers: { cookie: pepeCookie } })
@@ -218,14 +218,14 @@ describe('auth', () => {
   it('cambiar contraseña invalida las demás sesiones del usuario (la actual sobrevive)', async () => {
     const { app } = await makeInstance()
     const admin = await loginAdmin(app)
-    await app.request('/api/users', jsonReq(admin, 'POST', '/api/users', { username: 'pepe', password: 'pepe123' }))
-    const pepe1 = await loginUser(app, 'pepe', 'pepe123')
-    const pepe2 = await loginUser(app, 'pepe', 'pepe123')
+    await app.request('/api/users', jsonReq(admin, 'POST', '/api/users', { username: 'pepe', password: 'pepe1234567' }))
+    const pepe1 = await loginUser(app, 'pepe', 'pepe1234567')
+    const pepe2 = await loginUser(app, 'pepe', 'pepe1234567')
     expect(pepe1.cookie).not.toBe(pepe2.cookie)
     const changed = await app.request('/api/auth/password', {
       method: 'PUT',
       headers: { cookie: pepe2.cookie, 'Content-Type': 'application/json', 'x-csrf-token': pepe2.csrfToken },
-      body: JSON.stringify({ current: 'pepe123', next: 'nueva456' }),
+      body: JSON.stringify({ current: 'pepe1234567', next: 'nueva4567890' }),
     })
     expect(changed.status).toBe(200)
     const oldSession = await app.request('/api/auth/me', { headers: { cookie: pepe1.cookie } })

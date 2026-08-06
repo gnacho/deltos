@@ -9,7 +9,7 @@ import { seedDemo } from '../src/demo.js'
 import { createApp } from '../src/app.js'
 
 // Crea una instancia completa (BD prod + demo en dir temporal) para tests.
-export async function makeInstance({ adminPass = 'admin123', seedDemoData = true } = {}) {
+export async function makeInstance({ adminPass = 'admin1234567', seedDemoData = true } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'deltos-test-'))
   const uploadsDir = path.join(dir, 'uploads')
   const prod = openDb(path.join(dir, 'app.db'))
@@ -37,7 +37,7 @@ export async function makeInstance({ adminPass = 'admin123', seedDemoData = true
 }
 
 // Login como admin de producción; devuelve { cookie, csrfToken }.
-export async function loginAdmin(app, password = 'admin123') {
+export async function loginAdmin(app, password = 'admin1234567') {
   const res = await app.request('/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
