@@ -463,6 +463,12 @@ table.cmp tbody tr:hover { background: rgb(var(--surface)); }
 .honest p { font-size: 0.95rem; color: rgb(var(--muted)); margin-bottom: 0.75rem; }
 .honest p:last-child { margin-bottom: 0; }
 
+/* ============ CLUB CLOUDLESS + ACERCA DE MÍ ============ */
+.club-cta { margin-top: 2rem; }
+.about-body { max-width: 52rem; margin-top: 1.5rem; }
+.about-body p { font-size: 1.05rem; color: rgb(var(--muted)); line-height: 1.65; margin-bottom: 1rem; }
+.about-body p:last-child { margin-bottom: 0; }
+
 /* ============ 04 INSTALACIÓN: CORCHO ============ */
 .install-cork { padding: 3rem 0; margin-top: 1rem; }
 .install-cork .cork-bg { border-radius: 0; border: 1px solid rgb(var(--cork-dark)); }
