@@ -14,6 +14,8 @@ y este proyecto se adhiere a [Versionado Semántico](https://semver.org/lang/es/
   secretos (SESSION_SECRET fuera de BD), rate-limit y body caps, y bugs
   latentes. Cada hallazgo se materializa en su propio issue/PR.
 
+## [2.0.0] - 2026-08-06
+
 ### Changed
 
 - **Migración del toolchain de build**: Vite 7 → 8 (Rolldown), @vitejs/plugin-react 4 → 6, Tailwind CSS 3 → 4 (config en CSS vía `@theme`, plugin Vite `@tailwindcss/vite`).
