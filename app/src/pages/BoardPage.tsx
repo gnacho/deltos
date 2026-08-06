@@ -1,6 +1,6 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent } from 'react';
-import { useParams, Navigate } from 'react-router-dom';
+import { useParams, Navigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { Plus } from 'lucide-react';
 import type { ColumnId, Task } from '@/data/types';
