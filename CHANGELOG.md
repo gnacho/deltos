@@ -23,6 +23,8 @@ y este proyecto se adhiere a [Versionado Semántico](https://semver.org/lang/es/
 ### Fixed
 
 - **Vulnerabilidad HIGH (CSRF en modo RSC)**: GHSA-qwww-vcr4-c8h2, afectaba a react-router 7.12.0–8.2.0; cerrada con react-router 8.3.0.
+- **Body cap real en `/api/*`** (`hono/body-limit`): el check anterior dependía de `Content-Length` y se saltaba con bodies chunked; ahora también se cubren.
+- **Password mínima 10 caracteres** en registro, alta de usuarios, reset y cambio de contraseña (antes 6), alineado con el resto de apps del stack.
 
 ## [1.9.2] - 2026-08-01
 

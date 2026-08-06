@@ -6,8 +6,8 @@ describe('audit log admin', () => {
   it('GET /api/admin/audit → 403 sin admin, 200 con admin', async () => {
     const { app } = await makeInstance()
     const auth = await loginAdmin(app)
-    await app.request('/api/users', jsonReq(auth, 'POST', '/api/users', { username: 'pepe', password: 'pepe123' }))
-    const pepe = await loginUser(app, 'pepe', 'pepe123')
+    await app.request('/api/users', jsonReq(auth, 'POST', '/api/users', { username: 'pepe', password: 'pepe1234567' }))
+    const pepe = await loginUser(app, 'pepe', 'pepe1234567')
     const denied = await app.request('/api/admin/audit', { headers: { cookie: pepe.cookie } })
     expect(denied.status).toBe(403)
     const ok = await app.request('/api/admin/audit', { headers: { cookie: auth.cookie } })
@@ -17,7 +17,7 @@ describe('audit log admin', () => {
   it('crear usuario registra user_created en el audit log', async () => {
     const { app } = await makeInstance()
     const auth = await loginAdmin(app)
-    await app.request('/api/users', jsonReq(auth, 'POST', '/api/users', { username: 'maria', password: 'maria123' }))
+    await app.request('/api/users', jsonReq(auth, 'POST', '/api/users', { username: 'maria', password: 'maria1234567' }))
     const res = await app.request('/api/admin/audit', { headers: { cookie: auth.cookie } })
     const body = await res.json()
     const entry = body.items.find((i) => i.action === 'user_created')
@@ -29,7 +29,7 @@ describe('audit log admin', () => {
   it('borrar usuario registra user_deleted', async () => {
     const { app } = await makeInstance()
     const auth = await loginAdmin(app)
-    const created = await app.request('/api/users', jsonReq(auth, 'POST', '/api/users', { username: 'temp', password: 'temp123' }))
+    const created = await app.request('/api/users', jsonReq(auth, 'POST', '/api/users', { username: 'temp', password: 'temp1234567' }))
     const userId = (await created.json()).user.id
     await app.request(`/api/users/${userId}`, jsonReq(auth, 'DELETE', ''))
     const res = await app.request('/api/admin/audit', { headers: { cookie: auth.cookie } })
@@ -42,7 +42,7 @@ describe('audit log admin', () => {
   it('cambiar rol registra user_role_changed con from/to', async () => {
     const { app } = await makeInstance()
     const auth = await loginAdmin(app)
-    const created = await app.request('/api/users', jsonReq(auth, 'POST', '/api/users', { username: 'role-test', password: 'role123' }))
+    const created = await app.request('/api/users', jsonReq(auth, 'POST', '/api/users', { username: 'role-test', password: 'role1234567' }))
     const userId = (await created.json()).user.id
     await app.request(`/api/users/${userId}/role`, jsonReq(auth, 'PUT', `/api/users/${userId}/role`, { role: 'admin' }))
     const res = await app.request('/api/admin/audit', { headers: { cookie: auth.cookie } })
@@ -56,9 +56,9 @@ describe('audit log admin', () => {
   it('reset password registra user_password_reset', async () => {
     const { app } = await makeInstance()
     const auth = await loginAdmin(app)
-    const created = await app.request('/api/users', jsonReq(auth, 'POST', '/api/users', { username: 'resetpw', password: 'old123' }))
+    const created = await app.request('/api/users', jsonReq(auth, 'POST', '/api/users', { username: 'resetpw', password: 'old1234567' }))
     const userId = (await created.json()).user.id
-    await app.request(`/api/users/${userId}/password`, jsonReq(auth, 'PUT', `/api/users/${userId}/password`, { password: 'new456' }))
+    await app.request(`/api/users/${userId}/password`, jsonReq(auth, 'PUT', `/api/users/${userId}/password`, { password: 'new4567890' }))
     const res = await app.request('/api/admin/audit', { headers: { cookie: auth.cookie } })
     const body = await res.json()
     const entry = body.items.find((i) => i.action === 'user_password_reset')
@@ -85,7 +85,7 @@ describe('audit log admin', () => {
     const { app } = await makeInstance()
     const auth = await loginAdmin(app)
     for (let i = 0; i < 5; i++) {
-      await app.request('/api/users', jsonReq(auth, 'POST', '/api/users', { username: `u${i}`, password: 'pass123' }))
+      await app.request('/api/users', jsonReq(auth, 'POST', '/api/users', { username: `u${i}`, password: 'pass1234567' }))
     }
     const page1 = await (await app.request('/api/admin/audit?limit=2', { headers: { cookie: auth.cookie } })).json()
     expect(page1.items).toHaveLength(2)

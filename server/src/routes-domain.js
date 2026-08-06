@@ -97,7 +97,7 @@ const commentSchema = z.object({
 
 const userCreateSchema = z.object({
   username: z.string().min(1).max(50),
-  password: z.string().min(6, 'la contraseña inicial debe tener al menos 6 caracteres').max(100),
+  password: z.string().min(10, 'la contraseña inicial debe tener al menos 10 caracteres').max(100),
   color: colorSchema.default('slate'),
   role: z.enum(['admin', 'user']).default('user'),
 })
@@ -106,7 +106,7 @@ const demoToggleSchema = z.object({ enabled: z.boolean() })
 
 const userRoleSchema = z.object({ role: z.enum(['admin', 'user']) })
 const userPasswordSchema = z.object({
-  password: z.string().min(6, 'la contraseña debe tener al menos 6 caracteres').max(100),
+  password: z.string().min(10, 'la contraseña debe tener al menos 10 caracteres').max(100),
 })
 const userLanguageSchema = z.object({ language: z.enum(['auto', 'es', 'en']) })
 

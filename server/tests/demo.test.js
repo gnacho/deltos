@@ -94,8 +94,8 @@ describe('modo demo', () => {
   it('un usuario no-admin no puede conmutar el modo demo', async () => {
     const { app } = await makeInstance()
     const admin = await loginAdmin(app)
-    await app.request('/api/users', jsonReq(admin, 'POST', '/api/users', { username: 'pepe', password: 'pepe123' }))
-    const pepe = await loginUser(app, 'pepe', 'pepe123')
+    await app.request('/api/users', jsonReq(admin, 'POST', '/api/users', { username: 'pepe', password: 'pepe1234567' }))
+    const pepe = await loginUser(app, 'pepe', 'pepe1234567')
     const res = await app.request('/api/settings/demo', jsonReq(pepe, 'PUT', '', { enabled: false }))
     expect(res.status).toBe(403)
   })
