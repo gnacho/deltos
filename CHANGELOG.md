@@ -34,10 +34,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Existing projects with an emoji (e.g. 🏡) migrate to their equivalent icon
   (`home`); any legacy emoji still renders as text (compatibility).
 
-### Thanks
-
-- To **Carlos Nebot** for the feedback.
-
 ## [2.1.0] - 2026-08-07
 
 ### Added
@@ -59,6 +55,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   attachments are removed too, and suggests moving tasks to another project
   first if you want to keep them. The confirm button is now pastel red with
   centered text.
+
+### Thanks
+
+- To **Carlos Nebot** for the feedback.
 
 ## [2.0.0] - 2026-08-06
 
