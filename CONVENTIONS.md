@@ -1,234 +1,232 @@
-# CONVENTIONS.md — convenciones de API y logging de Deltos
+# CONVENTIONS.md — Deltos API and logging conventions
 
-Resumen operativo de las convenciones ADOPTADAS (skills de usuario `api-stack`
-y `log-ops`). Es el contrato para el frontend (fase 2) y para quien opere el
-servicio. En caso de duda, el código manda: `server/src/error-codes.js`,
+Operational summary of the ADOPTED conventions (user skills `api-stack` and
+`log-ops`). It is the contract for the frontend (phase 2) and for whoever
+operates the service. In case of doubt, the code rules: `server/src/error-codes.js`,
 `server/src/errors.js`, `server/src/logger.js`, `server/src/wide-event.js`,
 `server/src/pagination.js`, `server/src/sse.js`.
 
 ## 1. API
 
-### Envelope de errores (TODO 4xx/5xx)
+### Error envelope (all 4xx/5xx)
 
 ```json
-{ "error": { "code": "TASK_NOT_FOUND", "message": "Tarea no encontrada", "details": { "...": "opcional" } } }
+{ "error": { "code": "TASK_NOT_FOUND", "message": "Task not found", "details": { "...": "optional" } } }
 ```
 
-- `code`: estable, machine-readable, convención `RECURSO_ESTADO`. **El frontend
-  traduce por `code`** (fuente de verdad, fase 2).
-- `message`: español, solo fallback para logs y clientes sin i18n.
-- `details`: opcional. En 422 lleva `{ issues: [...] }` crudos de zod
-  (`path` + `code`) para re-traducir campo a campo.
-- Construcción única en `app.onError` (`server/src/errors.js`): HTTPException
-  (con `cause.code` de dominio) / ZodError → 422 / `SQLITE_CONSTRAINT_UNIQUE`
-  → 409 / resto → 500. **El 500 nunca filtra stack ni internals al cliente**
-  (sí al log, nivel `error`).
-- Toda respuesta lleva cabecera `x-request-id` (correlación con logs).
+- `code`: stable, machine-readable, `RESOURCE_STATE` convention. **The frontend
+  translates by `code`** (source of truth, phase 2).
+- `message`: Spanish, fallback only for logs and clients without i18n.
+- `details`: optional. On 422 it carries the raw zod `{ issues: [...] }`
+  (`path` + `code`) to retranslate field by field.
+- Single construction in `app.onError` (`server/src/errors.js`): HTTPException
+  (with domain `cause.code`) / ZodError → 422 / `SQLITE_CONSTRAINT_UNIQUE`
+  → 409 / else → 500. **The 500 never leaks stack or internals to the client**
+  (it does to the log, at `error` level).
+- Every response carries the `x-request-id` header (correlation with logs).
 
-### Catálogo de códigos (`server/src/error-codes.js`)
+### Code catalogue (`server/src/error-codes.js`)
 
-| Code | HTTP | Uso |
+| Code | HTTP | Usage |
 |---|---|---|
-| `BAD_REQUEST` | 400 | Petición incorrecta genérica |
-| `VALIDATION_FAILED` | 422 | zValidator falló; `details.issues` |
-| `INVALID_CURSOR` | 400 | Cursor keyset malformado |
-| `NOT_FOUND` | 404 | Ruta/recurso genérico inexistente |
-| `PAYLOAD_TOO_LARGE` | 413 | Content-Length excede el límite |
-| `UNIQUE_VIOLATION` | 409 | Red de seguridad UNIQUE sin código de dominio |
-| `RATE_LIMITED` | 429 | Rate-limit genérico |
-| `INTERNAL_ERROR` | 500 | Bug del server (sin stack al cliente) |
-| `AUTH_REQUIRED` | 401 | Sin sesión válida |
-| `AUTH_INVALID_CREDENTIALS` | 401 | Login fallido |
-| `AUTH_RATE_LIMITED` | 429 | Login bloqueado 5 min tras 5 fallos |
-| `AUTH_FORBIDDEN` | 403 | Requiere rol admin |
-| `AUTH_WRONG_CURRENT_PASSWORD` | 400 | Cambio de contraseña: actual incorrecta |
-| `AUTH_DEMO_DISABLED` | 403 | Modo demo desactivado en Ajustes |
-| `CSRF_INVALID` | 403 | Token CSRF ausente o no coincide |
-| `DEMO_UNAVAILABLE` | 503 | BD demo sin usuario demo |
+| `BAD_REQUEST` | 400 | Generic bad request |
+| `VALIDATION_FAILED` | 422 | zValidator failed; `details.issues` |
+| `INVALID_CURSOR` | 400 | Malformed keyset cursor |
+| `NOT_FOUND` | 404 | Generic missing route/resource |
+| `PAYLOAD_TOO_LARGE` | 413 | Content-Length exceeds the limit |
+| `UNIQUE_VIOLATION` | 409 | UNIQUE safety net without a domain code |
+| `RATE_LIMITED` | 429 | Generic rate limit |
+| `INTERNAL_ERROR` | 500 | Server bug (no stack to the client) |
+| `AUTH_REQUIRED` | 401 | No valid session |
+| `AUTH_INVALID_CREDENTIALS` | 401 | Failed login |
+| `AUTH_RATE_LIMITED` | 429 | Login locked 5 min after 5 failures |
+| `AUTH_FORBIDDEN` | 403 | Admin role required |
+| `AUTH_WRONG_CURRENT_PASSWORD` | 400 | Password change: current one wrong |
+| `AUTH_DEMO_DISABLED` | 403 | Demo mode disabled in Settings |
+| `CSRF_INVALID` | 403 | CSRF token missing or mismatch |
+| `DEMO_UNAVAILABLE` | 503 | Demo DB without demo user |
 | `USER_NOT_FOUND` | 404 | |
 | `USER_ALREADY_EXISTS` | 409 | username UNIQUE |
-| `USER_LAST_ADMIN` | 400 | Debe quedar ≥ 1 admin |
-| `USER_SELF_ROLE` | 400 | No puedes cambiar tu propio rol |
-| `USER_SELF_DELETE` | 400 | No puedes eliminarte a ti mismo |
+| `USER_LAST_ADMIN` | 400 | At least 1 admin must remain |
+| `USER_SELF_ROLE` | 400 | You cannot change your own role |
+| `USER_SELF_DELETE` | 400 | You cannot delete yourself |
 | `PROJECT_NOT_FOUND` | 404 | |
 | `LABEL_NOT_FOUND` | 404 | |
-| `LABEL_NAME_TAKEN` | 409 | labels.name UNIQUE (alta y renombrado) |
+| `LABEL_NAME_TAKEN` | 409 | labels.name UNIQUE (create and rename) |
 | `TASK_NOT_FOUND` | 404 | |
 | `ASSIGNEE_NOT_FOUND` | 404 | |
 | `ATTACHMENT_NOT_FOUND` | 404 | |
-| `ATTACHMENT_FILE_MISSING` | 404 | Fichero no está en disco |
-| `UPLOAD_FILE_REQUIRED` | 400 | Falta campo `file` en multipart |
-| `UPLOAD_TOO_LARGE` | 413 | Fichero > `MAX_UPLOAD_MB` |
-| `UPLOAD_INVALID_MIME` | 415 | Tipo MIME no permitido |
-| `SETTINGS_PROD_ONLY` | 403 | Ajuste solo desde sesión de producción |
-| `SSE_TOO_MANY_CLIENTS` | 429 | Hub SSE lleno (`MAX_SSE_CLIENTS`) |
-| `PUSH_NOT_CONFIGURED` | 503 | Sin claves VAPID |
-| `PUSH_DEMO_UNAVAILABLE` | 501 | Sin push real en modo demo |
+| `ATTACHMENT_FILE_MISSING` | 404 | File not on disk |
+| `UPLOAD_FILE_REQUIRED` | 400 | Missing `file` field in multipart |
+| `UPLOAD_TOO_LARGE` | 413 | File > `MAX_UPLOAD_MB` |
+| `UPLOAD_INVALID_MIME` | 415 | MIME type not allowed |
+| `SETTINGS_PROD_ONLY` | 403 | Setting only from a production session |
+| `SSE_TOO_MANY_CLIENTS` | 429 | SSE hub full (`MAX_SSE_CLIENTS`) |
+| `PUSH_NOT_CONFIGURED` | 503 | No VAPID keys |
+| `PUSH_DEMO_UNAVAILABLE` | 501 | No real push in demo mode |
 
-### Validación
+### Validation
 
-`zValidator` de `@hono/zod-validator` en **cada** ruta (`json` / `query` /
-`param` según corresponda) con hook que lanza el `ZodError` → 422 con
-envelope. Multipart (adjuntos) valida presencia, tamaño y **whitelist MIME**
-a mano (no es JSON). Tipos permitidos: imágenes (jpeg/png/gif/webp/svg+xml),
-PDF, texto (plain/csv), JSON, documentos Office/ODF, y archivos comprimidos
-(zip/gzip/tar). Cualquier otro MIME → 415 `UPLOAD_INVALID_MIME`.
+`zValidator` from `@hono/zod-validator` on **every** route (`json` / `query` /
+`param` as appropriate) with a hook that throws the `ZodError` → 422 with the
+envelope. Multipart (attachments) validates presence, size and the **MIME
+whitelist** by hand (it is not JSON). Allowed types: images (jpeg/png/gif/webp/svg+xml),
+PDF, text (plain/csv), JSON, Office/ODF documents, and compressed archives
+(zip/gzip/tar). Any other MIME → 415 `UPLOAD_INVALID_MIME`.
 
-### CSRF (token por sesión)
+### CSRF (per-session token)
 
-Toda mutación autenticada (POST/PUT/PATCH/DELETE en `/api/*`) requiere la
-cabecera `x-csrf-token` con el token de la sesión. El token se obtiene en
-el cuerpo de `POST /api/auth/login`, `POST /api/auth/demo` y
-`GET /api/auth/me` (campo `csrfToken`). GET/HEAD/OPTIONS quedan exentos.
-Rutas públicas sin sesión (login/demo/logout) también quedan exentas.
-Token ausente o no coincide → **403 `CSRF_INVALID`**.
+Every authenticated mutation (POST/PUT/PATCH/DELETE on `/api/*`) requires the
+`x-csrf-token` header with the session token. The token is obtained in the
+body of `POST /api/auth/login`, `POST /api/auth/demo` and
+`GET /api/auth/me` (`csrfToken` field). GET/HEAD/OPTIONS are exempt.
+Public routes without a session (login/demo/logout) are also exempt.
+Missing or mismatched token → **403 `CSRF_INVALID`**.
 
-### Códigos de estado en mutaciones
+### Status codes on mutations
 
-- `POST` que crea → **201 + cabecera `Location`** (`/api/tasks/:id`,
+- `POST` that creates → **201 + `Location` header** (`/api/tasks/:id`,
   `/api/projects/:id`, `/api/labels/:id`, `/api/users/:id`,
-  `/api/attachments/:id`; en comentarios apunta a la tarea contenedora porque
-  no hay GET de comentario individual).
-- `DELETE` → **204 sin cuerpo** (`/api/tasks/:id`, `/api/projects/:id`,
+  `/api/attachments/:id`; for comments it points to the containing task
+  because there is no GET for a single comment).
+- `DELETE` → **204 without body** (`/api/tasks/:id`, `/api/projects/:id`,
   `/api/labels/:id`, `/api/users/:id`, `/api/push/unsubscribe`).
-- Violación UNIQUE de SQLite → **409 con código de dominio**.
+- SQLite UNIQUE violation → **409 with a domain code**.
 
-### Paginación keyset — `GET /api/activity`
+### Keyset pagination — `GET /api/activity`
 
-- Query: `?cursor=<opaco>&limit=<1..100>` (default 30). Sin `page`/`offset`.
-- Cursor opaco base64url de `{ts, id}` (ts = `created_at` epoch ms; id =
-  desempate). LIMIT n+1 → respuesta `{ items, nextCursor, hasMore }`.
-- `nextCursor: null` y `hasMore: false` en la última página.
-- Cursor malformado → **400 `INVALID_CURSOR`** (nunca se ignora: devolvería la
-  página 1 en silencio y la UI vería duplicados).
-- **CAMBIO de contrato** respecto a ≤1.4.0: antes `{items, page, limit, total}`
-  con `?page=&limit=`. La fase 2 del frontend debe migrar a cursor.
+- Query: `?cursor=<opaque>&limit=<1..100>` (default 30). No `page`/`offset`.
+- Opaque base64url cursor of `{ts, id}` (ts = `created_at` epoch ms; id =
+  tiebreaker). LIMIT n+1 → response `{ items, nextCursor, hasMore }`.
+- `nextCursor: null` and `hasMore: false` on the last page.
+- Malformed cursor → **400 `INVALID_CURSOR`** (never ignored: it would silently
+  return page 1 and the UI would see duplicates).
+- **CONTRACT CHANGE** vs ≤1.4.0: before `{items, page, limit, total}`
+  with `?page=&limit=`. The phase-2 frontend must migrate to the cursor.
 
 ### SSE — `GET /api/events`
 
-- Eventos **nombrados** `<dominio>.changed`: `task.changed`, `project.changed`,
+- **Named** events `<domain>.changed`: `task.changed`, `project.changed`,
   `label.changed`, `comment.changed`, `attachment.changed`, `user.changed`,
-  `settings.changed`. El cliente: `source.addEventListener('task.changed', …)`.
-- `id:` **monótono** estrictamente creciente en todos los eventos (incluidos
-  `hello` y `sync.resync`).
-- `Last-Event-ID`: al reconectar, si el id visto es anterior a la secuencia
-  actual, el server emite **UN `sync.resync`** (`data: {type:'changed',
-  entity:'*'}`) = "refetchea todo vía REST". Los eventos son notificaciones de
-  cambio sin datos, no canal de datos: no hay histórico que reenviar.
-- Heartbeat: comentario SSE **`: ping` cada 20 s** (crítico tras Nginx Proxy
-  Manager; no es un evento, no mueve `lastEventId`).
-- `data` sigue siendo `{type:'changed', entity}` (compatibilidad con el
-  frontend actual hasta la fase 2).
-- **CAMBIOS de contrato** respecto a ≤1.4.0: antes eventos sin nombre (canal
-  `message`), sin `id` y heartbeat como evento `ping`. La fase 2 debe pasar de
-  `onmessage` a `addEventListener('<dominio>.changed')` + `sync.resync`.
-- `shutdown` avisa en cierre graceful; `X-Accel-Buffering: no`; 429
-  `SSE_TOO_MANY_CLIENTS` con el hub lleno.
+  `settings.changed`. Client: `source.addEventListener('task.changed', …)`.
+- `id:` **monotonic** strictly increasing on every event (including `hello`
+  and `sync.resync`).
+- `Last-Event-ID`: on reconnect, if the seen id is older than the current
+  sequence, the server emits **ONE `sync.resync`** (`data: {type:'changed',
+  entity:'*'}`) = "refetch everything via REST". Events are change
+  notifications without data, not a data channel: there is no history to replay.
+- Heartbeat: SSE comment **`: ping` every 20 s** (critical behind Nginx Proxy
+  Manager; not an event, does not move `lastEventId`).
+- `data` still is `{type:'changed', entity}` (compatibility with the current
+  frontend until phase 2).
+- **CONTRACT CHANGES** vs ≤1.4.0: before unnamed events (`message` channel),
+  no `id`, and heartbeat as a `ping` event. Phase 2 must move from `onmessage`
+  to `addEventListener('<domain>.changed')` + `sync.resync`.
+- `shutdown` notifies on graceful close; `X-Accel-Buffering: no`; 429
+  `SSE_TOO_MANY_CLIENTS` when the hub is full.
 
-## 2. Logging (skill log-ops)
+## 2. Logging (log-ops skill)
 
-- **NDJSON a stdout → journald rota, nadie más rota.** Sin ficheros propios ni
-  rotación in-app. Operación completa en `docs/logging.md`.
-- Logger propio sin dependencias (`server/src/logger.js`): niveles
-  `debug`/`info`/`warn`/`error`, mínimo por `LOG_LEVEL` (default `info`;
-  `debug` solo con override temporal de systemd).
-- **Mensajes estáticos + atributos clave-valor**: `msg` es el nombre del
-  evento (snake_case, constante, buscable); los datos van en atributos. Nunca
-  strings interpolados con datos variables en `msg`.
-- **Wide events**: exactamente 1 evento JSON por request API
-  (`msg: "http_request"`) con `request_id` (también cabecera `x-request-id`),
-  `method`, `route` (plantilla, no path cruda → sin query/PII), `status`,
-  `duration_ms`, `user_id_hash`, `error.{code,message}` si hubo excepción.
-  Nivel `error` solo si 5xx/excepción.
-- **Qué NO se loguea** (anti-ruido): `GET /health`, `GET /api/events` (SSE),
-  GET/HEAD de estáticos/SPA con status < 400, bodies de request/response,
-  heartbeats SSE.
-- **PII: redacción estructurada por clave** (no regex sobre el mensaje) en
-  TODOS los emisores: `password`, `token`, `secret`, `authorization`,
-  `cookie`, `email`, `session`, `credentials`, … → `[REDACTADO]` (lista
-  canónica completa en `docs/logging.md`; cualquier clave que contenga
-  `token`/`secret`/`password` también se censura). Nunca emails completos ni
-  IPs completas. `user_id` siempre `user_id_hash` = `u_` + SHA-256(12 hex).
-  Stack traces solo con `LOG_LEVEL=debug`.
-- **Deploy**: `deploy/journald-deltos.conf` (drop-in de unidad con
-  `LogRateLimit*`); drop-in global de journald y consultas en
-  `docs/logging.md`; logrotate solo para ficheros ajenos (NPM).
+- **NDJSON to stdout → journald rotates, nobody else rotates.** No own files or
+  in-app rotation. Full operations in `docs/logging.md`.
+- Own dependency-free logger (`server/src/logger.js`): levels
+  `debug`/`info`/`warn`/`error`, minimum via `LOG_LEVEL` (default `info`;
+  `debug` only with a temporary systemd override).
+- **Static messages + key-value attributes**: `msg` is the event name
+  (snake_case, constant, searchable); data goes in attributes. Never
+  interpolated strings with variable data in `msg`.
+- **Wide events**: exactly 1 JSON event per API request
+  (`msg: "http_request"`) with `request_id` (also the `x-request-id` header),
+  `method`, `route` (template, not raw path → no query/PII), `status`,
+  `duration_ms`, `user_id_hash`, `error.{code,message}` if there was an
+  exception. `error` level only for 5xx/exceptions.
+- **What is NOT logged** (anti-noise): `GET /health`, `GET /api/events` (SSE),
+  GET/HEAD of static/SPA with status < 400, request/response bodies, SSE heartbeats.
+- **PII: structured redaction by key** (not regex over the message) in ALL
+  emitters: `password`, `token`, `secret`, `authorization`, `cookie`, `email`,
+  `session`, `credentials`, … → `[REDACTED]` (full canonical list in
+  `docs/logging.md`; any key containing `token`/`secret`/`password` is also
+  censored). Never full emails or full IPs. `user_id` is always
+  `user_id_hash` = `u_` + SHA-256(12 hex). Stack traces only with `LOG_LEVEL=debug`.
+- **Deploy**: `deploy/journald-deltos.conf` (unit drop-in with
+  `LogRateLimit*`); global journald drop-in and queries in `docs/logging.md`;
+  logrotate only for third-party files (NPM).
 
-## 3. Runtime y versiones
+## 3. Runtime and versions
 
-- **Node 24 LTS es el runtime de referencia** (Dockerfile `node:24-slim`,
-  `install.sh` pin `NODE_VERSION="24.18.1"`). `engines: ">=22"` como suelo
-  para no romper entornos atrasados; CI/tests corren con 24.
-- Suite: vitest 4.1.10, 72 tests (`npm test` en `server/`).
+- **Node 24 LTS is the reference runtime** (Dockerfile `node:24-slim`,
+  `install.sh` pins `NODE_VERSION="24.18.1"`). `engines: ">=22"` as floor to
+  avoid breaking outdated environments; CI/tests run on 24.
+- Suite: vitest 4.1.10, 72 tests (`npm test` in `server/`).
 
-## 4. Decidido y pendiente (rework mayor, pospuesto)
+## 4. Decided but pending (major rework, deferred)
 
-Decisiones de las skills **no adoptadas todavía** por pragmatismo (romperían
-auth/frontend actuales; requieren fase dedicada):
+Skill decisions **not adopted yet** for pragmatism (they would break the
+current auth/frontend; they need a dedicated phase):
 
-1. **Migración a `/api/v1`** (layout versionado de recursos). Hoy las rutas
-   cuelgan de `/api/*` sin versionar. Pendiente: mover a `/api/v1/<recurso>`
-   manteniendo `/api/health` fuera del versionado, con periodo de compat.
-2. **Contrato tipado con el frontend**: `shared/schemas.ts` (zod compartido),
-   `export type AppType` y cliente `hc<AppType>()` en React, con
-   `ApplyGlobalResponse` para tipar los envelopes globales. Requiere que las
-   rutas se definan como sub-apps encadenadas con handlers inline (hoy es JS
-   plano con `registerXRoutes(app)`), probablemente migración del server a TS.
-3. **`Idempotency-Key`** en POSTs sensibles (tabla `idempotency_keys`, TTL 24
-   h): no implementado; las mutaciones actuales son de bajo riesgo y el header
-   queda reservado en el contrato.
-4. **i18n server-side de `message`** (locale = sesión > `Accept-Language`):
-   hoy el fallback es siempre español; la fase 2 traducirá por `code`.
+1. **Migration to `/api/v1`** (versioned resource layout). Today the routes
+   hang off `/api/*` unversioned. Pending: move to `/api/v1/<resource>`
+   keeping `/api/health` outside the versioning, with a compatibility period.
+2. **Typed contract with the frontend**: `shared/schemas.ts` (shared zod),
+   `export type AppType` and `hc<AppType>()` client in React, with
+   `ApplyGlobalResponse` to type the global envelopes. Requires routes defined
+   as chained sub-apps with inline handlers (today it is plain JS with
+   `registerXRoutes(app)`), likely a server migration to TS.
+3. **`Idempotency-Key`** on sensitive POSTs (table `idempotency_keys`, TTL 24
+   h): not implemented; current mutations are low-risk and the header stays
+   reserved in the contract.
+4. **Server-side i18n of `message`** (locale = session > `Accept-Language`):
+   today the fallback is always Spanish; phase 2 will translate by `code`.
 
-La sección de convenciones de UI la añadirá la fase 2 del frontend.
+The UI conventions section will be added by the phase-2 frontend.
 
-## 5. UI (skill ui-appearance-system, adaptada a Tailwind)
+## 5. UI (ui-appearance-system skill, adapted to Tailwind)
 
-Convenciones de apariencia adoptadas en `app/` (fase 2). La skill original
-prescribe "todo el color por variables CSS"; **decisión documentada de
-adaptación**: Deltos ya usa Tailwind con tokens propios (`--canvas-rgb`,
-`--surface-rgb`, `--ok-rgb`, … mapeados en `tailwind.config.js`), así que las
-variables CSS se usan **solo para el acento** (`--accent-rgb`,
-`--accent-soft-rgb`, `--accent-fg-rgb`) y el resto del sistema sigue en los
-tokens Tailwind existentes. No hay migración completa a variables.
+Appearance conventions adopted in `app/` (phase 2). The original skill
+prescribes "all color via CSS variables"; **documented adaptation decision**:
+Deltos already uses Tailwind with its own tokens (`--canvas-rgb`,
+`--surface-rgb`, `--ok-rgb`, … mapped in `tailwind.config.js`), so CSS
+variables are used **only for the accent** (`--accent-rgb`,
+`--accent-soft-rgb`, `--accent-fg-rgb`) and the rest of the system stays on
+the existing Tailwind tokens. There is no full migration to variables.
 
-- **Acento**: 4 opciones (`emerald` por defecto, `sky`, `violet`, `amber`),
-  cada una con par `[color, soft]` DISTINTO por tema. El `color` tiene
-  contraste ≥4.5:1 sobre `--surface` en ambos temas (se usa como texto activo
-  en pestañas, bottom-nav y enlaces); el `soft` es fondo sutil de
-  selección/badges; `--accent-fg-rgb` es la tinta sobre el acento (blanco en
-  claro, oscuro en oscuro). Fuente única: `src/theme/accents.ts` (tabla
-  `ACCENTS`); se consume vía clases Tailwind `bg-brand`, `text-brand`,
-  `bg-brand-soft`, `text-brandfg`, `border-brand`.
-- **Semántica independiente del acento**: `--ok/--warn/--danger/--info`
-  (clases `text-ok`, `bg-ok`, …) NUNCA siguen al acento. Con acento ámbar, un
-  estado sano (`ok`) y un aviso (`warn`) deben seguir siendo distinguibles.
-- **Tema triple** `light|dark|auto` (clase `.dark` en `<html>`, watcher de
-  `prefers-color-scheme` en auto) y **densidad** `comfortable|compact`:
-  compact = `html{font-size:13.5px}` + `data-density="compact"` con reglas
-  CSS puntuales en `index.css` (paddings/gaps de tarjetas y listas). Todo lo
-  dimensionado en rem/em escala solo con la palanca de font-size; al crear
-  CSS nuevo, usar rem/em (nunca `zoom`).
-- **Prepaint espejo**: el script inline de `index.html` aplica tema, acento y
-  densidad desde localStorage ANTES del primer paint (sin flash). Es ESPEJO
-  de `accents.ts`/`ThemeProvider.tsx` (mismas claves `deltos-theme`,
-  `deltos-accent`, `deltos-density`, misma tabla de acentos): si cambia una
-  parte, cambiar la otra. `theme-color` del `<meta>` se sincroniza con el
-  tema efectivo.
-- **i18n**: diccionarios planos ES/EN (`src/i18n/locales/*/translation.json`)
-  con react-i18next; auto = `navigator.language`, override por perfil de
-  usuario. Nunca literales en JSX. **Errores de API por código**: el
-  namespace `errors` cubre TODO el catálogo de §1; la UI resuelve
-  `errors.<code>` (`src/lib/errors.ts#apiErrorText`) y cae al `message` del
-  server si falta la clave. 422 `VALIDATION_FAILED` expone
-  `details.issues` para marcar campos (`fieldErrors`).
-- **Foco visible** global: `:focus-visible { outline: 2px solid
-  rgb(var(--accent-rgb)) }`; no quitar. Sin animaciones vistosas
-  (transiciones de color/fondo ≤ .45s) y `prefers-reduced-motion` respetado
-  (media query + switch de Ajustes).
-- **Modales accesibles**: overlay cierra al click fuera, `Escape` cierra,
-  foco atrapado, `role="dialog"`. **Safe-area iOS**
-  (`env(safe-area-inset-bottom)`) en bottom-nav.
-- **Verificación visual obligatoria** de cualquier cambio de apariencia:
-  2 temas × 4 acentos × 2 densidades × 2 idiomas en la vista tocada (mínimo
-  razonable: ambos temas + un acento no-emerald + compacta), con capturas.
+- **Accent**: 4 options (`emerald` by default, `sky`, `violet`, `amber`),
+  each with a DISTINCT `[color, soft]` pair per theme. The `color` has
+  ≥4.5:1 contrast over `--surface` in both themes (used as active text in
+  tabs, bottom-nav and links); the `soft` is the subtle selection/badge
+  background; `--accent-fg-rgb` is the ink on the accent (white in light,
+  dark in dark). Single source: `src/theme/accents.ts` (the `ACCENTS` table);
+  consumed via the Tailwind classes `bg-brand`, `text-brand`, `bg-brand-soft`,
+  `text-brandfg`, `border-brand`.
+- **Accent-independent semantics**: `--ok/--warn/--danger/--info` (classes
+  `text-ok`, `bg-ok`, …) NEVER follow the accent. With an amber accent, a
+  healthy state (`ok`) and a warning (`warn`) must stay distinguishable.
+- **Triple theme** `light|dark|auto` (`.dark` class on `<html>`, watcher of
+  `prefers-color-scheme` in auto) and **density** `comfortable|compact`:
+  compact = `html{font-size:13.5px}` + `data-density="compact"` with targeted
+  CSS rules in `index.css` (card/list paddings and gaps). Everything is sized
+  in rem/em scaling only with the font-size lever; when writing new CSS, use
+  rem/em (never `zoom`).
+- **Prepaint mirror**: the inline script in `index.html` applies theme, accent
+  and density from localStorage BEFORE the first paint (no flash). It is a
+  MIRROR of `accents.ts`/`ThemeProvider.tsx` (same keys `deltos-theme`,
+  `deltos-accent`, `deltos-density`, same accent table): if one part changes,
+  change the other. The `<meta>` `theme-color` stays in sync with the
+  effective theme.
+- **i18n**: flat ES/EN dictionaries (`src/i18n/locales/*/translation.json`)
+  with react-i18next; auto = `navigator.language`, override per user profile.
+  Never literals in JSX. **API errors by code**: the `errors` namespace covers
+  the whole §1 catalogue; the UI resolves `errors.<code>`
+  (`src/lib/errors.ts#apiErrorText`) and falls back to the server `message`
+  when the key is missing. 422 `VALIDATION_FAILED` exposes
+  `details.issues` to mark fields (`fieldErrors`).
+- **Visible focus** global: `:focus-visible { outline: 2px solid
+  rgb(var(--accent-rgb)) }`; do not remove. No flashy animations
+  (color/background transitions ≤ .45s) and `prefers-reduced-motion` respected
+  (media query + Settings switch).
+- **Accessible modals**: overlay closes on outside click, `Escape` closes,
+  focus trapped, `role="dialog"`. **iOS safe-area**
+  (`env(safe-area-inset-bottom)`) in the bottom-nav.
+- **Mandatory visual verification** of any appearance change:
+  2 themes × 4 accents × 2 densities × 2 languages on the touched view (minimum
+  reasonable: both themes + one non-emerald accent + compact), with screenshots.

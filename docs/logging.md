@@ -1,56 +1,56 @@
-# Operación de logs de Deltos
+# Operating Deltos logs
 
-Cómo emite Deltos y cómo se operan sus logs en el host (skill log-ops del
-usuario). Resumen: **JSON NDJSON a stdout → journald rota, nadie más rota.**
+How Deltos emits logs and how they are operated on the host (user log-ops
+skill). Summary: **JSON NDJSON to stdout → journald rotates, nobody else rotates.**
 
-## Qué emite Deltos
+## What Deltos emits
 
-Logger propio sin dependencias (`server/src/logger.js`): NDJSON a stdout,
-niveles `debug`/`info`/`warn`/`error`, mínimo por `LOG_LEVEL` (default `info`).
-Mensajes estáticos (nombre del evento en `msg`, snake_case) + atributos
-clave-valor — nunca strings interpolados con datos variables en `msg`.
+Own dependency-free logger (`server/src/logger.js`): NDJSON to stdout,
+levels `debug`/`info`/`warn`/`error`, minimum via `LOG_LEVEL` (default `info`).
+Static messages (event name in `msg`, snake_case) + key-value attributes —
+never interpolated strings with variable data in `msg`.
 
-- **Wide events** (`server/src/wide-event.js`): exactamente **1 evento JSON por
-  request API** (`msg: "http_request"`), emitido al final con `request_id`
-  (también en la cabecera `x-request-id` de la respuesta), `method`, `route`
-  (plantilla Hono `/api/tasks/:id`, no la path cruda → sin query ni PII),
-  `status`, `duration_ms`, `user_id_hash` y `error.{code,message}` si hubo
-  excepción. Nivel `error` si status ≥ 500 o excepción; `info` en el resto.
-- **Excluidos del wide event** (anti-ruido, son el 80-95 % del volumen):
-  `GET /health`, `GET /api/events` (SSE: conexión larga) y GET/HEAD de
-  estáticos/SPA que responden < 400.
-- Eventos de negocio/arranque: `server_listening`, `bootstrap_admin_created`,
+- **Wide events** (`server/src/wide-event.js`): exactly **1 JSON event per
+  API request** (`msg: "http_request"`), emitted at the end with `request_id`
+  (also in the `x-request-id` response header), `method`, `route` (Hono
+  template `/api/tasks/:id`, not the raw path → no query or PII), `status`,
+  `duration_ms`, `user_id_hash` and `error.{code,message}` if there was an
+  exception. `error` level if status ≥ 500 or an exception; `info` otherwise.
+- **Excluded from the wide event** (anti-noise, 80-95 % of the volume):
+  `GET /health`, `GET /api/events` (SSE: long-lived connection) and GET/HEAD
+  of static/SPA that respond < 400.
+- Business/startup events: `server_listening`, `bootstrap_admin_created`,
   `demo_seeded`, `schema_migrated`, `sessions_expired_purged`,
-  `push_send_failed`, `unhandled_error`… siempre con atributos, nunca con PII.
+  `push_send_failed`, `unhandled_error`… always with attributes, never with PII.
 
-## Política PII (redacción estructurada por clave, no regex sobre el mensaje)
+## PII policy (structured redaction by key, not regex over the message)
 
-`redact()` recorre los atributos y censura a `[REDACTADO]` cualquier clave de
-la lista canónica (case-insensitive): `password`, `passwd`, `pwd`, `secret`,
+`redact()` walks the attributes and censors to `[REDACTED]` any key from the
+canonical list (case-insensitive): `password`, `passwd`, `pwd`, `secret`,
 `token`, `access_token`, `refresh_token`, `id_token`, `api_key`, `apikey`,
 `authorization`, `auth`, `cookie`, `set-cookie`, `session`, `session_id`,
-`email`, `credentials`, `private_key`, `client_secret` — más cualquier clave
-que **contenga** `token`, `secret` o `password`.
+`email`, `credentials`, `private_key`, `client_secret` — plus any key that
+**contains** `token`, `secret` or `password`.
 
-Nunca en logs: passwords (ni hasheados), tokens, `Authorization`, cookies,
-emails completos, bodies de request/response, endpoints de push (capability
-URLs secretas). IPs: como mucho truncadas /24. `user_id` siempre como
-`user_id_hash` = `u_` + SHA-256 truncado (12 hex), estable para correlacionar.
-Stack traces: solo con `LOG_LEVEL=debug` (que no toca disco en producción, ver
-`MaxLevelStore` abajo).
+Never in logs: passwords (not even hashed), tokens, `Authorization`, cookies,
+full emails, request/response bodies, push endpoints (secret capability
+URLs). IPs: at most truncated /24. `user_id` is always `user_id_hash` =
+`u_` + truncated SHA-256 (12 hex), stable for correlation.
+Stack traces: only with `LOG_LEVEL=debug` (which never touches disk in
+production, see `MaxLevelStore` below).
 
-Test de la política (cubierto en `server/tests/api-conventions.test.js`):
-objeto trampa con `password`/`authorization`/`email` → todo sale
-`[REDACTADO]`; el mismo test es el smoke de despliegue.
+Policy test (covered in `server/tests/api-conventions.test.js`): a trap object
+with `password`/`authorization`/`email` → everything comes out `[REDACTED]`;
+the same test is the deployment smoke test.
 
-## Rotación y retención: journald, nadie más
+## Rotation and retention: journald, nobody else
 
-Sin ficheros `*.log` propios, sin rotación in-app (nada de lumberjack/
-pino-roll). journald ya rota por tamaño y por tiempo, comprime y sella.
+No own `*.log` files, no in-app rotation (no lumberjack/pino-roll). journald
+already rotates by size and time, compresses and seals.
 
-### Drop-in global de journald del host
+### Global journald drop-in on the host
 
-`/etc/systemd/journald.conf.d/50-homelab.conf` (valores de referencia homelab):
+`/etc/systemd/journald.conf.d/50-homelab.conf` (homelab reference values):
 
 ```ini
 [Journal]
@@ -63,53 +63,53 @@ SystemMaxFileSize=100M
 SystemMaxFiles=20
 MaxFileSec=1week
 MaxRetentionSec=1month
-# PRODUCCIÓN: el debug nunca toca disco
+# PRODUCTION: debug never touches disk
 MaxLevelStore=info
 RateLimitIntervalSec=30s
 RateLimitBurst=5000
 ForwardToSyslog=no
 ```
 
-OJO Debian/Ubuntu: `Storage=persistent` (o `auto`) **solo persiste si existe
-`/var/log/journal`**:
+NOTE Debian/Ubuntu: `Storage=persistent` (or `auto`) **only persists if
+`/var/log/journal` exists**:
 
 ```bash
 mkdir -p /var/log/journal
-systemctl restart systemd-journald   # o: journalctl --flush
+systemctl restart systemd-journald   # or: journalctl --flush
 ```
 
-Verificación:
+Verification:
 
 ```bash
-systemd-analyze cat-config systemd/journald.conf   # config efectiva fusionada
+systemd-analyze cat-config systemd/journald.conf   # effective merged config
 journalctl --disk-usage
 journalctl --header | grep -i persistent
 ```
 
-### Drop-in de la unidad Deltos
+### Deltos unit drop-in
 
 `deploy/journald-deltos.conf` → `/etc/systemd/system/deltos.service.d/10-logging.conf`:
-`Environment=LOG_LEVEL=info`, `LogRateLimitIntervalSec/Burst` por unidad y
-ejemplos de `LogFilterPatterns=~` comentados (red de seguridad; el ruido ya se
-corta en origen). `debug` solo con override temporal (`systemctl edit deltos`),
-nunca permanente.
+`Environment=LOG_LEVEL=info`, per-unit `LogRateLimitIntervalSec/Burst` and
+commented `LogFilterPatterns=~` examples (safety net; the noise is already cut
+at the source). `debug` only with a temporary override (`systemctl edit deltos`),
+never permanent.
 
-## Consultas `journalctl` útiles
+## Useful `journalctl` queries
 
 ```bash
-journalctl -u deltos -f -o cat                          # seguir el NDJSON crudo
-journalctl -u deltos --since today -o cat | jq -r .msg | sort | uniq -c | sort -rn   # volumen por evento
-journalctl -u deltos -g '"level":"error"' --since -1h   # solo errores
+journalctl -u deltos -f -o cat                          # follow the raw NDJSON
+journalctl -u deltos --since today -o cat | jq -r .msg | sort | uniq -c | sort -rn   # volume per event
+journalctl -u deltos -g '"level":"error"' --since -1h   # errors only
 journalctl -u deltos -g '"status":5' --since today      # 5xx (wide events)
-journalctl -u deltos -g '"request_id":"<id>"'           # correlacionar por request (x-request-id)
-journalctl -u deltos -g '"user_id_hash":"u_…"'          # actividad de un usuario (hash, no id)
-journalctl -u deltos --since today -g '"status":200' | wc -l   # medir ruido residual
+journalctl -u deltos -g '"request_id":"<id>"'           # correlate by request (x-request-id)
+journalctl -u deltos -g '"user_id_hash":"u_…"'          # activity of one user (hash, not id)
+journalctl -u deltos --since today -g '"status":200' | wc -l   # measure residual noise
 ```
 
-## Ficheros ajenos a journald: logrotate (solo Nginx Proxy Manager)
+## Files outside journald: logrotate (Nginx Proxy Manager only)
 
-Los access/error logs de NPM son ficheros ajenos → logrotate clásico
-(`/etc/logrotate.d/npm`), nunca la app:
+NPM access/error logs are third-party files → classic logrotate
+(`/etc/logrotate.d/npm`), never the app:
 
 ```
 /data/npm/logs/*.log {
@@ -119,15 +119,15 @@ Los access/error logs de NPM son ficheros ajenos → logrotate clásico
     delaycompress
     missingok
     notifempty
-    copytruncate   # NPM no reabre fds por señal; copytruncate y listo
+    copytruncate   # NPM does not reopen fds on signal; copytruncate and done
 }
 ```
 
-Mejor todavía: `access_log off` en la location del healthcheck de NPM para que
-el ruido ni se genere (decisión 5 de log-ops).
+Even better: `access_log off` on the NPM healthcheck location so the noise is
+never generated (decision 5 of log-ops).
 
-## Colector/visor
+## Collector/viewer
 
-Un host y terminal: **journalctl basta**. Si algún día hay multi-host o se
-quiere UI web: VictoriaLogs + Fluent Bit (~30-60 MB/host). Nunca Promtail
-(EOL marzo 2026).
+One host and terminal: **journalctl is enough**. If someday there are multiple
+hosts or a web UI is wanted: VictoriaLogs + Fluent Bit (~30-60 MB/host). Never
+Promtail (EOL March 2026).
