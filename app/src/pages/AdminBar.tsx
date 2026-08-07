@@ -582,6 +582,7 @@ export default function AdminBar() {
         url: upd.latest.url,
         swWaiting: !!upd.swWaiting,
         applySw: upd.swWaiting ? upd.applySw : null,
+        applyRelease: upd.applyRelease,
       });
     } else if (upd.state === 'idle' || upd.state === 'checking') {
       // el check sigue en curso: no tocar el ribbon hasta saber el resultado
@@ -592,9 +593,10 @@ export default function AdminBar() {
         url: null,
         swWaiting: !!upd.swWaiting,
         applySw: upd.swWaiting ? upd.applySw : null,
+        applyRelease: null,
       });
     }
-  }, [upd.state, upd.latest, upd.swWaiting]);
+  }, [upd.state, upd.latest, upd.swWaiting, upd.applyRelease]);
 
   if (user.role !== 'admin') return null;
 

@@ -6,6 +6,7 @@
  * "Actualizar y recargar" sin pasar por GitHub.
  */
 import { useEffect, useState } from 'react';
+import { apiPost } from '../data/api-client';
 
 export type UpdateState = 'idle' | 'checking' | 'up-to-date' | 'available' | 'error';
 
@@ -83,5 +84,11 @@ export function useAppUpdate(currentVersion: string, repoUrl?: string) {
     swWaiting.postMessage({ type: 'SKIP_WAITING' });
   };
 
-  return { supported: !!repo || swSupported, state, latest, check, swWaiting, applySw };
+  // Aplica la release nueva en el SERVIDOR (deltos-update.sh, solo admin).
+  // El servidor se reinicia; la app se recarga con el build nuevo.
+  const applyRelease = async () => {
+    await apiPost<{ ok: boolean }>('/api/update/apply');
+  };
+
+  return { supported: !!repo || swSupported, state, latest, check, swWaiting, applySw, applyRelease };
 }

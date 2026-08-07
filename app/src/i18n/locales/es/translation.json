@@ -479,6 +479,8 @@
     "banner": "Hay una nueva versión de Deltos en el servidor.",
     "bannerNew": "Nueva versión de Deltos disponible: v{{version}}.",
     "openRelease": "Ver novedades",
+    "installNow": "Actualizar ahora",
+    "applying": "Actualizando…",
     "reload": "Recargar"
   },
   "errorBoundary": {

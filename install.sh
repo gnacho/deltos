@@ -375,6 +375,24 @@ elif [ "$DRY_RUN" -eq 1 ]; then
     info "[dry-run] would install backup timer ${SERVICE_NAME}-backup.timer"
 fi
 
+# -------------------------------------------------------- update timer (weekly) --
+# Auto-update semanal (regla: timer > cron siempre): script versionado en el
+# repo, releases estables + checksums + marker semver (patrón app-auto-update).
+UPDATE_SCRIPT="$OPT_DIR/current/deploy/deltos-update.sh"
+if [ -f "$UPDATE_SCRIPT" ] && [ "$DRY_RUN" -eq 0 ]; then
+    run $SUDO cp "$OPT_DIR/current/deploy/deltos-update.sh" "$OPT_DIR/deltos-update.sh"
+    run $SUDO chmod 0755 "$OPT_DIR/deltos-update.sh"
+    run $SUDO cp "$OPT_DIR/current/deploy/deltos-update.service" "/etc/systemd/system/${SERVICE_NAME}-update.service"
+    run $SUDO cp "$OPT_DIR/current/deploy/deltos-update.timer" "/etc/systemd/system/${SERVICE_NAME}-update.timer"
+    run $SUDO sed -i "s|/opt/deltos|$OPT_DIR|g" "/etc/systemd/system/${SERVICE_NAME}-update.service"
+    run $SUDO sed -i "s|/var/lib/deltos|$STATE_DIR|g" "/etc/systemd/system/${SERVICE_NAME}-update.service"
+    run $SUDO systemctl daemon-reload
+    run $SUDO systemctl enable --now "${SERVICE_NAME}-update.timer"
+    ok "update timer enabled (weekly)"
+elif [ "$DRY_RUN" -eq 1 ]; then
+    info "[dry-run] would install update timer ${SERVICE_NAME}-update.timer"
+fi
+
 # ------------------------------------------------------------------ summary --
 printf '\n%s================ %s installed ================%s\n' "$C_G" "$APP_NAME" "$C_0"
 printf 'Version:  %s%s\n' "$DELTOS_VERSION" "$( [ "$UPGRADING" -eq 1 ] && echo ' (upgrade)' || true)"
