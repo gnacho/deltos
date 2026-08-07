@@ -34,6 +34,10 @@ y este proyecto se adhiere a [Versionado Semántico](https://semver.org/lang/es/
 - Los proyectos existentes con emoji (p. ej. 🏡) migran a su icono equivalente
   (`home`); cualquier emoji legado se sigue mostrando como texto (compatibilidad).
 
+### Thanks
+
+- A **Carlos Nebot** por su feedback.
+
 ## [2.1.0] - 2026-08-07
 
 ### Added
