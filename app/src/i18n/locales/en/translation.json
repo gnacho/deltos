@@ -211,8 +211,14 @@
     "hecha_other": "{{count}} done",
     "openBoard": "Open the {{name}} board",
     "new": "New project",
+    "edit": "Edit project",
+    "delete": "Delete project",
+    "deleteWarning": "Its tasks, comments and attachments will be deleted too. This cannot be undone.",
+    "deleting": "Deleting…",
+    "deleteError": "Could not delete the project",
     "form": {
       "title": "New project",
+      "editTitle": "Edit project",
       "name": "Name",
       "namePlaceholder": "Project name",
       "nameRequired": "Name is required",
@@ -221,7 +227,10 @@
       "color": "Color",
       "create": "Create project",
       "creating": "Creating…",
-      "error": "Could not create the project"
+      "save": "Save changes",
+      "saving": "Saving…",
+      "error": "Could not create the project",
+      "updateError": "Could not update the project"
     }
   },
   "activityPage": {
