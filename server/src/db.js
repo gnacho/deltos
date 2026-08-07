@@ -256,6 +256,9 @@ export function hourlyMaintenance(db, label) {
   const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000
   const { changes: trashChanges } = db.prepare('DELETE FROM tasks WHERE deleted_at IS NOT NULL AND deleted_at < ?').run(thirtyDaysAgo)
   if (trashChanges > 0) log.info('trash_purged', { db: label, count: trashChanges })
+  const oneHourAgo = Date.now() - 3600 * 1000
+  const { changes: attChanges } = db.prepare('DELETE FROM login_attempts WHERE locked_until > 0 AND locked_until < ?').run(oneHourAgo)
+  if (attChanges > 0) log.info('login_attempts_purged', { db: label, count: attChanges })
 }
 
 export function kvGet(db, key, fallback = null) {
