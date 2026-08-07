@@ -8,6 +8,7 @@ import { streamSSE } from 'hono/streaming'
 import { zValidator } from '@hono/zod-validator'
 import { bodyLimit } from 'hono/body-limit'
 import fs from 'node:fs'
+import crypto from 'node:crypto'
 import path from 'node:path'
 import { z } from 'zod'
 import * as auth from './auth.js'
@@ -252,6 +253,10 @@ export function createApp(ctx) {
 
   app.post('/api/update/apply', async (c) => {
     auth.requireAdmin(c)
+    const user = c.get('user')
+    prod.prepare(
+      'INSERT INTO admin_audit (id, actor_id, action, target_type, data, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+    ).run(crypto.randomUUID(), user.id, 'update.apply', 'system', '{}', Date.now())
     const ok = await applyUpdate()
     if (!ok) httpError(500, ERROR_CODES.INTERNAL_ERROR)
     // El script con SKIP_RESTART=1 deja el server vivo hasta aquí; se sale y
