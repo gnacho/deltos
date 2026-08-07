@@ -217,7 +217,7 @@
     "deleteWarning": "The project and all its tasks, comments and attachments will be deleted. If you want to keep a task, move it to another project first. This cannot be undone.",
     "deleting": "Deleting…",
     "deleteError": "Could not delete the project",
-    "deleteConfirm": "Delete project",
+    "deleteConfirm": "Yes, delete",
     "form": {
       "title": "New project",
       "editTitle": "Edit project",
