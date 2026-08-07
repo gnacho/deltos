@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, User } from 'lucide-react';
+import { X, User, ChevronDown } from 'lucide-react';
 import { z } from 'zod';
 import type { ColumnId, Priority } from '@/data/types';
 import { useData } from '@/data/data-context';
 import type { NewTaskDefaults } from '@/components/modal-context';
 import { COLUMNS, PRIORITIES, PRIORITY_BADGE } from '@/lib/constants';
 import { colorOf } from '@/lib/colors';
-import { projectIconEmoji } from '@/lib/project-icons';
+import { ProjectIcon } from '@/components/ProjectIcon';
 import { apiErrorText } from '@/lib/errors';
 import { Avatar } from '@/components/Avatar';
 import { ArrowUp, ArrowRight, ArrowDown } from 'lucide-react';
@@ -43,6 +43,7 @@ export function NewTaskModal({
   const [labelIds, setLabelIds] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [projectOpen, setProjectOpen] = useState(false);
 
   const titleRef = useRef<HTMLInputElement>(null);
   const lastFocus = useRef<Element | null>(null);
@@ -154,18 +155,59 @@ export function NewTaskModal({
             >
               {t('newTask.project')}
             </label>
-            <select
-              id="nt-project"
-              value={projectId}
-              onChange={(e) => setProjectId(e.target.value)}
-              className="w-full bg-surface2 border border-app rounded-xl px-3.5 py-2.5 text-[15px] outline-none focus:border-brand"
-            >
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {projectIconEmoji(p.emoji)} {p.name}
-                </option>
-              ))}
-            </select>
+            <div className="relative">
+              <button
+                type="button"
+                id="nt-project"
+                aria-haspopup="listbox"
+                aria-expanded={projectOpen}
+                onClick={() => setProjectOpen((o) => !o)}
+                className="w-full inline-flex items-center gap-2 bg-surface2 border border-app rounded-xl px-3.5 py-2.5 text-[15px] font-medium outline-none focus:border-brand"
+              >
+                <ProjectIcon name={projects.find((p) => p.id === projectId)?.emoji ?? 'home'} className="w-4.5 h-4.5 text-muted shrink-0" />
+                <span className="flex-1 text-left truncate">
+                  {projects.find((p) => p.id === projectId)?.name ?? ''}
+                </span>
+                <ChevronDown
+                  className={`w-4 h-4 text-faint shrink-0 transition-transform duration-200 ${projectOpen ? 'rotate-180' : ''}`}
+                  aria-hidden="true"
+                />
+              </button>
+              {projectOpen && (
+                <>
+                  <div className="fixed inset-0 z-20" onClick={() => setProjectOpen(false)} aria-hidden="true" />
+                  <ul
+                    role="listbox"
+                    aria-label={t('newTask.project')}
+                    className="absolute z-30 left-0 right-0 mt-1.5 max-h-64 overflow-y-auto nice-scroll rounded-xl bg-surface border border-app shadow-2xl py-1"
+                  >
+                    {projects.map((p) => {
+                      const active = p.id === projectId;
+                      return (
+                        <li key={p.id} role="option" aria-selected={active}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setProjectId(p.id);
+                              setProjectOpen(false);
+                            }}
+                            className={`w-full flex items-center gap-2.5 px-3.5 py-2 text-[14px] text-left hover:bg-surface2 ${
+                              active ? 'font-medium text-brand' : ''
+                            }`}
+                          >
+                            <ProjectIcon name={p.emoji} className="w-4 h-4 shrink-0" />
+                            <span className="flex-1 truncate">{p.name}</span>
+                            {active && (
+                              <span className="text-[12px] font-semibold">{t('task.current')}</span>
+                            )}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </>
+              )}
+            </div>
           </div>
 
           <div>

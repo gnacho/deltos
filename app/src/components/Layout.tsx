@@ -19,8 +19,7 @@ import { LogoMark } from '@/components/Logo';
 import { Avatar } from '@/components/Avatar';
 import { ConnectionDot } from '@/components/ConnectionDot';
 import { colorOf } from '@/lib/colors';
-import { projectIconEmoji } from '@/lib/project-icons';
-import { SELECT_STYLE } from '@/lib/select-style';
+import { ProjectIcon } from '@/components/ProjectIcon';
 import { ModalContext, type NewTaskDefaults, type TaskTab } from '@/components/modal-context';
 import { TaskModal } from '@/components/TaskModal';
 import { useUpdateAvailable } from '@/hooks/useUpdateAvailable';
@@ -195,6 +194,7 @@ export default function Layout() {
       return false;
     }
   });
+  const [boardOpen, setBoardOpen] = useState(false);
 
   const toggleCollapse = () => {
     setCollapsed((prev) => {
@@ -245,26 +245,81 @@ export default function Layout() {
 
   const boardSelect = boardView !== null && (
     <>
-      <label className="sr-only" htmlFor="board-view">
+      <label className="sr-only" id="board-view-label">
         {t('nav.boardSelect')}
       </label>
-      <select
-        id="board-view"
-        value={boardView === 'project' && currentProjectId ? currentProjectId : 'todo'}
-        onChange={(e) => {
-          const v = e.target.value;
-          navigate(v === 'todo' ? '/' : `/p/${v}`);
-        }}
-        className="max-w-[180px] truncate bg-surface2 border border-app rounded-lg pl-2.5 pr-7 py-1.5 text-sm font-medium appearance-none bg-no-repeat"
-        style={SELECT_STYLE}
-      >
-        <option value="todo">📋 {t('nav.todo')}</option>
-        {projects.map((p) => (
-          <option key={p.id} value={p.id}>
-            {projectIconEmoji(p.emoji)} {p.name}
-          </option>
-        ))}
-      </select>
+      <div className="relative">
+        <button
+          type="button"
+          aria-haspopup="listbox"
+          aria-expanded={boardOpen}
+          aria-labelledby="board-view-label"
+          onClick={() => setBoardOpen((o) => !o)}
+          className="max-w-[220px] inline-flex items-center gap-2 bg-surface2 border border-app rounded-lg pl-2.5 pr-2 py-1.5 text-sm font-medium appearance-none outline-none focus:border-brand"
+        >
+          {boardView === 'project' && currentProject ? (
+            <>
+              <ProjectIcon name={currentProject.emoji} className="w-4 h-4 text-muted shrink-0" />
+              <span className="truncate">{currentProject.name}</span>
+            </>
+          ) : (
+            <>
+              <LayoutGrid className="w-4 h-4 text-muted shrink-0" aria-hidden="true" />
+              <span>{t('nav.todo')}</span>
+            </>
+          )}
+          <ChevronsRight
+            className={`w-3.5 h-3.5 text-faint shrink-0 transition-transform duration-200 ${boardOpen ? 'rotate-90' : ''}`}
+            aria-hidden="true"
+          />
+        </button>
+        {boardOpen && (
+          <>
+            <div className="fixed inset-0 z-20" onClick={() => setBoardOpen(false)} aria-hidden="true" />
+            <ul
+              role="listbox"
+              aria-label={t('nav.boardSelect')}
+              className="absolute z-30 right-0 mt-1.5 w-56 max-h-80 overflow-y-auto nice-scroll rounded-xl bg-surface border border-app shadow-2xl py-1"
+            >
+              <li role="option" aria-selected={boardView === 'todo'}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBoardOpen(false);
+                    if (boardView !== 'todo') navigate('/');
+                  }}
+                  className={`w-full flex items-center gap-2.5 px-3.5 py-2 text-[14px] text-left hover:bg-surface2 ${
+                    boardView === 'todo' ? 'font-medium text-brand' : 'text-muted'
+                  }`}
+                >
+                  <LayoutGrid className="w-4 h-4 shrink-0" aria-hidden="true" />
+                  <span className="flex-1">{t('nav.todo')}</span>
+                </button>
+              </li>
+              {projects.map((p) => {
+                const active = boardView === 'project' && currentProjectId === p.id;
+                return (
+                  <li key={p.id} role="option" aria-selected={active}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBoardOpen(false);
+                        if (!active) navigate(`/p/${p.id}`);
+                      }}
+                      className={`w-full flex items-center gap-2.5 px-3.5 py-2 text-[14px] text-left hover:bg-surface2 ${
+                        active ? 'font-medium text-brand' : 'text-muted'
+                      }`}
+                    >
+                      <ProjectIcon name={p.emoji} className="w-4 h-4 shrink-0" />
+                      <span className="flex-1 truncate">{p.name}</span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </>
+        )}
+      </div>
     </>
   );
 
