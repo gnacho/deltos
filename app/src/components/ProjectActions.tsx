@@ -1,14 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Pencil, Trash2 } from 'lucide-react';
+import { X, Trash2 } from 'lucide-react';
 import { useData } from '@/data/data-context';
 import type { Project } from '@/data/types';
 import { ProjectForm } from '@/components/ProjectForm';
 import { apiErrorText } from '@/lib/errors';
 
 /**
- * Acciones de proyecto desde el tablero: editar (modal con el mismo
- * formulario que la vista Proyectos) y eliminar (confirmación con aviso).
+ * Acciones de proyecto desde el tablero. La hamburguesa del board abre
+ * DIRECTAMENTE la edición (nombre, emoji, color); al pie de esa tarjeta hay
+ * una zona de peligro "Eliminar proyecto" que pide confirmación. Borrar un
+ * proyecto elimina también sus tareas (cascada): se avisa y se sugiere
+ * reasignar las tareas a otro proyecto antes si se quieren conservar.
  * Tras borrar navega a `/` porque el proyecto ya no existe.
  */
 export function ProjectActions({
@@ -20,7 +23,7 @@ export function ProjectActions({
 }) {
   const { t } = useTranslation();
   const data = useData();
-  const [view, setView] = useState<'menu' | 'edit' | 'delete'>('menu');
+  const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -64,13 +67,9 @@ export function ProjectActions({
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       role="dialog"
       aria-modal="true"
-      aria-label={view === 'delete' ? t('projects.delete') : t('projects.edit')}
+      aria-label={t('projects.edit')}
     >
-      <div
-        className="absolute inset-0 bg-black/45"
-        onClick={onClose}
-        aria-hidden="true"
-      />
+      <div className="absolute inset-0 bg-black/45" onClick={onClose} aria-hidden="true" />
       <div className="relative w-full max-w-[420px] rounded-2xl bg-surface border border-app shadow-xl p-5">
         <div className="mb-4 flex items-center justify-between gap-3">
           <h2 className="font-display font-semibold text-[16px] truncate">
@@ -87,38 +86,26 @@ export function ProjectActions({
           </button>
         </div>
 
-        {view === 'menu' && (
-          <div className="flex flex-col gap-2">
-            <button
-              type="button"
-              onClick={() => setView('edit')}
-              className="flex items-center gap-2.5 rounded-xl px-3.5 py-3 text-[14px] font-medium bg-surface2 border border-app hover:bg-surface text-left"
-            >
-              <Pencil className="w-4 h-4 text-muted" aria-hidden="true" />
-              {t('projects.edit')}
-            </button>
-            <button
-              type="button"
-              onClick={() => setView('delete')}
-              className="flex items-center gap-2.5 rounded-xl px-3.5 py-3 text-[14px] font-medium bg-surface2 border border-app hover:bg-surface text-left text-rose-600 dark:text-rose-400"
-            >
-              <Trash2 className="w-4 h-4" aria-hidden="true" />
-              {t('projects.delete')}
-            </button>
-          </div>
-        )}
-
-        {view === 'edit' && (
-          <ProjectForm
-            initial={project}
-            onSaved={onClose}
-            onCancel={() => setView('menu')}
-          />
-        )}
-
-        {view === 'delete' && (
+        {!confirming ? (
+          <>
+            <ProjectForm initial={project} onSaved={onClose} onCancel={onClose} />
+            {/* Zona de peligro */}
+            <div className="mt-5 border-t border-app pt-4">
+              <button
+                type="button"
+                onClick={() => setConfirming(true)}
+                className="flex items-center gap-2.5 w-full rounded-xl px-3.5 py-2.5 text-[14px] font-medium bg-surface2 border border-app hover:bg-surface text-left text-rose-600 dark:text-rose-400"
+              >
+                <Trash2 className="w-4 h-4" aria-hidden="true" />
+                {t('projects.delete')}
+              </button>
+            </div>
+          </>
+        ) : (
           <div className="space-y-4">
-            <p className="text-[14px] leading-relaxed text-muted">{t('projects.deleteWarning')}</p>
+            <p className="text-[14px] leading-relaxed text-muted">
+              {t('projects.deleteWarning')}
+            </p>
             {deleteError && (
               <p role="alert" className="text-[13px] font-medium text-rose-600 dark:text-rose-400">
                 {deleteError}
@@ -135,7 +122,7 @@ export function ProjectActions({
               </button>
               <button
                 type="button"
-                onClick={() => setView('menu')}
+                onClick={() => setConfirming(false)}
                 disabled={deleting}
                 className="px-5 h-11 rounded-xl bg-surface2 border border-app text-[14px] font-medium text-muted hover:text-[var(--text)]"
               >
