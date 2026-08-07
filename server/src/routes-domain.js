@@ -42,7 +42,7 @@ const idParamSchema = z.object({ id: z.string().min(1).max(64) })
 
 const projectSchema = z.object({
   name: z.string().min(1).max(80),
-  emoji: z.string().max(8).default(''),
+  emoji: z.string().max(40).default(''),
   color: colorSchema.default('sky'),
 })
 // PATCH: campos explícitamente opcionales SIN default — zod v4 mantiene el
@@ -50,7 +50,7 @@ const projectSchema = z.object({
 // campo lo RESETEARÍA al default (bug v1.6.0: renombrar etiqueta → slate).
 const projectPatchSchema = z.object({
   name: z.string().min(1).max(80).optional(),
-  emoji: z.string().max(8).optional(),
+  emoji: z.string().max(40).optional(),
   color: colorSchema.optional(),
 })
 
