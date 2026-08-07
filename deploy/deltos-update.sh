@@ -49,30 +49,41 @@ got="$(sha256sum "$TMP_DIR/app.tar.gz" | awk '{print $1}')"
 [ "$expected" = "$got" ] || { log "SHA256 NO coincide ($TARBALL)"; exit 5; }
 
 echo "STEP:extract"
-RELEASE_DIR="$OPT_DIR/releases/v$VER_NO_V"
-[ -d "$RELEASE_DIR" ] || mkdir -p "$RELEASE_DIR"
-tar -xzf "$TMP_DIR/app.tar.gz" -C "$RELEASE_DIR"
-
-echo "STEP:node"
-# Deps de producción: el tarball ya trae node_modules del arch correcto (CI).
-# Si cambió package.json, reinstalar como el usuario del servicio (nunca root).
-if [ -f "$RELEASE_DIR/server/package.json" ]; then
-  PREV_PKG="$(readlink -f "$OPT_DIR/current" 2>/dev/null || echo)/server/package.json"
-  if [ ! -f "$PREV_PKG" ] || ! diff -q "$PREV_PKG" "$RELEASE_DIR/server/package.json" >/dev/null 2>&1; then
-    chown -R "$APP:$APP" "$RELEASE_DIR"
-    su -s /bin/sh "$APP" -c "cd $RELEASE_DIR/server && npm ci --omit=dev --no-audit --no-fund" \
-      || { log "npm ci falló en $RELEASE_DIR"; exit 6; }
-  fi
-fi
+mkdir -p "$TMP_DIR/pkg"
+tar -xzf "$TMP_DIR/app.tar.gz" -C "$TMP_DIR/pkg"
 
 echo "STEP:deploy"
-# Cambia el symlink current -> nueva release (rollback: apuntar a la anterior).
-chown -R "$APP:$APP" "$RELEASE_DIR"
-ln -sfn "$RELEASE_DIR" "$OPT_DIR/current"
-# Poda de releases antiguas: conserva las 2 anteriores además de la actual.
-ls -1dt "$OPT_DIR"/releases/v* 2>/dev/null | tail -n +4 | while read -r old; do
-  rm -rf "$old"
-done
+# Dos layouts posibles:
+#  - Capistrano (install.sh): /opt/deltos/current → releases/vX, datos en /var/lib/deltos.
+#  - Plano (deploy manual CT 226): /opt/deltos/{server,app/dist}, datos en /opt/deltos/data.
+if [ -L "$OPT_DIR/current" ]; then
+  # Capistrano: nueva release + flip de symlink (la anterior queda intacta = rollback).
+  RELEASE_DIR="$OPT_DIR/releases/v$VER_NO_V"
+  mkdir -p "$RELEASE_DIR"
+  cp -a "$TMP_DIR/pkg/dist" "$RELEASE_DIR/dist"
+  cp -a "$TMP_DIR/pkg/server" "$RELEASE_DIR/server"
+  cp -a "$TMP_DIR/pkg/install.sh" "$RELEASE_DIR/install.sh" 2>/dev/null || true
+  cp -a "$TMP_DIR/pkg/deploy" "$RELEASE_DIR/deploy" 2>/dev/null || true
+  chown -R "$APP:$APP" "$RELEASE_DIR"
+  ln -sfn "$RELEASE_DIR" "$OPT_DIR/current"
+  [ -x "$OPT_DIR/node/bin/node" ] && ln -sfn "$OPT_DIR/node/bin/node" "$RELEASE_DIR/server/node" 2>/dev/null || true
+  # Poda de releases antiguas: conserva las 2 anteriores además de la actual.
+  ls -1dt "$OPT_DIR"/releases/v* 2>/dev/null | tail -n +4 | while read -r old; do
+    rm -rf "$old"
+  done
+else
+  # Plano: backup + copia directa (el patrón del CT 226).
+  [ -d "$OPT_DIR/app/dist" ] && cp -a "$OPT_DIR/app/dist" "$OPT_DIR/app.dist.bak-$TS"
+  [ -d "$OPT_DIR/server" ] && cp -a "$OPT_DIR/server" "$OPT_DIR/server.bak-$TS"
+  rm -rf "$OPT_DIR/app/dist"
+  mkdir -p "$OPT_DIR/app/dist"
+  cp -a "$TMP_DIR/pkg/dist/." "$OPT_DIR/app/dist/"
+  rm -rf "$OPT_DIR/server"
+  mkdir -p "$OPT_DIR/server"
+  cp -a "$TMP_DIR/pkg/server/." "$OPT_DIR/server/"
+  chown -R "$APP:$APP" "$OPT_DIR"
+fi
+# Datos NUNCA se tocan: SQLite y uploads viven en $STATE_DIR (fuera de server/).
 
 echo "STEP:restart"
 printf '%s' "$VER_NO_V" > "$MARKER"
@@ -82,6 +93,8 @@ if [ "${SKIP_RESTART:-0}" != "1" ]; then
 fi
 log "actualizado a $VER_NO_V (port $PORT)"
 
-# Rollback manual:
-#   ls /opt/deltos/releases   (elige la anterior)
+# Rollback manual (layout plano):
+#   rm -rf /opt/deltos/{app/dist,server} && mv /opt/deltos/server.bak-$TS /opt/deltos/server \
+#   && mv /opt/deltos/app.dist.bak-$TS /opt/deltos/app/dist && systemctl restart deltos
+# Rollback manual (capistrano):
 #   ln -sfn /opt/deltos/releases/v<prev> /opt/deltos/current && systemctl restart deltos
