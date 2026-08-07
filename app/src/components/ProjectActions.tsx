@@ -94,7 +94,7 @@ export function ProjectActions({
               <button
                 type="button"
                 onClick={() => setConfirming(true)}
-                className="flex items-center gap-2.5 w-full rounded-xl px-3.5 py-2.5 text-[14px] font-medium bg-surface2 border border-app hover:bg-surface text-left text-rose-600 dark:text-rose-400"
+                className="flex items-center justify-center gap-2 w-full rounded-xl px-3.5 py-2.5 text-[14px] font-semibold bg-rose-100 text-rose-700 hover:bg-rose-200 dark:bg-rose-900/40 dark:text-rose-300 dark:hover:bg-rose-900/60"
               >
                 <Trash2 className="w-4 h-4" aria-hidden="true" />
                 {t('projects.delete')}
