@@ -7,6 +7,7 @@ import {
   type CreateProjectInput,
   type CreateTaskInput,
   type DataApi,
+  type UpdateProjectInput,
 } from './data-context';
 import type { Bootstrap, Label, Project, Task, TaskDetail, TaskPatch } from './types';
 
@@ -213,6 +214,22 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [fetchBootstrap],
   );
 
+  const updateProject = useCallback(
+    async (id: string, patch: UpdateProjectInput): Promise<void> => {
+      await apiPatch<{ project: Project }>(`/api/projects/${encodeURIComponent(id)}`, patch);
+      await fetchBootstrap();
+    },
+    [fetchBootstrap],
+  );
+
+  const deleteProject = useCallback(
+    async (id: string): Promise<void> => {
+      await apiDelete(`/api/projects/${encodeURIComponent(id)}`);
+      await fetchBootstrap();
+    },
+    [fetchBootstrap],
+  );
+
   const createLabel = useCallback(
     async (input: { name: string; color: string }): Promise<Label> => {
       const res = await apiPost<{ label: Label }>('/api/labels', input);
@@ -279,6 +296,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       addComment,
       uploadAttachment,
       createProject,
+      updateProject,
+      deleteProject,
       createLabel,
       updateLabel,
       deleteLabel,

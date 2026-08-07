@@ -20,6 +20,12 @@ export interface CreateProjectInput {
   color: string;
 }
 
+export interface UpdateProjectInput {
+  name?: string;
+  emoji?: string;
+  color?: string;
+}
+
 /** Contrato síncrono: los componentes no conocen HTTP. */
 export interface DataApi {
   connectionStatus: ConnectionStatus;
@@ -51,6 +57,8 @@ export interface DataApi {
   addComment: (id: string, body: string) => Promise<void>;
   uploadAttachment: (id: string, file: File) => Promise<void>;
   createProject: (input: CreateProjectInput) => Promise<Project>;
+  updateProject: (id: string, patch: UpdateProjectInput) => Promise<void>;
+  deleteProject: (id: string) => Promise<void>;
   createLabel: (input: { name: string; color: string }) => Promise<Label>;
   updateLabel: (id: string, patch: { name?: string; color?: string }) => Promise<void>;
   deleteLabel: (id: string) => Promise<void>;
