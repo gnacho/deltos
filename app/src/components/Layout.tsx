@@ -23,6 +23,7 @@ import { ProjectIcon } from '@/components/ProjectIcon';
 import { ModalContext, type NewTaskDefaults, type TaskTab } from '@/components/modal-context';
 import { TaskModal } from '@/components/TaskModal';
 import { useUpdateAvailable } from '@/hooks/useUpdateAvailable';
+import { useUpdateBanner } from '@/hooks/update-banner-store';
 import { NewTaskModal } from '@/components/NewTaskModal';
 
 /**
@@ -118,19 +119,34 @@ function IconNavLink({
   );
 }
 
-/** Banner "hay una versión nueva en ESTE servidor" (anti pantalla-negra). */
+/** Banner "hay una nueva versión" (anti pantalla-negra + resultado del check de GitHub). */
 function UpdateBanner() {
   const { t } = useTranslation();
   const { demo } = useSession();
-  const available = useUpdateAvailable(!demo);
-  if (!available) return null;
-  return (
-    <div
-      role="status"
-      className="mb-4 flex items-center gap-2.5 rounded-xl border border-sky-500/35 bg-sky-500/10 px-3.5 py-2.5 text-[13px] font-semibold text-sky-600 dark:text-sky-400"
-    >
-      <span className="h-2 w-2 shrink-0 rounded-full bg-sky-500 animate-ping" />
-      <span className="flex-1">{t('update.banner')}</span>
+  const serverChanged = useUpdateAvailable(!demo);
+  const checkResult = useUpdateBanner();
+
+  if (!serverChanged && !checkResult.available && !checkResult.swWaiting) return null;
+
+  const applyAction =
+    checkResult.swWaiting && checkResult.applySw ? (
+      <button
+        type="button"
+        onClick={checkResult.applySw}
+        className="shrink-0 rounded-lg bg-sky-500 px-3 py-1 text-[12px] font-semibold text-white hover:brightness-110"
+      >
+        {t('update.reload')}
+      </button>
+    ) : checkResult.available && checkResult.url ? (
+      <a
+        href={checkResult.url}
+        target="_blank"
+        rel="noreferrer"
+        className="shrink-0 rounded-lg bg-sky-500 px-3 py-1 text-[12px] font-semibold text-white hover:brightness-110"
+      >
+        {t('update.openRelease')}
+      </a>
+    ) : (
       <button
         type="button"
         onClick={() => location.reload()}
@@ -138,6 +154,20 @@ function UpdateBanner() {
       >
         {t('update.reload')}
       </button>
+    );
+
+  return (
+    <div
+      role="status"
+      className="mb-4 flex items-center gap-2.5 rounded-xl border border-sky-500/35 bg-sky-500/10 px-3.5 py-2.5 text-[13px] font-semibold text-sky-600 dark:text-sky-400"
+    >
+      <span className="h-2 w-2 shrink-0 rounded-full bg-sky-500 animate-ping" />
+      <span className="flex-1">
+        {checkResult.available
+          ? t('update.bannerNew', { version: checkResult.version })
+          : t('update.banner')}
+      </span>
+      {applyAction}
     </div>
   );
 }
