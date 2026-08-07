@@ -1,78 +1,78 @@
 # Deltos — server
 
-Backend de **Deltos**, PWA de gestión de tareas para una pareja (multiusuario).
-Node 24 LTS (>=22) ESM · Hono 4 + @hono/node-server · better-sqlite3 (SQL directo, WAL) · bcryptjs · cookie · zod.
+Backend of **Deltos**, a task-management PWA for couples (multi-user).
+Node 24 LTS (>=22) ESM · Hono 4 + @hono/node-server · better-sqlite3 (direct SQL, WAL) · bcryptjs · cookie · zod.
 
-## Arranque
+## Startup
 
 ```bash
-cp .env.example .env      # ajusta AUTH_USER / AUTH_PASS
+cp .env.example .env      # adjust AUTH_USER / AUTH_PASS
 npm install
 npm start                 # http://localhost:3000
-npm run dev               # con --watch
+npm run dev               # with --watch
 npm test                  # vitest (72 tests)
 ```
 
-- **Producción arranca VACÍA**: solo se crea el admin bootstrap de `.env` (`AUTH_USER`/`AUTH_PASS`, bcrypt, idempotente).
-- **Modo demo**: BD separada (`app_demo.db`) con seed determinista del mockup (Mar/Jordi/demo, 4 proyectos, 6 etiquetas, 15 tareas con fechas relativas a hoy, 3 tareas con descripción + adjuntos + comentarios + eventos). Botón "Entrar como demo" → `POST /api/auth/demo` (sin contraseña). Desactivable con `PUT /api/settings/demo` (admin).
-  - En la BD demo, `mar` (admin) y `jordi` (user) tienen contraseña `deltos-demo`; `demo` no tiene contraseña usable.
-- Datos en `DATA_DIR` (`app.db`, `app_demo.db`, `uploads/`). El frontend compilado se sirve desde `STATIC_DIR` (`../app/dist`) con SPA fallback.
+- **Production starts EMPTY**: only the admin bootstrap from `.env` is created (`AUTH_USER`/`AUTH_PASS`, bcrypt, idempotent).
+- **Demo mode**: separate DB (`app_demo.db`) with a deterministic mockup seed (Mar/Jordi/demo, 4 projects, 6 labels, 15 tasks with dates relative to today, 3 tasks with description + attachments + comments + events). "Enter as demo" button → `POST /api/auth/demo` (no password). Disable with `PUT /api/settings/demo` (admin).
+  - In the demo DB, `mar` (admin) and `jordi` (user) have password `deltos-demo`; `demo` has no usable password.
+- Data in `DATA_DIR` (`app.db`, `app_demo.db`, `uploads/`). The compiled frontend is served from `STATIC_DIR` (`../app/dist`) with SPA fallback.
 
-## Autenticación
+## Authentication
 
-Cookie `session = id.hmac` (HMAC-SHA256), httpOnly, SameSite=Lax, 30 días, flag `Secure` configurable (`COOKIE_SECURE`, default false para dev http). Secret: `SESSION_SECRET` o autogenerado en `kv` (la cookie sobrevive reinicios). Rotación de sesión tras login. Rate-limit de login en SQLite (`login_attempts`): 5 fallos → bloqueo 5 min.
+Cookie `session = id.hmac` (HMAC-SHA256), httpOnly, SameSite=Lax, 30 days, `Secure` flag configurable (`COOKIE_SECURE`, default false for dev http). Secret: `SESSION_SECRET` or auto-generated in `kv` (the cookie survives restarts). Session rotation after login. SQLite login rate-limit (`login_attempts`): 5 failures → 5 min lockout.
 
-`GET /api/auth/me` devuelve `{ user, demo }` — `demo:true` si la sesión es de la BD demo (badge DEMO en la UI).
+`GET /api/auth/me` returns `{ user, demo }` — `demo:true` if the session belongs to the demo DB (DEMO badge in the UI).
 
 ## Endpoints
 
-### Auth (públicos: login, register, demo, logout, GET settings/demo)
+### Auth (public: login, register, demo, logout, GET settings/demo)
 
-| Método | Ruta | Descripción |
+| Method | Path | Description |
 |---|---|---|
-| POST | `/api/auth/register` | Alta de usuario `{username, password≥6, color?, language?}` → 201 |
-| POST | `/api/auth/login` | `{username, password}` → cookie rotada + `{user, demo:false}` · 401/429 |
-| POST | `/api/auth/demo` | Sesión demo sin contraseña · **403** si desactivado |
-| POST | `/api/auth/logout` | Destruye sesión y limpia cookie |
+| POST | `/api/auth/register` | Create user `{username, password≥6, color?, language?}` → 201 |
+| POST | `/api/auth/login` | `{username, password}` → rotated cookie + `{user, demo:false}` · 401/429 |
+| POST | `/api/auth/demo` | Passwordless demo session · **403** if disabled |
+| POST | `/api/auth/logout` | Destroys session and clears cookie |
 | GET | `/api/auth/me` | `{user, demo}` |
 | PUT | `/api/auth/profile` | `{email?, phone?, language?, color?}` |
-| PUT | `/api/auth/password` | `{current, next≥6}` — verifica la actual con bcrypt |
+| PUT | `/api/auth/password` | `{current, next≥6}` — verifies the current one with bcrypt |
 
-### Datos (requieren sesión)
+### Data (require session)
 
-| Método | Ruta | Descripción |
+| Method | Path | Description |
 |---|---|---|
-| GET | `/api/bootstrap` | UNA llamada: `{users, projects (con counts por columna), labels, tasks}` — tasks con `labels[]`, `assignee`, `counts {comments, attachments}` |
-| POST | `/api/projects` · PATCH/DELETE `/api/projects/:id` | CRUD proyectos |
-| POST | `/api/labels` · PATCH/DELETE `/api/labels/:id` | CRUD etiquetas (globales) |
-| POST | `/api/tasks` | `{project_id, title, description?, column?, priority?, due_date?, assignee_id?, labels?[]}` + evento `created` |
-| PATCH | `/api/tasks/:id` | title/description/priority/due_date/assignee_id/labels — cada cambio su `activity_event` |
-| POST | `/api/tasks/:id/move` | `{column, position}` — reordena ambas columnas en transacción + evento `moved {from,to}` |
-| DELETE | `/api/tasks/:id` | Borra (cascada) y compacta posiciones |
-| GET | `/api/tasks/:id` | Detalle: task + labels + attachments + comments + activity (LIMIT 50) |
-| POST | `/api/tasks/:id/comments` | `{body}` — los comentarios NO van a activity_events |
-| POST | `/api/tasks/:id/attachments` | multipart `file`, ≤10 MB → `DATA_DIR/uploads/<uuid>` + evento `attachment` |
-| GET | `/api/attachments/:id` | Descarga con content-type y content-disposition |
-| GET | `/api/activity?cursor=&limit=` | Feed global keyset (task, proyecto, username) → `{items, nextCursor, hasMore}`, default 30, máx 100 |
-| GET | `/api/events` | SSE: eventos `<dominio>.changed` con `id` monótono, `Last-Event-ID` → `sync.resync`, heartbeat `: ping` 20 s · `X-Accel-Buffering: no` · máx 20 clientes (429) |
+| GET | `/api/bootstrap` | ONE call: `{users, projects (with per-column counts), labels, tasks}` — tasks with `labels[]`, `assignee`, `counts {comments, attachments}` |
+| POST | `/api/projects` · PATCH/DELETE `/api/projects/:id` | Projects CRUD |
+| POST | `/api/labels` · PATCH/DELETE `/api/labels/:id` | Labels CRUD (global) |
+| POST | `/api/tasks` | `{project_id, title, description?, column?, priority?, due_date?, assignee_id?, labels?[]}` + `created` event |
+| PATCH | `/api/tasks/:id` | title/description/priority/due_date/assignee_id/labels — each change its own `activity_event` |
+| POST | `/api/tasks/:id/move` | `{column, position}` — reorders both columns in a transaction + `moved {from,to}` event |
+| DELETE | `/api/tasks/:id` | Deletes (cascade) and compacts positions |
+| GET | `/api/tasks/:id` | Detail: task + labels + attachments + comments + activity (LIMIT 50) |
+| POST | `/api/tasks/:id/comments` | `{body}` — comments do NOT go to activity_events |
+| POST | `/api/tasks/:id/attachments` | multipart `file`, ≤10 MB → `DATA_DIR/uploads/<uuid>` + `attachment` event |
+| GET | `/api/attachments/:id` | Download with content-type and content-disposition |
+| GET | `/api/activity?cursor=&limit=` | Global keyset feed (task, project, username) → `{items, nextCursor, hasMore}`, default 30, max 100 |
+| GET | `/api/events` | SSE: `<domain>.changed` events with monotonic `id`, `Last-Event-ID` → `sync.resync`, `: ping` heartbeat 20 s · `X-Accel-Buffering: no` · max 20 clients (429) |
 | GET | `/health` | `{status, uptime, memory, db}` |
 
 ### Admin
 
-| Método | Ruta | Descripción |
+| Method | Path | Description |
 |---|---|---|
-| GET | `/api/users` | Lista de usuarios (sin hashes) |
+| GET | `/api/users` | User list (no hashes) |
 | POST | `/api/users` | `{username, password≥6, color?, role?}` |
-| GET | `/api/settings/demo` | Público: `{demo_enabled}` (para mostrar el botón demo en login) |
-| PUT | `/api/settings/demo` | `{enabled}` — solo admin de producción |
+| GET | `/api/settings/demo` | Public: `{demo_enabled}` (to show the demo button on login) |
+| PUT | `/api/settings/demo` | `{enabled}` — production admin only |
 
-## Notas técnicas
+## Technical notes
 
-- **Dos BD**: `app.db` (producción) y `app_demo.db` (demo). `requireAuth` resuelve la sesión primero en prod y luego en demo, y fija `c.get('db')` — todas las rutas operan sobre la BD de la sesión. Los datos nunca se mezclan.
-- **WAL + checkpoint TRUNCATE cada hora** + limpieza de sesiones caducadas.
-- **Headers**: CSP `default-src 'self'`, X-Frame-Options DENY, nosniff, Referrer-Policy, Permissions-Policy; HSTS solo si `COOKIE_SECURE=true`.
-- **Graceful shutdown** (SIGTERM/SIGINT): avisa a clientes SSE, cierra server y BD.
-- **Logs**: NDJSON a stdout (logger propio, `src/logger.js`), wide event por request (`src/wide-event.js`), nivel por `LOG_LEVEL` (default `info`). Operación: `../docs/logging.md`.
-- **Runtime de referencia: Node 24 LTS** (Dockerfile `node:24-slim`, install.sh pin 24.18.1); `engines >=22` como suelo.
-- JSON en snake_case (igual que el esquema). **Errores: envelope `{error:{code,message,details?}}`** (catálogo en `src/error-codes.js`; convenciones completas en `../CONVENTIONS.md`).
-- Columnas del tablero: `nuevo` | `encurso` | `hecho`. `position` global por columna.
+- **Two DBs**: `app.db` (production) and `app_demo.db` (demo). `requireAuth` resolves the session first in prod then in demo, and sets `c.get('db')` — all routes operate on the session's DB. Data never mixes.
+- **WAL + hourly TRUNCATE checkpoint** + expired-session cleanup.
+- **Headers**: CSP `default-src 'self'`, X-Frame-Options DENY, nosniff, Referrer-Policy, Permissions-Policy; HSTS only if `COOKIE_SECURE=true`.
+- **Graceful shutdown** (SIGTERM/SIGINT): notifies SSE clients, closes server and DB.
+- **Logs**: NDJSON to stdout (own logger, `src/logger.js`), wide event per request (`src/wide-event.js`), level via `LOG_LEVEL` (default `info`). Operations: `../docs/logging.md`.
+- **Reference runtime: Node 24 LTS** (Dockerfile `node:24-slim`, install.sh pins 24.18.1); `engines >=22` as floor.
+- JSON in snake_case (same as the schema). **Errors: envelope `{error:{code,message,details?}}`** (catalogue in `src/error-codes.js`; full conventions in `../CONVENTIONS.md`).
+- Board columns: `nuevo` | `encurso` | `hecho`. `position` global per column.
