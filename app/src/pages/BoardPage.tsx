@@ -2,7 +2,7 @@ import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent } from 'react';
 import { useParams, Navigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
-import { Plus } from 'lucide-react';
+import { MoreHorizontal, Plus } from 'lucide-react';
 import type { ColumnId, Task } from '@/data/types';
 import { useData } from '@/data/data-context';
 import { useTaskModal } from '@/components/modal-context';
@@ -12,6 +12,7 @@ import { emptyFilters, type FilterState } from '@/components/filters-state';
 import { COLUMNS } from '@/lib/constants';
 import { colorOf, COLUMN_ACCENT_RGB } from '@/lib/colors';
 import { announce } from '@/lib/announce';
+import { ProjectActions } from '@/components/ProjectActions';
 
 const reducedMotionMQ = window.matchMedia('(prefers-reduced-motion: reduce)');
 
@@ -25,6 +26,7 @@ export default function BoardPage() {
 
   const [filters, setFilters] = useState<FilterState>(emptyFilters);
   const [seg, setSeg] = useState<ColumnId>('nuevo');
+  const [projectActionsOpen, setProjectActionsOpen] = useState(false);
 
   const boardRef = useRef<HTMLDivElement>(null);
   const dragId = useRef<string | null>(null);
@@ -317,7 +319,20 @@ export default function BoardPage() {
             </h1>
             <p className="text-sm text-muted mt-0.5">{subtitle}</p>
           </div>
-          <p className="tnum text-sm text-muted">{t('board.openTasks', { count: openCount })}</p>
+          <div className="flex items-center gap-2">
+            {!isTodo && project && (
+              <button
+                type="button"
+                onClick={() => setProjectActionsOpen(true)}
+                aria-label={t('projects.actions', { name: project.name })}
+                title={t('projects.actions', { name: project.name })}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-app bg-surface text-muted hover:text-text"
+              >
+                <MoreHorizontal className="w-4.5 h-4.5" aria-hidden="true" />
+              </button>
+            )}
+            <p className="tnum text-sm text-muted">{t('board.openTasks', { count: openCount })}</p>
+          </div>
         </div>
 
         {isTodo && <Filters filters={filters} onChange={setFilters} />}
@@ -426,6 +441,10 @@ export default function BoardPage() {
       >
         <Plus className="w-6 h-6" aria-hidden="true" />
       </button>
+
+      {projectActionsOpen && project && (
+        <ProjectActions project={project} onClose={() => setProjectActionsOpen(false)} />
+      )}
     </div>
   );
 }
