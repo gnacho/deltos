@@ -9,10 +9,36 @@ y este proyecto se adhiere a [Versionado Semántico](https://semver.org/lang/es/
 
 ### Todo
 
+- **Selector de iconos para proyectos** (Lucide curado): sustituir el campo de
+  texto del emoji por un selector de iconos cotidianos.
 - **Auditoría de seguridad y robustez** (release bug-hunting): revisar auth y
   sesiones, CSRF token, cabeceras de seguridad HTTP, path traversal,
   secretos (SESSION_SECRET fuera de BD), rate-limit y body caps, y bugs
   latentes. Cada hallazgo se materializa en su propio issue/PR.
+
+## [2.1.0] - 2026-08-07
+
+### Added
+
+- **Editar y eliminar proyectos desde la vista Proyectos**: cada tarjeta tiene
+  acciones de editar (nombre, emoji, color con el formulario inline
+  precargado) y de eliminar, con confirmación.
+- **Editar y eliminar proyectos desde su tablero**: el botón de acciones de la
+  cabecera abre directamente el formulario de edición y, al pie, ofrece
+  eliminar el proyecto con confirmación.
+
+### Changed
+
+- **Formulario de proyecto compartido** (`ProjectForm`): la vista Proyectos y
+  el tablero usan el mismo componente de crear/editar, con los mismos campos y
+  validación.
+- **Botón de acciones del tablero**: pasa de menú desplegable a edición
+  directa, con icono de sliders y situado a la derecha del contador de tareas
+  abiertas.
+- **Aviso al eliminar un proyecto**: explica que se borran también sus tareas,
+  comentarios y archivos, y sugiere reasignar las tareas a otro proyecto antes
+  si se quieren conservar. El botón de confirmación es ahora rojo pastel con
+  el texto centrado.
 
 ## [2.0.0] - 2026-08-06
 
