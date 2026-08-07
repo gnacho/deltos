@@ -4,6 +4,7 @@ import { X, Trash2 } from 'lucide-react';
 import { useData } from '@/data/data-context';
 import type { Project } from '@/data/types';
 import { ProjectForm } from '@/components/ProjectForm';
+import { ProjectIcon } from '@/components/ProjectIcon';
 import { apiErrorText } from '@/lib/errors';
 
 /**
@@ -72,8 +73,9 @@ export function ProjectActions({
       <div className="absolute inset-0 bg-black/45" onClick={onClose} aria-hidden="true" />
       <div className="relative w-full max-w-[420px] rounded-2xl bg-surface border border-app shadow-xl p-5">
         <div className="mb-4 flex items-center justify-between gap-3">
-          <h2 className="font-display font-semibold text-[16px] truncate">
-            {project.emoji} {project.name}
+          <h2 className="font-display font-semibold text-[16px] truncate inline-flex items-center gap-2">
+            <ProjectIcon name={project.emoji} className="w-4.5 h-4.5 text-muted shrink-0" />
+            {project.name}
           </h2>
           <button
             ref={closeRef}

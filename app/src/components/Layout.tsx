@@ -19,6 +19,7 @@ import { LogoMark } from '@/components/Logo';
 import { Avatar } from '@/components/Avatar';
 import { ConnectionDot } from '@/components/ConnectionDot';
 import { colorOf } from '@/lib/colors';
+import { projectIconEmoji } from '@/lib/project-icons';
 import { SELECT_STYLE } from '@/lib/select-style';
 import { ModalContext, type NewTaskDefaults, type TaskTab } from '@/components/modal-context';
 import { TaskModal } from '@/components/TaskModal';
@@ -260,7 +261,7 @@ export default function Layout() {
         <option value="todo">📋 {t('nav.todo')}</option>
         {projects.map((p) => (
           <option key={p.id} value={p.id}>
-            {p.emoji} {p.name}
+            {projectIconEmoji(p.emoji)} {p.name}
           </option>
         ))}
       </select>

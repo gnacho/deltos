@@ -8,6 +8,7 @@ import { useData } from '@/data/data-context';
 import type { NewTaskDefaults } from '@/components/modal-context';
 import { COLUMNS, PRIORITIES, PRIORITY_BADGE } from '@/lib/constants';
 import { colorOf } from '@/lib/colors';
+import { projectIconEmoji } from '@/lib/project-icons';
 import { apiErrorText } from '@/lib/errors';
 import { Avatar } from '@/components/Avatar';
 import { ArrowUp, ArrowRight, ArrowDown } from 'lucide-react';
@@ -161,7 +162,7 @@ export function NewTaskModal({
             >
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.emoji} {p.name}
+                  {projectIconEmoji(p.emoji)} {p.name}
                 </option>
               ))}
             </select>

@@ -13,6 +13,7 @@ import { COLUMNS } from '@/lib/constants';
 import { colorOf, COLUMN_ACCENT_RGB } from '@/lib/colors';
 import { announce } from '@/lib/announce';
 import { ProjectActions } from '@/components/ProjectActions';
+import { ProjectIcon } from '@/components/ProjectIcon';
 
 const reducedMotionMQ = window.matchMedia('(prefers-reduced-motion: reduce)');
 
@@ -251,7 +252,7 @@ export default function BoardPage() {
 
   /* ---------- Render ---------- */
 
-  const title = isTodo ? t('nav.todo') : `${project!.emoji} ${project!.name}`;
+  const title = isTodo ? t('nav.todo') : project!.name;
   const subtitle = isTodo ? t('board.todoSubtitle') : t('board.projectSubtitle');
 
   return (
@@ -314,7 +315,8 @@ export default function BoardPage() {
         {/* Cabecera de vista */}
         <div className="flex flex-wrap items-end justify-between gap-3 mb-5">
           <div>
-            <h1 className="font-display font-bold text-2xl lg:text-[28px] tracking-tight">
+            <h1 className="font-display font-bold text-2xl lg:text-[28px] tracking-tight inline-flex items-center gap-2.5">
+              {!isTodo && project && <ProjectIcon name={project.emoji} className="w-6 h-6 text-muted" />}
               {title}
             </h1>
             <p className="text-sm text-muted mt-0.5">{subtitle}</p>

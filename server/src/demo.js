@@ -65,10 +65,10 @@ export function seedDemo(db, uploadsDir) {
     const insProject = db.prepare(
       'INSERT INTO projects (id, name, emoji, color, position, created_at) VALUES (?, ?, ?, ?, ?, ?)'
     )
-    insProject.run('p-casa', 'Casa', '🏠', 'sky', 0, now - 30 * DAY)
-    insProject.run('p-trabajo', 'Trabajo', '💼', 'blue', 1, now - 30 * DAY)
-    insProject.run('p-viaje', 'Viaje a Lisboa', '✈️', 'amber', 2, now - 30 * DAY)
-    insProject.run('p-huerto', 'Huerto', '🌱', 'emerald', 3, now - 30 * DAY)
+    insProject.run('p-casa', 'Casa', 'home', 'sky', 0, now - 30 * DAY)
+    insProject.run('p-trabajo', 'Trabajo', 'briefcase', 'blue', 1, now - 30 * DAY)
+    insProject.run('p-viaje', 'Viaje a Lisboa', 'plane', 'amber', 2, now - 30 * DAY)
+    insProject.run('p-huerto', 'Huerto', 'sprout', 'emerald', 3, now - 30 * DAY)
 
     // --- Etiquetas globales (6) ---
     const insLabel = db.prepare('INSERT INTO labels (id, name, color) VALUES (?, ?, ?)')

@@ -224,7 +224,7 @@
       "name": "Nombre",
       "namePlaceholder": "Nombre del proyecto",
       "nameRequired": "El nombre es obligatorio",
-      "emoji": "Emoji",
+      "icon": "Icono",
       "emojiPlaceholder": "📋",
       "color": "Color",
       "create": "Crear proyecto",

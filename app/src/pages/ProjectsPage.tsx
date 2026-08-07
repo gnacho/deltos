@@ -8,6 +8,7 @@ import { COLUMNS } from '@/lib/constants';
 import { colorOf } from '@/lib/colors';
 import { apiErrorText } from '@/lib/errors';
 import { ProjectForm } from '@/components/ProjectForm';
+import { ProjectIcon } from '@/components/ProjectIcon';
 
 /** Vista Proyectos: contadores por estado + crear/editar/eliminar proyecto. */
 export default function ProjectsPage() {
@@ -90,8 +91,8 @@ export default function ProjectsPage() {
                       className={`w-2.5 h-2.5 rounded-full shrink-0 ${colorOf(p.color).dot}`}
                       aria-hidden="true"
                     />
-                    <span className="text-xl leading-none" aria-hidden="true">
-                      {p.emoji}
+                    <span className="w-5 h-5 shrink-0 flex items-center justify-center text-muted" aria-hidden="true">
+                      <ProjectIcon name={p.emoji} className="w-5 h-5" />
                     </span>
                     <span className="flex-1 min-w-0 font-display font-semibold text-[16px] truncate">
                       {p.name}

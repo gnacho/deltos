@@ -6,6 +6,8 @@ import { useData } from '@/data/data-context';
 import type { Project } from '@/data/types';
 import { colorOf, PROJECT_COLORS } from '@/lib/colors';
 import { apiErrorText } from '@/lib/errors';
+import { PROJECT_ICONS } from '@/lib/project-icons';
+import { ProjectIcon } from '@/components/ProjectIcon';
 
 const nameSchema = z.string().trim().min(1).max(80);
 
@@ -29,7 +31,7 @@ export function ProjectForm({
 
   const [form, setForm] = useState({
     name: initial?.name ?? '',
-    emoji: initial?.emoji ?? '',
+    emoji: initial?.emoji ?? 'home',
     color: initial?.color ?? 'sky',
   });
   const [error, setError] = useState<string | null>(null);
@@ -75,41 +77,49 @@ export function ProjectForm({
       className="space-y-4"
       aria-label={t(editing ? 'projects.form.editTitle' : 'projects.form.title')}
     >
-      <div className="grid grid-cols-[1fr_88px] gap-3">
-        <div>
-          <label
-            htmlFor="np-name"
-            className="block text-[12px] font-semibold tracking-wide uppercase text-faint mb-1.5"
-          >
-            {t('projects.form.name')}
-          </label>
-          <input
-            id="np-name"
-            type="text"
-            value={form.name}
-            maxLength={80}
-            autoFocus
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-            placeholder={t('projects.form.namePlaceholder')}
-            className="w-full bg-surface2 border border-app rounded-xl px-3.5 py-2.5 text-[15px] outline-none focus:border-brand"
-          />
-        </div>
-        <div>
-          <label
-            htmlFor="np-emoji"
-            className="block text-[12px] font-semibold tracking-wide uppercase text-faint mb-1.5"
-          >
-            {t('projects.form.emoji')}
-          </label>
-          <input
-            id="np-emoji"
-            type="text"
-            value={form.emoji}
-            maxLength={8}
-            onChange={(e) => setForm({ ...form, emoji: e.target.value })}
-            placeholder={t('projects.form.emojiPlaceholder')}
-            className="w-full bg-surface2 border border-app rounded-xl px-3 py-2.5 text-[15px] text-center outline-none focus:border-brand"
-          />
+      <div>
+        <label
+          htmlFor="np-name"
+          className="block text-[12px] font-semibold tracking-wide uppercase text-faint mb-1.5"
+        >
+          {t('projects.form.name')}
+        </label>
+        <input
+          id="np-name"
+          type="text"
+          value={form.name}
+          maxLength={80}
+          autoFocus
+          onChange={(e) => setForm({ ...form, name: e.target.value })}
+          placeholder={t('projects.form.namePlaceholder')}
+          className="w-full bg-surface2 border border-app rounded-xl px-3.5 py-2.5 text-[15px] outline-none focus:border-brand"
+        />
+      </div>
+      <div>
+        <p className="text-[12px] font-semibold tracking-wide uppercase text-faint mb-1.5">
+          {t('projects.form.icon')}
+        </p>
+        <div className="flex flex-wrap gap-1.5" role="group" aria-label={t('projects.form.icon')}>
+          {PROJECT_ICONS.map((ic) => {
+            const active = form.emoji === ic.name;
+            return (
+              <button
+                key={ic.name}
+                type="button"
+                aria-pressed={active}
+                aria-label={ic.name}
+                title={ic.name}
+                onClick={() => setForm({ ...form, emoji: ic.name })}
+                className={`h-9 w-9 rounded-lg border flex items-center justify-center transition-colors ${
+                  active
+                    ? 'border-brand bg-brand/10 text-brand'
+                    : 'border-app bg-surface2 text-muted hover:text-text hover:border-brand/40'
+                }`}
+              >
+                <ProjectIcon name={ic.name} className="w-4.5 h-4.5" />
+              </button>
+            );
+          })}
         </div>
       </div>
       <div>
