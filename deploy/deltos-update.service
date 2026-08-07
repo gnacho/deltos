@@ -1,0 +1,11 @@
+[Unit]
+Description=Deltos — aplicar actualización semanal (releases estables + checksums)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/deltos/deltos-update.sh
+# Auto-update de la app: corre como root porque necesita systemctl restart y
+# chown -R deltos. Nada de eso toca datos (SQLite está en /var/lib/deltos).
+TimeoutStartSec=600

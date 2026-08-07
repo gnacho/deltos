@@ -13,6 +13,8 @@ export interface UpdateBannerState {
   /** El servidor ya está redeployado y el SW nuevo espera activación. */
   swWaiting: boolean;
   applySw: (() => void) | null;
+  /** Aplica la release nueva en el servidor (deltos-update.sh, solo admin). */
+  applyRelease: (() => Promise<void>) | null;
 }
 
 const EMPTY: UpdateBannerState = {
@@ -21,6 +23,7 @@ const EMPTY: UpdateBannerState = {
   url: null,
   swWaiting: false,
   applySw: null,
+  applyRelease: null,
 };
 
 let state: UpdateBannerState = EMPTY;

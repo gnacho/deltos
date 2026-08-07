@@ -125,8 +125,21 @@ function UpdateBanner() {
   const { demo } = useSession();
   const serverChanged = useUpdateAvailable(!demo);
   const checkResult = useUpdateBanner();
+  const [applying, setApplying] = useState(false);
 
   if (!serverChanged && !checkResult.available && !checkResult.swWaiting) return null;
+
+  const applyRelease = async () => {
+    if (!checkResult.applyRelease || applying) return;
+    setApplying(true);
+    try {
+      await checkResult.applyRelease();
+      // El servidor se reinicia; la app se recarga con el build nuevo.
+      setTimeout(() => location.reload(), 2500);
+    } catch {
+      setApplying(false);
+    }
+  };
 
   const applyAction =
     checkResult.swWaiting && checkResult.applySw ? (
@@ -136,6 +149,15 @@ function UpdateBanner() {
         className="shrink-0 rounded-lg bg-sky-500 px-3 py-1 text-[12px] font-semibold text-white hover:brightness-110"
       >
         {t('update.reload')}
+      </button>
+    ) : checkResult.available && checkResult.applyRelease ? (
+      <button
+        type="button"
+        onClick={() => void applyRelease()}
+        disabled={applying}
+        className="shrink-0 rounded-lg bg-sky-500 px-3 py-1 text-[12px] font-semibold text-white hover:brightness-110 disabled:opacity-60"
+      >
+        {applying ? t('update.applying') : t('update.installNow')}
       </button>
     ) : checkResult.available && checkResult.url ? (
       <a

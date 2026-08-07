@@ -20,6 +20,7 @@ import { httpError, onError, validationHook } from './errors.js'
 import { ERROR_CODES } from './error-codes.js'
 import { mutationRateLimit } from './rate-limit.js'
 import { idempotencyMiddleware } from './idempotency.js'
+import { updateStatus, applyUpdate } from './update.js'
 
 const pkg = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
 
@@ -240,6 +241,25 @@ export function createApp(ctx) {
       uptime: process.uptime(),
     })
   )
+
+  // --- Actualizaciones (solo admin): detecta la última release estable del
+  // repo (releases/latest) y la aplica ejecutando deltos-update.sh (deploy/).
+  // El apply no toca datos (SQLite está en $DATA_DIR, fuera del release).
+  app.get('/api/update/status', async (c) => {
+    auth.requireAdmin(c)
+    return c.json(await updateStatus(prod))
+  })
+
+  app.post('/api/update/apply', async (c) => {
+    auth.requireAdmin(c)
+    const ok = await applyUpdate()
+    if (!ok) httpError(500, ERROR_CODES.INTERNAL_ERROR)
+    // El script con SKIP_RESTART=1 deja el server vivo hasta aquí; se sale y
+    // systemd (Restart=on-failure) relanza con el código nuevo.
+    setTimeout(() => process.exit(0), 1500)
+    return c.json({ ok: true, restarting: true }, 202)
+  })
+
   registerDomainRoutes(app, { hub, uploadsDir: ctx.uploadsDir, prod, config, dataDir: ctx.dataDir })
   registerPushRoutes(app)
   registerHealth(app, { prod, demo })
