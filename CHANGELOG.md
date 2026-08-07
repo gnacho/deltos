@@ -1,181 +1,179 @@
 # Changelog
 
-Todos los cambios notables de Deltos se documentan en este fichero.
+All notable changes to Deltos are documented in this file.
 
-El formato se basa en [Keep a Changelog](https://keepachangelog.com/es/1.1.0/),
-y este proyecto se adhiere a [Versionado Semántico](https://semver.org/lang/es/).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
 ### Todo
 
-- **Auditoría de seguridad y robustez** (release bug-hunting): revisar auth y
-  sesiones, CSRF token, cabeceras de seguridad HTTP, path traversal,
-  secretos (SESSION_SECRET fuera de BD), rate-limit y body caps, y bugs
-  latentes. Cada hallazgo se materializa en su propio issue/PR.
+- **Security and robustness audit** (bug-hunting release): review auth and
+  sessions, CSRF token, HTTP security headers, path traversal,
+  secrets (SESSION_SECRET outside the DB), rate limits and body caps, and
+  latent bugs. Each finding becomes its own issue/PR.
 
 ## [2.2.0] - 2026-08-07
 
 ### Added
 
-- **Selector de iconos para proyectos**: al crear o editar un proyecto, en
-  lugar de escribir un emoji se elige de un catálogo curado de **63 iconos
-  Lucide** (hogar, tareas domésticas, jardín, transporte, oficina, objetos
-  diarios, comida, familia/ocio e informática). Los iconos son monocromáticos
-  y siguen el tema claro/oscuro.
-- **Selector compacto**: el icono es un botón junto al nombre; al pulsarlo se
-  despliega la selección y al elegir se cierra dejando el icono elegido.
-- **Iconos monocromáticos en el selector de tablero** del topbar y en el de
-  proyecto al crear una tarea (sustituyen a los `<select>` nativos, que solo
-  mostraban emojis de color).
+- **Icon picker for projects**: when creating or editing a project, instead of
+  typing an emoji you pick from a curated catalogue of **63 Lucide icons**
+  (home, household chores, garden, transport, office, everyday objects, food,
+  family/leisure and tech). Icons are monochrome and follow the light/dark
+  theme.
+- **Compact picker**: the icon is a button next to the name; clicking it opens
+  the selection, and choosing one closes it leaving the picked icon in place.
+- **Monochrome icons in the board selector** in the top bar and in the project
+  selector when creating a task (replacing native `<select>` elements, which
+  could only show colored emojis).
 
 ### Changed
 
-- Los proyectos existentes con emoji (p. ej. 🏡) migran a su icono equivalente
-  (`home`); cualquier emoji legado se sigue mostrando como texto (compatibilidad).
+- Existing projects with an emoji (e.g. 🏡) migrate to their equivalent icon
+  (`home`); any legacy emoji still renders as text (compatibility).
 
 ### Thanks
 
-- A **Carlos Nebot** por su feedback.
+- To **Carlos Nebot** for the feedback.
 
 ## [2.1.0] - 2026-08-07
 
 ### Added
 
-- **Editar y eliminar proyectos desde la vista Proyectos**: cada tarjeta tiene
-  acciones de editar (nombre, emoji, color con el formulario inline
-  precargado) y de eliminar, con confirmación.
-- **Editar y eliminar proyectos desde su tablero**: el botón de acciones de la
-  cabecera abre directamente el formulario de edición y, al pie, ofrece
-  eliminar el proyecto con confirmación.
+- **Edit and delete projects from the Projects view**: every card has actions
+  to edit (name, emoji, color with the prefilled inline form) and to delete,
+  with confirmation.
+- **Edit and delete projects from their board**: the header actions button
+  opens the edit form directly and, at the bottom, offers deleting the project
+  with confirmation.
 
 ### Changed
 
-- **Formulario de proyecto compartido** (`ProjectForm`): la vista Proyectos y
-  el tablero usan el mismo componente de crear/editar, con los mismos campos y
-  validación.
-- **Botón de acciones del tablero**: pasa de menú desplegable a edición
-  directa, con icono de sliders y situado a la derecha del contador de tareas
-  abiertas.
-- **Aviso al eliminar un proyecto**: explica que se borran también sus tareas,
-  comentarios y archivos, y sugiere reasignar las tareas a otro proyecto antes
-  si se quieren conservar. El botón de confirmación es ahora rojo pastel con
-  el texto centrado.
+- **Shared project form** (`ProjectForm`): the Projects view and the board use
+  the same create/edit component, with the same fields and validation.
+- **Board actions button**: from a dropdown menu to direct editing, with a
+  sliders icon, placed to the right of the open-tasks counter.
+- **Delete warning**: explains that the project's tasks, comments and
+  attachments are removed too, and suggests moving tasks to another project
+  first if you want to keep them. The confirm button is now pastel red with
+  centered text.
 
 ## [2.0.0] - 2026-08-06
 
 ### Changed
 
-- **Migración del toolchain de build**: Vite 7 → 8 (Rolldown), @vitejs/plugin-react 4 → 6, Tailwind CSS 3 → 4 (config en CSS vía `@theme`, plugin Vite `@tailwindcss/vite`).
-- **React Router 7 → 8.3.0**: imports migrados de `react-router-dom` a `react-router`.
-- **Backend**: Hono 4.12 → 4.13, better-sqlite3 13.0.2 → 13.0.3, @hono/node-server 2.0.12 → 2.1.0, i18next 25 → 26 (front).
+- **Build toolchain migration**: Vite 7 → 8 (Rolldown), @vitejs/plugin-react 4 → 6, Tailwind CSS 3 → 4 (CSS config via `@theme`, Vite plugin `@tailwindcss/vite`).
+- **React Router 7 → 8.3.0**: imports migrated from `react-router-dom` to `react-router`.
+- **Backend**: Hono 4.12 → 4.13, better-sqlite3 13.0.2 → 13.0.3, @hono/node-server 2.0.12 → 2.1.0, i18next 25 → 26 (frontend).
 
 ### Fixed
 
-- **Vulnerabilidad HIGH (CSRF en modo RSC)**: GHSA-qwww-vcr4-c8h2, afectaba a react-router 7.12.0–8.2.0; cerrada con react-router 8.3.0.
-- **Body cap real en `/api/*`** (`hono/body-limit`): el check anterior dependía de `Content-Length` y se saltaba con bodies chunked; ahora también se cubren.
-- **Password mínima 10 caracteres** en registro, alta de usuarios, reset y cambio de contraseña (antes 6), alineado con el resto de apps del stack.
+- **HIGH vulnerability (CSRF in RSC mode)**: GHSA-qwww-vcr4-c8h2, affecting react-router 7.12.0–8.2.0; fixed by react-router 8.3.0.
+- **Real body cap on `/api/*`** (`hono/body-limit`): the previous check relied on `Content-Length` and could be bypassed with chunked bodies; both are now covered.
+- **Minimum password length 10** in signup, user creation, password reset and password change (previously 6), aligned with the rest of the stack.
 
 ## [1.9.2] - 2026-08-01
 
 ### Added
 
-- AdminBar horizontal con estado de actualización (check de release), demo, respaldos auto con export y timer.
-- Acerca de con versiones y uptime reales.
+- Horizontal AdminBar with update status (release check), demo, automatic backups with export and timer.
+- About screen with real versions and uptime.
 
 ### Changed
 
-- Reordenadas las tarjetas de Ajustes; acento en AdminBar; respaldos simplificado (3 días); usuarios con estado activo.
+- Settings cards reordered; AdminBar accent; simplified backups (3 days); users with active status.
 
 ## [1.9.1] - 2026-07-31
 
 ### Added
 
-- Tarjeta "Mi perfil" canónica con icono email, idioma, contraseña, notificaciones y logout.
-- Nombre visible editable y email funcional en el perfil.
-- Fondo radial sutil desde el acento; tarjetas de Apariencia/Etiquetas a 50/50 y misma altura.
+- Canonical "My profile" card with email icon, language, password, notifications and logout.
+- Editable display name and working email in the profile.
+- Subtle radial background from the accent; Appearance/Labels cards at 50/50 with equal height.
 
 ### Fixed
 
-- Redirigir a login ante `CSRF_INVALID` para no quedar atascado en la app.
+- Redirect to login on `CSRF_INVALID` so the app does not get stuck.
 
 ## [1.9.0] - 2026-07-30
 
 ### Added
 
-- `PhotoCropDialog` para adjuntar imágenes con recorte.
+- `PhotoCropDialog` to attach images with cropping.
 
 ## [1.8.0] - 2026-07-29
 
 ### Added
 
 - Audit log.
-- Rate-limit.
-- Soft-delete (papelera).
-- Export de datos.
+- Rate limiting.
+- Soft delete (trash).
+- Data export.
 - Session fingerprint.
-- Idempotencia de mutaciones.
+- Mutation idempotency.
 
 ## [1.7.0] - 2026-07-28
 
 ### Added
 
-- Ajustes de servidor (respaldos + límites de adjuntos).
+- Server settings (backups + attachment limits).
 
 ### Fixed
 
-- CSRF token, whitelist de MIME, invalidación de sesión al cambiar la contraseña.
+- CSRF token, MIME whitelist, session invalidation on password change.
 
 ## [1.6.1] - 2026-07-27
 
 ### Fixed
 
-- `PATCH` de etiquetas/proyectos ya no resetea los campos con valor por defecto.
+- `PATCH` on labels/projects no longer resets fields with default values.
 
 ## [1.6.0] - 2026-07-27
 
 ### Added
 
-- Gestión de etiquetas.
-- Layout canónico de Ajustes/Actividad/Proyectos.
-- Protección anti pantalla-negra en despliegues.
+- Label management.
+- Canonical layout for Settings/Activity/Projects.
+- Anti-black-screen protection on deployments.
 
 ## [1.5.0] - 2026-07-26
 
 ### Added
 
-- Envelope de errores de API, JSON log-ops, Node 24 y selector de acento.
-- Diálogo interactivo de puerto en instalación nueva.
-- Pre-flight de recursos del instalador (disco/memoria/puerto libre).
+- API error envelope, JSON log-ops, Node 24 and accent picker.
+- Interactive port dialog on fresh installs.
+- Installer resource pre-flight (disk/memory/free port).
 
 ## [1.4.0] - 2026-07-25
 
 ### Added
 
-- Notificaciones push Web Push (VAPID) para la actividad de tareas.
+- Web Push (VAPID) notifications for task activity.
 
 ## [1.3.0] - 2026-07-24
 
 ### Added
 
-- Gestión de usuarios admin, comprobador de actualizaciones y PWA offline (gap de webapp-shell).
+- Admin user management, update checker and offline PWA (webapp-shell gap).
 
 ## [1.2.0] - 2026-07-23
 
 ### Changed
 
-- Renombrado del proyecto de Nido a **Deltos**.
+- Project renamed from Nido to **Deltos**.
 
 ### Fixed
 
-- Cookie `deltos_session` y patrones de tarball de release renombrados correctamente.
+- `deltos_session` cookie and release tarball patterns renamed correctly.
 
 ## [1.0.0] - 2026-07-22
 
 ### Added
 
-- Instalador one-liner y pipeline de release (node_modules pre-built por arquitectura).
-- Shell webapp unificado (sidebar colapsable, rail, topbar, DemoBanner).
-- Tokens canónicos con densidad compacta y reduce-motion.
-- README EN/ES con licencia AGPL-3.0.
-- Primera versión pública estable del Kanban PWA (antes Nido).
+- One-liner installer and release pipeline (pre-built node_modules per architecture).
+- Unified webapp shell (collapsible sidebar, rail, topbar, DemoBanner).
+- Canonical tokens with compact density and reduce-motion.
+- EN/ES README with AGPL-3.0 license.
+- First stable public release of the Kanban PWA (formerly Nido).
