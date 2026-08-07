@@ -9,12 +9,30 @@ y este proyecto se adhiere a [Versionado Semántico](https://semver.org/lang/es/
 
 ### Todo
 
-- **Selector de iconos para proyectos** (Lucide curado): sustituir el campo de
-  texto del emoji por un selector de iconos cotidianos.
 - **Auditoría de seguridad y robustez** (release bug-hunting): revisar auth y
   sesiones, CSRF token, cabeceras de seguridad HTTP, path traversal,
   secretos (SESSION_SECRET fuera de BD), rate-limit y body caps, y bugs
   latentes. Cada hallazgo se materializa en su propio issue/PR.
+
+## [2.2.0] - 2026-08-07
+
+### Added
+
+- **Selector de iconos para proyectos**: al crear o editar un proyecto, en
+  lugar de escribir un emoji se elige de un catálogo curado de **63 iconos
+  Lucide** (hogar, tareas domésticas, jardín, transporte, oficina, objetos
+  diarios, comida, familia/ocio e informática). Los iconos son monocromáticos
+  y siguen el tema claro/oscuro.
+- **Selector compacto**: el icono es un botón junto al nombre; al pulsarlo se
+  despliega la selección y al elegir se cierra dejando el icono elegido.
+- **Iconos monocromáticos en el selector de tablero** del topbar y en el de
+  proyecto al crear una tarea (sustituyen a los `<select>` nativos, que solo
+  mostraban emojis de color).
+
+### Changed
+
+- Los proyectos existentes con emoji (p. ej. 🏡) migran a su icono equivalente
+  (`home`); cualquier emoji legado se sigue mostrando como texto (compatibilidad).
 
 ## [2.1.0] - 2026-08-07
 
