@@ -214,7 +214,7 @@
     "edit": "Editar proyecto",
     "actions": "Acciones de {{name}}",
     "delete": "Eliminar proyecto",
-    "deleteWarning": "Se borrarán también sus tareas, comentarios y archivos. Esta acción no se puede deshacer.",
+    "deleteWarning": "Se borrará el proyecto y también sus tareas, comentarios y archivos. Si quieres conservar alguna tarea, asígnala a otro proyecto antes. Esta acción no se puede deshacer.",
     "deleting": "Eliminando…",
     "deleteError": "No se ha podido eliminar el proyecto",
     "deleteConfirm": "Eliminar proyecto",
