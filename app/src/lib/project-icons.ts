@@ -10,32 +10,56 @@ export interface ProjectIconDef {
 }
 
 export const PROJECT_ICONS: ProjectIconDef[] = [
+  // Hogar
   { name: 'home', emoji: '🏠' },
+  { name: 'building', emoji: '🏢' },
   { name: 'bed-double', emoji: '🛏️' },
   { name: 'sofa', emoji: '🛋️' },
   { name: 'lamp', emoji: '💡' },
+  { name: 'key', emoji: '🔑' },
+  // Tareas domésticas
   { name: 'washing-machine', emoji: '🧺' },
-  { name: 'bath', emoji: '🛁' },
+  { name: 'shower-head', emoji: '🚿' },
+  { name: 'toilet', emoji: '🚽' },
   { name: 'utensils', emoji: '🍽️' },
+  { name: 'cooking-pot', emoji: '🍳' },
   { name: 'shopping-cart', emoji: '🛒' },
   { name: 'shopping-basket', emoji: '🧺' },
-  { name: 'key', emoji: '🔑' },
+  // Jardín y exterior
   { name: 'sprout', emoji: '🌱' },
   { name: 'trees', emoji: '🌳' },
   { name: 'flower', emoji: '🌸' },
-  { name: 'tent', emoji: '⛺' },
   { name: 'sun', emoji: '☀️' },
   { name: 'umbrella', emoji: '☂️' },
+  { name: 'tent', emoji: '⛺' },
+  // Transporte
   { name: 'car', emoji: '🚗' },
   { name: 'bike', emoji: '🚲' },
   { name: 'plane', emoji: '✈️' },
   { name: 'truck', emoji: '🚚' },
+  { name: 'bus', emoji: '🚌' },
+  // Trabajo y oficina
   { name: 'briefcase', emoji: '💼' },
   { name: 'graduation-cap', emoji: '🎓' },
   { name: 'book-open', emoji: '📖' },
   { name: 'wallet', emoji: '👛' },
   { name: 'coins', emoji: '🪙' },
   { name: 'calendar', emoji: '📅' },
+  { name: 'printer', emoji: '🖨️' },
+  { name: 'clipboard', emoji: '📋' },
+  // Objetos diarios
+  { name: 'backpack', emoji: '🎒' },
+  { name: 'watch', emoji: '⌚' },
+  { name: 'glasses', emoji: '👓' },
+  { name: 'scissors', emoji: '✂️' },
+  { name: 'puzzle', emoji: '🧩' },
+  { name: 'palette', emoji: '🎨' },
+  { name: 'coffee', emoji: '☕' },
+  // Comida
+  { name: 'apple', emoji: '🍎' },
+  { name: 'pizza', emoji: '🍕' },
+  { name: 'chef-hat', emoji: '👨‍🍳' },
+  // Familia y ocio
   { name: 'heart', emoji: '❤️' },
   { name: 'baby', emoji: '👶' },
   { name: 'paw-print', emoji: '🐾' },
@@ -44,7 +68,7 @@ export const PROJECT_ICONS: ProjectIconDef[] = [
   { name: 'dumbbell', emoji: '🏋️' },
   { name: 'music', emoji: '🎵' },
   { name: 'camera', emoji: '📷' },
-  { name: 'gamepad', emoji: '🎮' },
+  // Informática
   { name: 'monitor', emoji: '🖥️' },
   { name: 'laptop', emoji: '💻' },
   { name: 'tablet', emoji: '📱' },
@@ -56,7 +80,6 @@ export const PROJECT_ICONS: ProjectIconDef[] = [
   { name: 'hard-drive', emoji: '💾' },
   { name: 'cpu', emoji: '⚙️' },
   { name: 'network', emoji: '🌐' },
-  { name: 'antenna', emoji: '📡' },
   { name: 'tv', emoji: '📺' },
   { name: 'phone', emoji: '📞' },
 ];
