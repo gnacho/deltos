@@ -212,10 +212,12 @@
     "openBoard": "Abrir tablero de {{name}}",
     "new": "Nuevo proyecto",
     "edit": "Editar proyecto",
+    "actions": "Acciones de {{name}}",
     "delete": "Eliminar proyecto",
     "deleteWarning": "Se borrarán también sus tareas, comentarios y archivos. Esta acción no se puede deshacer.",
     "deleting": "Eliminando…",
     "deleteError": "No se ha podido eliminar el proyecto",
+    "deleteConfirm": "Eliminar proyecto",
     "form": {
       "title": "Nuevo proyecto",
       "editTitle": "Editar proyecto",

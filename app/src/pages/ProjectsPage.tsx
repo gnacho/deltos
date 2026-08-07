@@ -1,18 +1,13 @@
 import { useState } from 'react';
-import type { FormEvent } from 'react';
 import { useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { ChevronRight, Pencil, Plus, Trash2 } from 'lucide-react';
-import { z } from 'zod';
 import { useData } from '@/data/data-context';
 import type { Project } from '@/data/types';
 import { COLUMNS } from '@/lib/constants';
-import { colorOf, PROJECT_COLORS } from '@/lib/colors';
+import { colorOf } from '@/lib/colors';
 import { apiErrorText } from '@/lib/errors';
-
-const nameSchema = z.string().trim().min(1).max(80);
-
-const EMPTY_FORM = { name: '', emoji: '', color: 'sky' };
+import { ProjectForm } from '@/components/ProjectForm';
 
 /** Vista Proyectos: contadores por estado + crear/editar/eliminar proyecto. */
 export default function ProjectsPage() {
@@ -23,9 +18,7 @@ export default function ProjectsPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Project | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  const [form, setForm] = useState(EMPTY_FORM);
   const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   const projects = data.getProjects();
@@ -35,54 +28,17 @@ export default function ProjectsPage() {
   const closeForm = () => {
     setFormOpen(false);
     setEditing(null);
-    setForm(EMPTY_FORM);
-    setError(null);
   };
 
   const startEdit = (p: Project) => {
     setFormOpen(false);
     setEditing(p);
     setConfirmDelete(null);
-    setForm({ name: p.name, emoji: p.emoji, color: p.color });
-    setError(null);
-  };
-
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    const parsed = nameSchema.safeParse(form.name);
-    if (!parsed.success) {
-      setError(t('projects.form.nameRequired'));
-      return;
-    }
-    setSaving(true);
-    try {
-      if (editing) {
-        await data.updateProject(editing.id, {
-          name: parsed.data,
-          emoji: form.emoji.trim(),
-          color: form.color,
-        });
-        closeForm();
-      } else {
-        const project = await data.createProject({
-          name: parsed.data,
-          emoji: form.emoji.trim(),
-          color: form.color,
-        });
-        closeForm();
-        navigate(`/p/${project.id}`);
-      }
-    } catch (err) {
-      setError(
-        apiErrorText(err, editing ? t('projects.form.updateError') : t('projects.form.error')),
-      );
-      setSaving(false);
-    }
   };
 
   const remove = async (id: string) => {
     setDeleting(true);
+    setError(null);
     try {
       await data.deleteProject(id);
       setConfirmDelete(null);
@@ -106,6 +62,12 @@ export default function ProjectsPage() {
           {t('projects.stats', { projects: projects.length, open: openAll })}
         </p>
       </div>
+
+      {error && (
+        <p role="alert" className="mb-4 text-[13px] font-medium text-rose-600 dark:text-rose-400">
+          {error}
+        </p>
+      )}
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 sm:items-start">
         {projects.map((p, i) => {
@@ -228,123 +190,19 @@ export default function ProjectsPage() {
         )}
 
         {(formOpen || editing) && (
-          <form
-            onSubmit={submit}
-            noValidate
-            className="sm:col-span-2 xl:col-span-3 rounded-2xl bg-surface border border-app shadow-soft p-5 space-y-4"
-            aria-label={t(editing ? 'projects.form.editTitle' : 'projects.form.title')}
-          >
-            <h2 className="font-display font-semibold text-[15px]">
+          <div className="sm:col-span-2 xl:col-span-3 rounded-2xl bg-surface border border-app shadow-soft p-5">
+            <h2 className="font-display font-semibold text-[15px] mb-4">
               {t(editing ? 'projects.form.editTitle' : 'projects.form.title')}
             </h2>
-            <div className="grid grid-cols-[1fr_88px] gap-3">
-              <div>
-                <label
-                  htmlFor="np-name"
-                  className="block text-[12px] font-semibold tracking-wide uppercase text-faint mb-1.5"
-                >
-                  {t('projects.form.name')}
-                </label>
-                <input
-                  id="np-name"
-                  type="text"
-                  value={form.name}
-                  maxLength={80}
-                  autoFocus
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  placeholder={t('projects.form.namePlaceholder')}
-                  className="w-full bg-surface2 border border-app rounded-xl px-3.5 py-2.5 text-[15px] outline-none focus:border-brand"
-                />
-              </div>
-              <div>
-                <label
-                  htmlFor="np-emoji"
-                  className="block text-[12px] font-semibold tracking-wide uppercase text-faint mb-1.5"
-                >
-                  {t('projects.form.emoji')}
-                </label>
-                <input
-                  id="np-emoji"
-                  type="text"
-                  value={form.emoji}
-                  maxLength={8}
-                  onChange={(e) => setForm({ ...form, emoji: e.target.value })}
-                  placeholder={t('projects.form.emojiPlaceholder')}
-                  className="w-full bg-surface2 border border-app rounded-xl px-3 py-2.5 text-[15px] text-center outline-none focus:border-brand"
-                />
-              </div>
-            </div>
-            <div>
-              <p className="text-[12px] font-semibold tracking-wide uppercase text-faint mb-1.5">
-                {t('projects.form.color')}
-              </p>
-              <div
-                className="flex flex-wrap gap-2"
-                role="group"
-                aria-label={t('projects.form.color')}
-              >
-                {PROJECT_COLORS.map((c) => {
-                  const active = form.color === c;
-                  return (
-                    <button
-                      key={c}
-                      type="button"
-                      aria-pressed={active}
-                      aria-label={c}
-                      onClick={() => setForm({ ...form, color: c })}
-                      className={`w-8 h-8 rounded-full ${colorOf(c).dot} flex items-center justify-center ${
-                        active
-                          ? 'ring-2 ring-offset-2 ring-current ring-offset-[var(--surface)]'
-                          : 'opacity-60 hover:opacity-100'
-                      }`}
-                    >
-                      {active && (
-                        <svg
-                          className="w-4 h-4 text-white"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="3"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          aria-hidden="true"
-                        >
-                          <path d="m4.5 12.5 5 5 10-11" />
-                        </svg>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-            {error && (
-              <p role="alert" className="text-[13px] font-medium text-rose-600 dark:text-rose-400">
-                {error}
-              </p>
-            )}
-            <div className="flex gap-2.5">
-              <button
-                type="submit"
-                disabled={saving}
-                className="flex-1 h-11 rounded-xl bg-brand text-brandfg text-[14px] font-semibold hover:brightness-110 disabled:opacity-60"
-              >
-                {saving
-                  ? editing
-                    ? t('projects.form.saving')
-                    : t('projects.form.creating')
-                  : editing
-                    ? t('projects.form.save')
-                    : t('projects.form.create')}
-              </button>
-              <button
-                type="button"
-                onClick={closeForm}
-                className="px-5 h-11 rounded-xl bg-surface2 border border-app text-[14px] font-medium text-muted hover:text-[var(--text)]"
-              >
-                {t('common.cancel')}
-              </button>
-            </div>
-          </form>
+            <ProjectForm
+              initial={editing}
+              onSaved={(project) => {
+                closeForm();
+                if (!editing) navigate(`/p/${project.id}`);
+              }}
+              onCancel={closeForm}
+            />
+          </div>
         )}
       </div>
     </div>

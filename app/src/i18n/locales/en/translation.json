@@ -212,10 +212,12 @@
     "openBoard": "Open the {{name}} board",
     "new": "New project",
     "edit": "Edit project",
+    "actions": "Actions for {{name}}",
     "delete": "Delete project",
     "deleteWarning": "Its tasks, comments and attachments will be deleted too. This cannot be undone.",
     "deleting": "Deleting…",
     "deleteError": "Could not delete the project",
+    "deleteConfirm": "Delete project",
     "form": {
       "title": "New project",
       "editTitle": "Edit project",
