@@ -20,6 +20,7 @@ import { apiErrorText } from '@/lib/errors';
 import { Avatar } from '@/components/Avatar';
 import { CheckToggle } from '@/components/CheckToggle';
 import { useAppUpdate } from '@/hooks/useAppUpdate';
+import { setUpdateBanner } from '@/hooks/update-banner-store';
 import pkg from '../../package.json';
 
 const REPO_URL = 'https://github.com/gnacho/deltos';
@@ -570,6 +571,30 @@ export default function AdminBar() {
   const upd = useAppUpdate(pkg.version, REPO_URL);
   const [showBackups, setShowBackups] = useState(false);
   const [showUsers, setShowUsers] = useState(false);
+
+  /* Publica el resultado del check en el store para que el ribbon global lo
+     muestre: release nueva → ribbon; al día / error → sin ribbon. */
+  useEffect(() => {
+    if (upd.state === 'available' && upd.latest) {
+      setUpdateBanner({
+        available: true,
+        version: upd.latest.version,
+        url: upd.latest.url,
+        swWaiting: !!upd.swWaiting,
+        applySw: upd.swWaiting ? upd.applySw : null,
+      });
+    } else if (upd.state === 'idle' || upd.state === 'checking') {
+      // el check sigue en curso: no tocar el ribbon hasta saber el resultado
+    } else {
+      setUpdateBanner({
+        available: false,
+        version: null,
+        url: null,
+        swWaiting: !!upd.swWaiting,
+        applySw: upd.swWaiting ? upd.applySw : null,
+      });
+    }
+  }, [upd.state, upd.latest, upd.swWaiting]);
 
   if (user.role !== 'admin') return null;
 

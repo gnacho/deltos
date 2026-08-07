@@ -477,6 +477,8 @@
   },
   "update": {
     "banner": "A new version of Deltos is on the server.",
+    "bannerNew": "New version of Deltos available: v{{version}}.",
+    "openRelease": "See what's new",
     "reload": "Reload"
   },
   "errorBoundary": {
