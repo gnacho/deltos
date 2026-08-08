@@ -94,6 +94,17 @@ export function createApp(ctx) {
   // --- Auth: todo /api/* requiere sesión salvo login/register/demo/logout ---
   app.use('/api/*', auth.requireAuth({ prod, demo, secret }))
 
+  // --- Demo de solo lectura: la BD demo es "inamovible". Se rechazan todas
+  // las mutaciones (POST/PUT/PATCH/DELETE) en sesiones demo. Las rutas
+  // públicas (login/demo/logout) no tienen c.get('demo') y pasan sin tocar.
+  // Así los datos reales del usuario nunca se confunden con la demo.
+  app.use('/api/*', async (c, next) => {
+    const method = c.req.method
+    if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return next()
+    if (!c.get('demo')) return next()
+    httpError(403, ERROR_CODES.DEMO_READ_ONLY)
+  })
+
   // --- CSRF: mutaciones POST/PUT/PATCH/DELETE requieren cabecera x-csrf-token
   // que coincida con el token de la sesión. GET/HEAD exentos (idempotentes).
   // Rutas públicas (sin sesión) exentas: login/demo/logout no tienen sesión.

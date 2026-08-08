@@ -864,13 +864,13 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
     return c.body(null, 204)
   })
 
-  // --- Ajustes: modo demo (flag en kv de producción) ---
-  // GET público (la pantalla de login lo consulta para mostrar el botón demo).
+  // --- Visibilidad del botón demo en el login (flag en kv de producción) ---
+  // GET público (la pantalla de login lo consulta para mostrar/ocultar el botón).
   app.get('/api/settings/demo', (c) => {
     return c.json({ demo_enabled: kvGet(prod, 'demo_enabled', '1') === '1' })
   })
 
-  // PUT solo admin de producción: conmuta el modo demo
+  // PUT solo admin de producción: muestra u oculta el botón demo del login.
   app.put('/api/settings/demo', zValidator('json', demoToggleSchema, validationHook), (c) => {
     requireAdmin(c)
     if (c.get('demo')) httpError(403, ERROR_CODES.SETTINGS_PROD_ONLY)

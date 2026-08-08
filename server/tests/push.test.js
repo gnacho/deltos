@@ -86,12 +86,13 @@ describe('endpoints /api/push', () => {
     expect((await res.json()).error.code).toBe('VALIDATION_FAILED')
   })
 
-  it('en modo demo: clave devuelve {demo:true} y subscribe no persiste', async () => {
+  it('en modo demo: clave devuelve {demo:true} y subscribe se rechaza (solo lectura)', async () => {
     const auth = await loginDemo(inst.app)
     const res = await inst.app.request('/api/push/vapid-public-key', jsonReq(auth, 'GET'))
     expect((await res.json()).demo).toBe(true)
     const res2 = await inst.app.request('/api/push/subscribe', jsonReq(auth, 'POST', '/api/push/subscribe', SUB))
-    expect(res2.status).toBe(501)
+    expect(res2.status).toBe(403)
+    expect((await res2.json()).error.code).toBe('DEMO_READ_ONLY')
     expect(inst.demo.prepare('SELECT * FROM push_subscriptions').all()).toHaveLength(0)
   })
 })

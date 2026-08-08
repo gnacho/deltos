@@ -23,7 +23,7 @@
     "submit": "Sign in",
     "submitting": "Signing in…",
     "demo": "Enter as demo",
-    "demoHint": "Explore Deltos with sample data.",
+    "demoHint": "Explore Deltos with sample data (read-only).",
     "errorRequired": "Enter username and password",
     "errorGeneric": "Could not sign in"
   },
@@ -269,9 +269,9 @@
     "installHint": "Add Deltos to your home screen to open it as an app.",
     "installUnavailable": "Install is not available in this browser. Use \"Add to home screen\" from the menu.",
     "installDone": "Deltos is already installed on this device.",
-    "demoMode": "Demo mode",
-    "demoHint": "Allows signing in with sample data from the login screen.",
-    "demoError": "Could not change demo mode",
+    "demoMode": "Demo button on login",
+    "demoHint": "Show the button to sign in with sample data from the login screen.",
+    "demoError": "Could not change the demo button visibility",
     "demoSessionHint": "You are in a demo session: this setting can only be changed from the production session.",
     "password": "Password",
     "pwCurrent": "Current password",
@@ -435,7 +435,7 @@
     "announce": "Card movement announcements"
   },
   "demo": {
-    "banner": "Demo mode — changes are not applied to the system",
+    "banner": "Demo (read-only): you are viewing sample data. Exit to go back to your boards.",
     "exit": "Exit demo"
   },
   "errors": {
@@ -452,9 +452,10 @@
     "AUTH_RATE_LIMITED": "Too many attempts, wait 5 minutes",
     "AUTH_FORBIDDEN": "Administrator role required",
     "AUTH_WRONG_CURRENT_PASSWORD": "The current password is incorrect",
-    "AUTH_DEMO_DISABLED": "Demo mode is disabled",
+    "AUTH_DEMO_DISABLED": "The demo button is disabled",
     "CSRF_INVALID": "Invalid security token. Please reload the page.",
     "DEMO_UNAVAILABLE": "Demo mode unavailable",
+    "DEMO_READ_ONLY": "The demo is read-only: exit the demo to make changes",
     "USER_NOT_FOUND": "User not found",
     "USER_ALREADY_EXISTS": "A user with that name already exists",
     "USER_LAST_ADMIN": "At least one administrator must remain",
