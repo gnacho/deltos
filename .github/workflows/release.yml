@@ -4,6 +4,11 @@ name: release
 # server + node_modules de producción PRE-BUILT por arch) + checksums.txt.
 # install.sh consume estos assets (perfil Node del skill installer-one-liner:
 # el servidor no necesita gcc/python/make — crítico para better-sqlite3).
+#
+# Dos fases: la matriz build compila cada arch en paralelo y sube el tarball
+# como artifact; el job release descarga TODOS los arch, genera UN único
+# checksums.txt con todos ellos y los publica en la release. Así se evita la
+# carrera en la que cada arch pisaba el checksums.txt del otro (issue #36).
 
 on:
   push:
@@ -60,23 +65,35 @@ jobs:
           cp -r deploy/* stage/deploy/
           cp install.sh stage/install.sh
           tar -czf "deltos_${VERSION}_linux_${{ matrix.arch }}.tar.gz" -C stage .
+
+      - name: Sube artifact por arch
+        uses: actions/upload-artifact@v4
+        with:
+          name: deltos-${{ matrix.arch }}
+          path: deltos_*.tar.gz
+          retention-days: 7
+
+  release:
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descarga todos los tarballs (ambos arch en un directorio)
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: deltos-*
+          merge-multiple: true
+
+      - name: Checksums combinado (todos los arch en un solo fichero)
+        working-directory: dist
+        run: |
           sha256sum deltos_*.tar.gz > checksums.txt
           cat checksums.txt
 
-      - name: Publica en la release (solo tags)
-        if: github.ref_type == 'tag'
+      - name: Publica en la release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            deltos_*.tar.gz
-            checksums.txt
-
-      - name: Sube artifact de prueba (solo workflow_dispatch)
-        if: github.ref_type != 'tag'
-        uses: actions/upload-artifact@v4
-        with:
-          name: deltos-snapshot-linux-${{ matrix.arch }}
-          path: |
-            deltos_*.tar.gz
-            checksums.txt
-          retention-days: 7
+            dist/deltos_*.tar.gz
+            dist/checksums.txt
