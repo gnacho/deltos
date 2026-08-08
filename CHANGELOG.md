@@ -24,6 +24,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   systemd `.path` unit watches it and starts the root update service on demand.
   The apply is asynchronous: the page polls the server version until it changes.
 
+### Thanks
+
+- To **Carlos Nebot**, whose feedback on the installer and demo shaped this
+  whole 2.3 line: the dry-run honesty, the read-only demo behind a login
+  button, and the long list of update-flow bugs that turned out to be hiding
+  behind "Update now".
+
 ## [2.3.2] - 2026-08-08
 
 ### Fixed

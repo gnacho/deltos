@@ -27,6 +27,14 @@ push, servido por un único servicio Node + SQLite. Vale para una pareja, una
 familia, un grupo de amigos organizando un viaje o un equipo pequeño, sin la
 complejidad de las herramientas grandes y sin tus datos en la nube de otro.
 
+## El nombre
+
+Deltos viene del griego antiguo _δέλτος_ (déltos): una tablilla de escritura
+y, por extensión, cualquier escrito o documento. Antes del papel, así se
+anotaba lo que importaba recordar. El nombre le pega a una app cuyo propósito
+es justamente poner las tareas por escrito y tenerlas a la vista de quienes
+las comparten.
+
 ## ¿Por qué existe?
 
 Deltos nació como el tablero de un viaje con amigos: seis personas, una hoja
