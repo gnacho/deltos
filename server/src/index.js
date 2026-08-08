@@ -11,6 +11,7 @@ import { createHub } from './sse.js'
 import { seedDemo } from './demo.js'
 import { createApp } from './app.js'
 import { configurePush, flushNotificationQueue } from './push.js'
+import { scheduleDigestVencimiento } from './digest.js'
 import { logger } from './logger.js'
 
 const log = logger.child({ component: 'server' })
@@ -93,10 +94,15 @@ const maintenance = setInterval(() => {
 }, 60 * 60 * 1000)
 maintenance.unref()
 
+// Digest diario de vencimiento (09:00 local): un resumen por usuario con sus
+// tareas asignadas que vencen pronto/hoy o están vencidas (no completadas).
+const digestTimer = scheduleDigestVencimiento(prod, false)
+
 // Graceful shutdown: notifica a clientes SSE, cierra server y BD
 function shutdown(signal) {
   log.info('server_shutdown', { signal })
   clearInterval(maintenance)
+  clearTimeout(digestTimer)
   hub.shutdown()
   server.close(() => {
     prod.close()
