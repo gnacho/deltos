@@ -14,6 +14,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   secrets (SESSION_SECRET outside the DB), rate limits and body caps, and
   latent bugs. Each finding becomes its own issue/PR.
 
+## [2.3.1] - 2026-08-08
+
+### Fixed
+
+- **In-app update apply flow** (three bugs that prevented "Update now" from
+  ever succeeding): the update script aborted on the flat layout because `$TS`
+  was used but never assigned under `set -eu`; the checksums.txt download hit a
+  stale CDN cache right after a release shipped (now fetched with a
+  cache-buster); and the installer wrote `Restart=on-failure`, which does not
+  restart on the apply's clean `process.exit(0)` (now `Restart=always`).
+
 ## [2.3.0] - 2026-08-08
 
 ### Changed
