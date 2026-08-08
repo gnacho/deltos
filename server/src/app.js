@@ -21,7 +21,7 @@ import { httpError, onError, validationHook } from './errors.js'
 import { ERROR_CODES } from './error-codes.js'
 import { mutationRateLimit } from './rate-limit.js'
 import { idempotencyMiddleware } from './idempotency.js'
-import { updateStatus, applyUpdate } from './update.js'
+import { updateStatus } from './update.js'
 
 const pkg = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
 
@@ -268,12 +268,18 @@ export function createApp(ctx) {
     prod.prepare(
       'INSERT INTO admin_audit (id, actor_id, action, target_type, data, created_at) VALUES (?, ?, ?, ?, ?, ?)'
     ).run(crypto.randomUUID(), user.id, 'update.apply', 'system', '{}', Date.now())
-    const ok = await applyUpdate()
-    if (!ok) httpError(500, ERROR_CODES.INTERNAL_ERROR)
-    // El script con SKIP_RESTART=1 deja el server vivo hasta aquí; se sale y
-    // systemd (Restart=on-failure) relanza con el código nuevo.
-    setTimeout(() => process.exit(0), 1500)
-    return c.json({ ok: true, restarting: true }, 202)
+    // El servicio va sandboxeado (ProtectSystem=strict + no-root): no puede
+    // ejecutar deltos-update.sh con privilegios. Escribe un flag en el dir de
+    // datos (escribible); un systemd .path (deltos-update.path) lo detecta y
+    // lanza deltos-update.service (root) on-demand. El apply es async: el
+    // front sondea /api/version hasta que el build cambia.
+    const flag = path.join(ctx.dataDir, '.update-requested')
+    try {
+      fs.writeFileSync(flag, new Date().toISOString())
+    } catch {
+      httpError(500, ERROR_CODES.INTERNAL_ERROR)
+    }
+    return c.json({ requested: true }, 202)
   })
 
   registerDomainRoutes(app, { hub, uploadsDir: ctx.uploadsDir, prod, config, dataDir: ctx.dataDir })
