@@ -100,18 +100,54 @@ describe('modo demo', () => {
     expect(res.status).toBe(403)
   })
 
-  it('las mutaciones en demo no tocan producción', async () => {
+  it('las mutaciones en demo se rechazan (solo lectura): 403 DEMO_READ_ONLY', async () => {
     const { app } = await makeInstance()
     const demo = await loginDemo(app)
     const boot = await (await app.request('/api/bootstrap', { headers: { cookie: demo.cookie } })).json()
-    const created = await app.request(
-      '/api/tasks',
-      jsonReq(demo, 'POST', '/api/tasks', { project_id: boot.projects[0].id, title: 'Solo en demo' })
-    )
-    expect(created.status).toBe(201)
+    const taskId = boot.tasks[0].id
+    const projectId = boot.projects[0].id
+
+    // POST crear tarea / etiqueta / proyecto / comentario
+    for (const [url, body] of [
+      ['/api/tasks', { project_id: projectId, title: 'No se puede' }],
+      ['/api/labels', { name: 'Intento', color: 'rose' }],
+      ['/api/projects', { name: 'Prohibido' }],
+      [`/api/tasks/${taskId}/comments`, { body: 'comentario demo' }],
+    ]) {
+      const res = await app.request(url, jsonReq(demo, 'POST', '', body))
+      expect(res.status, `POST ${url}`).toBe(403)
+      expect((await res.json()).error.code).toBe('DEMO_READ_ONLY')
+    }
+
+    // PATCH tarea y mover
+    expect((await app.request(`/api/tasks/${taskId}`, jsonReq(demo, 'PATCH', '', { title: 'cambiado' }))).status).toBe(403)
+    expect((await app.request(`/api/tasks/${taskId}/move`, jsonReq(demo, 'POST', '', { column: 'hecho', position: 0 }))).status).toBe(403)
+
+    // DELETE tarea
+    expect((await app.request(`/api/tasks/${taskId}`, jsonReq(demo, 'DELETE', ''))).status).toBe(403)
+
+    // La BD demo queda intacta (sigue habiendo 15 tareas) y producción vacía.
+    const boot2 = await (await app.request('/api/bootstrap', { headers: { cookie: demo.cookie } })).json()
+    expect(boot2.tasks).toHaveLength(15)
 
     const admin = await loginAdmin(app)
     const prodBoot = await (await app.request('/api/bootstrap', { headers: { cookie: admin.cookie } })).json()
     expect(prodBoot.tasks).toHaveLength(0)
+  })
+
+  it('en demo se puede navegar (GET) y salir (logout)', async () => {
+    const { app } = await makeInstance()
+    const demo = await loginDemo(app)
+
+    // GET funciona: bootstrap, detalle de tarea, actividad
+    const boot = await app.request('/api/bootstrap', { headers: { cookie: demo.cookie } })
+    expect(boot.status).toBe(200)
+    const taskId = (await boot.json()).tasks[0].id
+    expect((await app.request(`/api/tasks/${taskId}`, { headers: { cookie: demo.cookie } })).status).toBe(200)
+    expect((await app.request('/api/activity', { headers: { cookie: demo.cookie } })).status).toBe(200)
+
+    // Logout (ruta pública) funciona desde demo
+    const out = await app.request('/api/auth/logout', { method: 'POST', headers: { cookie: demo.cookie } })
+    expect(out.status).toBe(200)
   })
 })

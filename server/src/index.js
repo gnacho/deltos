@@ -34,7 +34,10 @@ fs.mkdirSync(uploadsDir, { recursive: true })
 const prod = openDb(path.join(config.DATA_DIR, 'app.db'))
 const demo = openDb(path.join(config.DATA_DIR, 'app_demo.db'))
 
-// demo_enabled=1 por defecto (toggle de Ajustes, solo admin)
+// demo_enabled=1 por defecto. Ya NO es un "modo demo" global: solo controla
+// si el botón "Entrar como demo" se muestra en el login. La BD demo es de
+// solo lectura (ver middleware DEMO_READ_ONLY en app.js), así que este flag
+// nunca puede dejar los datos del usuario "ocupados" por la demo.
 if (kvGet(prod, 'demo_enabled') === null) kvSet(prod, 'demo_enabled', '1')
 
 const secret = auth.getSecret(prod, config.SESSION_SECRET)

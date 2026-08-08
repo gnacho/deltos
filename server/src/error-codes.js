@@ -26,6 +26,7 @@ export const ERROR_CODES = {
   AUTH_DEMO_DISABLED: 'AUTH_DEMO_DISABLED', // 403, modo demo desactivado
   CSRF_INVALID: 'CSRF_INVALID', // 403, token CSRF ausente o no coincide
   DEMO_UNAVAILABLE: 'DEMO_UNAVAILABLE', // 503, BD demo sin usuario demo
+  DEMO_READ_ONLY: 'DEMO_READ_ONLY', // 403, la BD demo es de solo lectura
 
   // Usuarios (admin)
   USER_NOT_FOUND: 'USER_NOT_FOUND',
@@ -77,6 +78,7 @@ export const ERROR_MESSAGES_ES = {
   [ERROR_CODES.AUTH_DEMO_DISABLED]: 'El modo demo está desactivado',
   [ERROR_CODES.CSRF_INVALID]: 'Token de seguridad no válido. Recarga la página.',
   [ERROR_CODES.DEMO_UNAVAILABLE]: 'Modo demo no disponible',
+  [ERROR_CODES.DEMO_READ_ONLY]: 'La demostración es de solo lectura: sal de la demo para hacer cambios',
 
   [ERROR_CODES.USER_NOT_FOUND]: 'Usuario no encontrado',
   [ERROR_CODES.USER_ALREADY_EXISTS]: 'El usuario ya existe',
