@@ -13,7 +13,7 @@ import { zValidator } from '@hono/zod-validator'
 import { SqliteError } from 'better-sqlite3'
 import { requireAdmin } from './auth.js'
 import { kvGet, kvSet } from './db.js'
-import { notifyUsers, notifyAllExcept } from './push.js'
+import { notifyUsers, notifyAllExcept, notifyInterested } from './push.js'
 import { httpError, validationHook } from './errors.js'
 import { ERROR_CODES } from './error-codes.js'
 import { decodeCursor, keysetPage } from './pagination.js'
@@ -28,6 +28,19 @@ function notifyIds(db, demo, ids, tipo, datos, opciones = {}) {
   notifyUsers(db, ids, tipo, datos, { ...opciones, demo }).catch((err) =>
     log.error('push_notify_failed', { tipo, error: err })
   )
+}
+
+// Extrae @username de un texto y los resuelve a IDs de usuario existentes
+// (case-insensitive), excluyendo al actor. Para notificar menciones.
+export function extraerMenciones(db, text, actorId) {
+  const matches = (text || '').match(/@([A-Za-z0-9_]+)/g) || []
+  const nicks = [...new Set(matches.map((m) => m.slice(1)).map((n) => n.toLowerCase()))]
+  if (nicks.length === 0) return []
+  const placeholders = nicks.map(() => '?').join(',')
+  const rows = db
+    .prepare(`SELECT id FROM users WHERE LOWER(username) IN (${placeholders})`)
+    .all(...nicks)
+  return [...new Set(rows.map((r) => r.id).filter((id) => id !== actorId))]
 }
 
 // --- Validación zod (límites de input) -------------------------------------
@@ -371,13 +384,11 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
     })
     create()
     hub.broadcast('tasks')
-    // Push: 'tarea_creada' a todos menos actor y asignado; el asignado recibe
-    // 'asignacion' (así no le llegan dos avisos de la misma tarjeta).
+    // Push: si la tarea lleva asignado, recibe 'asignacion' (único aviso al
+    // interesado; evita el ruido de avisar a todo el proyecto con 'tarea_creada').
     const datosPush = { usuario: user.username, titulo: data.title }
     const asignado = data.assignee_id && data.assignee_id !== user.id ? data.assignee_id : null
     if (asignado) notifyIds(db, c.get('demo'), [asignado], 'asignacion', datosPush)
-    const otros = db.prepare('SELECT id FROM users WHERE id != ? AND id != ?').all(user.id, asignado || '').map((r) => r.id)
-    notifyIds(db, c.get('demo'), otros, 'tarea_creada', datosPush)
     c.header('Location', `/api/tasks/${id}`)
     return c.json({ task: hydrateTasks(db, 't.id = ?', [id])[0] }, 201)
   })
@@ -483,7 +494,7 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
       })
       move()
       hub.broadcast('tasks')
-      notifyAllExcept(db, c.get('demo'), user.id, 'tarea_movida', { usuario: user.username, titulo: task.title, columna: toCol })
+      notifyInterested(db, c.get('demo'), task, user.id, 'tarea_movida', { usuario: user.username, titulo: task.title, columna: toCol })
       return c.json({ task: hydrateTasks(db, 't.id = ?', [task.id])[0] })
     }
   )
@@ -549,7 +560,10 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
         .run(id, task.id, user.id, data.body, now)
       db.prepare('UPDATE tasks SET updated_at = ? WHERE id = ?').run(now, task.id)
       hub.broadcast('comments')
-      notifyAllExcept(db, c.get('demo'), user.id, 'comentario', { usuario: user.username, titulo: task.title })
+      notifyInterested(db, c.get('demo'), task, user.id, 'comentario', { usuario: user.username, titulo: task.title })
+      // @menciones: avisa a los usuarios citados con tipo 'mencion'
+      const mencionados = extraerMenciones(db, data.body, user.id)
+      if (mencionados.length) notifyIds(db, c.get('demo'), mencionados, 'mencion', { usuario: user.username, titulo: task.title })
       // Location: no hay GET de comentario individual; apunta a la tarea que lo contiene.
       c.header('Location', `/api/tasks/${task.id}`)
       return c.json(
