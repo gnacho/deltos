@@ -16,6 +16,7 @@ MARKER="$OPT_DIR/.release-id"
 CONF_DIR=/etc/deltos
 ENV_FILE="$CONF_DIR/env"
 SERVICE_NAME=deltos
+TS="$(date +%s)"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT INT TERM
 
@@ -40,7 +41,10 @@ echo "STEP:download"
 TARBALL="deltos_${VER_NO_V}_linux_${ARCH}.tar.gz"
 BASE="https://github.com/$REPO/releases/download/$VER"
 curl -fL "$BASE/$TARBALL" -o "$TMP_DIR/app.tar.gz"
-curl -fL "$BASE/checksums.txt" -o "$TMP_DIR/checksums.txt"
+# cache-buster en checksums.txt: la URL es estable entre versiones y la CDN
+# cachea el fichero viejo justo tras publicar una release, lo que haría
+# fallar la verificación (bug real, issue #38).
+curl -fL "$BASE/checksums.txt?nc=$TS" -o "$TMP_DIR/checksums.txt"
 
 echo "STEP:verify"
 expected="$(awk -v f="$TARBALL" '$0 ~ f {print $1; exit}' "$TMP_DIR/checksums.txt")"
