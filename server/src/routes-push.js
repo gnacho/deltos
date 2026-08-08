@@ -19,6 +19,16 @@ const subscribeSchema = z.object({
   }),
 })
 
+// Tipos de notificación configurables por el usuario (toggle en Ajustes).
+// notifyUsers (push.js) trata la AUSENCIA de fila como 'enabled'; una fila con
+// enabled=0 la desactiva. Deben ir sincronizados con el catálogo de push.js.
+export const TIPOS_PUSH = ['asignacion', 'comentario', 'tarea_movida', 'mencion', 'vencimiento']
+
+const prefSchema = z.object({
+  tipo: z.enum(TIPOS_PUSH),
+  enabled: z.boolean(),
+})
+
 const unsubscribeSchema = z.object({
   endpoint: z.string().url().max(1000),
 })
@@ -71,5 +81,31 @@ export function registerPushRoutes(app) {
     db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ? AND user_id = ?')
       .run(data.endpoint, c.get('user').id)
     return c.body(null, 204)
+  })
+
+  // Preferencias por tipo (toggles en Ajustes). Ausencia = activado.
+  app.get('/api/push/preferences', (c) => {
+    const db = c.get('db')
+    const user = c.get('user')
+    const rows = db
+      .prepare('SELECT tipo, enabled FROM notification_preferences WHERE user_id = ?')
+      .all(user.id)
+    const off = new Set(rows.filter((r) => !r.enabled).map((r) => r.tipo))
+    const prefs = {}
+    for (const tipo of TIPOS_PUSH) prefs[tipo] = !off.has(tipo)
+    return c.json({ prefs })
+  })
+
+  app.put('/api/push/preferences', zValidator('json', prefSchema, validationHook), (c) => {
+    if (c.get('demo')) httpError(403, ERROR_CODES.DEMO_READ_ONLY)
+    const db = c.get('db')
+    const user = c.get('user')
+    const { tipo, enabled } = c.req.valid('json')
+    db.prepare(
+      `INSERT INTO notification_preferences (user_id, tipo, enabled, min_severity, updated_at)
+       VALUES (?, ?, ?, 'normal', ?)
+       ON CONFLICT(user_id, tipo) DO UPDATE SET enabled = excluded.enabled, updated_at = excluded.updated_at`
+    ).run(user.id, tipo, enabled ? 1 : 0, Date.now())
+    return c.json({ ok: true })
   })
 }

@@ -195,4 +195,34 @@ describe('motor notifyUsers', () => {
     expect(res.enviados).toBe(0)
     expect(res.omitidos).toBe(1)
   })
+
+  it('preferencias: GET trae todos los tipos activados por defecto; PUT desactiva', async () => {
+    const auth = await loginAdmin(inst.app)
+    let res = await inst.app.request('/api/push/preferences', jsonReq(auth, 'GET', '/api/push/preferences'))
+    expect(res.status).toBe(200)
+    let prefs = (await res.json()).prefs
+    expect(prefs.asignacion).toBe(true)
+    expect(prefs.vencimiento).toBe(true)
+    expect(Object.keys(prefs).sort()).toEqual(['asignacion', 'comentario', 'mencion', 'tarea_movida', 'vencimiento'])
+
+    // Desactiva 'comentario'
+    res = await inst.app.request(
+      '/api/push/preferences',
+      jsonReq(auth, 'PUT', '/api/push/preferences', { tipo: 'comentario', enabled: false })
+    )
+    expect(res.status).toBe(200)
+    res = await inst.app.request('/api/push/preferences', jsonReq(auth, 'GET', '/api/push/preferences'))
+    prefs = (await res.json()).prefs
+    expect(prefs.comentario).toBe(false)
+    expect(prefs.asignacion).toBe(true)
+  })
+
+  it('preferencias: tipo inválido → 422', async () => {
+    const auth = await loginAdmin(inst.app)
+    const res = await inst.app.request(
+      '/api/push/preferences',
+      jsonReq(auth, 'PUT', '/api/push/preferences', { tipo: 'inventado', enabled: true })
+    )
+    expect(res.status).toBe(422)
+  })
 })
