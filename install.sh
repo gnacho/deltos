@@ -250,7 +250,13 @@ SUM_REF=$(grep "  $ASSET\$" "$TMP/checksums.txt" | awk '{print $1}')
 [ -n "$SUM_REF" ] || fatal 33 "$ASSET not listed in checksums.txt"
 [ "$SUM_FILE" = "$SUM_REF" ] || fatal 33 "sha256 MISMATCH for $ASSET — corrupt or tampered download"
 ok "sha256 verified"
-tar -tzf "$TMP/$ASSET" >/dev/null 2>&1 || fatal 34 "tarball is corrupt"
+# Manifiesto del tarball: el dry-run y la instalación real deben llegar a la
+# misma conclusión sobre qué timers instalar. Comprobar el contenido extraído
+# (path $OPT_DIR/current/deploy/...) falla en dry-run porque no se extrae nada;
+# el manifiesto sí está disponible en ambos modos (el tarball se descarga y
+# verifica siempre).
+MANIFEST=$(tar -tzf "$TMP/$ASSET") || fatal 34 "tarball is corrupt"
+tarball_has() { printf '%s\n' "$MANIFEST" | grep -q "deploy/$1\$"; }
 
 # -------------------------------------------------------------- Node runtime --
 NODE_DIR="node-v${NODE_VERSION}-linux-${NODE_ARCH}"
@@ -362,35 +368,40 @@ if [ "$DRY_RUN" -eq 0 ]; then
 fi
 
 # -------------------------------------------------------- backup timer (daily) --
-BACKUP_SCRIPT="$OPT_DIR/current/deploy/deltos-backup.sh"
-if [ -f "$BACKUP_SCRIPT" ] && [ "$DRY_RUN" -eq 0 ]; then
-    run $SUDO cp "$OPT_DIR/current/deploy/deltos-backup.service" "/etc/systemd/system/${SERVICE_NAME}-backup.service"
-    run $SUDO cp "$OPT_DIR/current/deploy/deltos-backup.timer" "/etc/systemd/system/${SERVICE_NAME}-backup.timer"
-    run $SUDO sed -i "s|/opt/deltos|$OPT_DIR|g" "/etc/systemd/system/${SERVICE_NAME}-backup.service"
-    run $SUDO sed -i "s|/var/lib/deltos|$STATE_DIR|g" "/etc/systemd/system/${SERVICE_NAME}-backup.service"
-    run $SUDO systemctl daemon-reload
-    run $SUDO systemctl enable --now "${SERVICE_NAME}-backup.timer"
-    ok "backup timer enabled (daily)"
-elif [ "$DRY_RUN" -eq 1 ]; then
-    info "[dry-run] would install backup timer ${SERVICE_NAME}-backup.timer"
+# Se instala solo si la release trae el script (versiones antiguas no lo
+# incluyen). El manifiesto del tarball es la fuente de verdad en ambos modos.
+if tarball_has deltos-backup.sh; then
+    if [ "$DRY_RUN" -eq 1 ]; then
+        info "[dry-run] would install backup timer ${SERVICE_NAME}-backup.timer"
+    else
+        $SUDO cp "$OPT_DIR/current/deploy/deltos-backup.service" "/etc/systemd/system/${SERVICE_NAME}-backup.service"
+        $SUDO cp "$OPT_DIR/current/deploy/deltos-backup.timer" "/etc/systemd/system/${SERVICE_NAME}-backup.timer"
+        $SUDO sed -i "s|/opt/deltos|$OPT_DIR|g" "/etc/systemd/system/${SERVICE_NAME}-backup.service"
+        $SUDO sed -i "s|/var/lib/deltos|$STATE_DIR|g" "/etc/systemd/system/${SERVICE_NAME}-backup.service"
+        $SUDO systemctl daemon-reload
+        $SUDO systemctl enable --now "${SERVICE_NAME}-backup.timer"
+        ok "backup timer enabled (daily)"
+    fi
 fi
 
 # -------------------------------------------------------- update timer (weekly) --
 # Auto-update semanal (regla: timer > cron siempre): script versionado en el
 # repo, releases estables + checksums + marker semver (patrón app-auto-update).
-UPDATE_SCRIPT="$OPT_DIR/current/deploy/deltos-update.sh"
-if [ -f "$UPDATE_SCRIPT" ] && [ "$DRY_RUN" -eq 0 ]; then
-    run $SUDO cp "$OPT_DIR/current/deploy/deltos-update.sh" "$OPT_DIR/deltos-update.sh"
-    run $SUDO chmod 0755 "$OPT_DIR/deltos-update.sh"
-    run $SUDO cp "$OPT_DIR/current/deploy/deltos-update.service" "/etc/systemd/system/${SERVICE_NAME}-update.service"
-    run $SUDO cp "$OPT_DIR/current/deploy/deltos-update.timer" "/etc/systemd/system/${SERVICE_NAME}-update.timer"
-    run $SUDO sed -i "s|/opt/deltos|$OPT_DIR|g" "/etc/systemd/system/${SERVICE_NAME}-update.service"
-    run $SUDO sed -i "s|/var/lib/deltos|$STATE_DIR|g" "/etc/systemd/system/${SERVICE_NAME}-update.service"
-    run $SUDO systemctl daemon-reload
-    run $SUDO systemctl enable --now "${SERVICE_NAME}-update.timer"
-    ok "update timer enabled (weekly)"
-elif [ "$DRY_RUN" -eq 1 ]; then
-    info "[dry-run] would install update timer ${SERVICE_NAME}-update.timer"
+# Igual que el backup: solo si la release trae el script.
+if tarball_has deltos-update.sh; then
+    if [ "$DRY_RUN" -eq 1 ]; then
+        info "[dry-run] would install update timer ${SERVICE_NAME}-update.timer"
+    else
+        $SUDO cp "$OPT_DIR/current/deploy/deltos-update.sh" "$OPT_DIR/deltos-update.sh"
+        $SUDO chmod 0755 "$OPT_DIR/deltos-update.sh"
+        $SUDO cp "$OPT_DIR/current/deploy/deltos-update.service" "/etc/systemd/system/${SERVICE_NAME}-update.service"
+        $SUDO cp "$OPT_DIR/current/deploy/deltos-update.timer" "/etc/systemd/system/${SERVICE_NAME}-update.timer"
+        $SUDO sed -i "s|/opt/deltos|$OPT_DIR|g" "/etc/systemd/system/${SERVICE_NAME}-update.service"
+        $SUDO sed -i "s|/var/lib/deltos|$STATE_DIR|g" "/etc/systemd/system/${SERVICE_NAME}-update.service"
+        $SUDO systemctl daemon-reload
+        $SUDO systemctl enable --now "${SERVICE_NAME}-update.timer"
+        ok "update timer enabled (weekly)"
+    fi
 fi
 
 # ------------------------------------------------------------------ summary --
