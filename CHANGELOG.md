@@ -14,6 +14,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   secrets (SESSION_SECRET outside the DB), rate limits and body caps, and
   latent bugs. Each finding becomes its own issue/PR.
 
+## [2.3.2] - 2026-08-08
+
+### Fixed
+
+- **Update script no longer deletes .env on the flat layout.** The flat-layout
+  branch replaced the whole `server/` directory, wiping the local `.env`
+  (DATA_DIR, PORT, VAPID) and crash-looping the service after an update. It now
+  replaces only the code (src, node_modules, package.json) and leaves `.env`
+  and other local files untouched.
+
 ## [2.3.1] - 2026-08-08
 
 ### Fixed
