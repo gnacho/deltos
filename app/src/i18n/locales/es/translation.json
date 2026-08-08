@@ -394,6 +394,14 @@
     "notifDemo": "No disponible en modo demo.",
     "notifIos": "En iPhone/iPad las alertas solo funcionan con la app instalada: Compartir → Añadir a pantalla de inicio.",
     "notifError": "No se pudieron activar las alertas. Inténtalo de nuevo.",
+    "notifTipos": "Qué avisos quieres recibir",
+    "notifTipo": {
+      "asignacion": "Tarea asignada a ti",
+      "comentario": "Comentario en tu tarjeta",
+      "tarea_movida": "Tu tarjeta movida",
+      "mencion": "Te mencionan",
+      "vencimiento": "Resumen de vencimiento"
+    },
     "accent": {
       "title": "Color de acento",
       "hint": "Se aplica a botones, pestañas y navegación.",

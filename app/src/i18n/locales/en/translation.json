@@ -394,6 +394,14 @@
     "notifDemo": "Not available in demo mode.",
     "notifIos": "On iPhone/iPad alerts only work with the app installed: Share → Add to Home Screen.",
     "notifError": "Could not enable alerts. Try again.",
+    "notifTipos": "Which alerts you want to receive",
+    "notifTipo": {
+      "asignacion": "Task assigned to you",
+      "comentario": "Comment on your task",
+      "tarea_movida": "Your task moved",
+      "mencion": "You are mentioned",
+      "vencimiento": "Due-date summary"
+    },
     "accent": {
       "title": "Accent color",
       "hint": "Applied to buttons, tabs and navigation.",

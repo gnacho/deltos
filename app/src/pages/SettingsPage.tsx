@@ -36,6 +36,7 @@ import { ACCENT_IDS, ACCENTS } from '@/theme/accents';
 import { applyUserLanguage } from '@/i18n';
 import { Avatar } from '@/components/Avatar';
 import { LogoMark } from '@/components/Logo';
+import { CheckToggle } from '@/components/CheckToggle';
 import { useInstallPrompt } from '@/hooks/useInstallPrompt';
 import { usePush } from '@/hooks/usePush';
 import AdminBar from './AdminBar';
@@ -354,6 +355,21 @@ function MiPerfilCard() {
 function NotificationsInline() {
   const { t } = useTranslation();
   const { soporte, estado, activar, desactivar } = usePush();
+  const TIPOS = ['asignacion', 'comentario', 'tarea_movida', 'mencion', 'vencimiento'] as const;
+  const [prefs, setPrefs] = useState<Record<string, boolean> | null>(null);
+
+  useEffect(() => {
+    apiFetch<{ prefs: Record<string, boolean> }>('/api/push/preferences')
+      .then((r) => setPrefs(r.prefs))
+      .catch(() => setPrefs(null));
+  }, []);
+
+  const cambiarPref = (tipo: string, enabled: boolean) => {
+    setPrefs((p) => (p ? { ...p, [tipo]: enabled } : p));
+    apiPut('/api/push/preferences', { tipo, enabled }).catch(() => {
+      setPrefs((p) => (p ? { ...p, [tipo]: !enabled } : p));
+    });
+  };
 
   return (
     <div className="space-y-3">
@@ -396,6 +412,23 @@ function NotificationsInline() {
             <p role="alert" className="text-[13px] font-medium text-rose-600 dark:text-rose-400">
               {estado.error}
             </p>
+          )}
+          {estado.suscrito && prefs && (
+            <div className="space-y-2 border-t border-app pt-3">
+              <p className="text-[13px] font-medium text-faint">{t('settings.notifTipos')}</p>
+              {TIPOS.map((tipo) => (
+                <div key={tipo} className="flex items-center justify-between gap-3">
+                  <span className="text-sm text-text-primary">{t(`settings.notifTipo.${tipo}`)}</span>
+                  <CheckToggle
+                    checked={prefs[tipo] !== false}
+                    onChange={(checked) => cambiarPref(tipo, checked)}
+                    label={t(`settings.notifTipo.${tipo}`)}
+                    variant="switch"
+                    size="sm"
+                  />
+                </div>
+              ))}
+            </div>
           )}
         </>
       )}
