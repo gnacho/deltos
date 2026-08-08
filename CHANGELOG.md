@@ -14,6 +14,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   secrets (SESSION_SECRET outside the DB), rate limits and body caps, and
   latent bugs. Each finding becomes its own issue/PR.
 
+## [2.3.0] - 2026-08-08
+
+### Changed
+
+- **Demo is now a read-only database behind a login button.** Previously demo
+  was a global toggle in the production database (defaulting on) with a fully
+  writable demo database; after an update a user could land on the demo data
+  and think their own was gone. Now every mutation on a demo session is
+  rejected with `403 DEMO_READ_ONLY`, browsing and logout still work, and the
+  admin toggle only controls whether the demo button is visible on the login
+  screen (no persistent state that can be left on by mistake).
+
+### Fixed
+
+- **Installer `--dry-run` now tells the truth about timers.** It used to
+  announce the weekly update timer even when the installed release did not
+  ship it. The dry-run and the real install now agree, by gating each timer on
+  whether its script is bundled in the release tarball. The weekly update
+  timer scripts now ship in the release too.
+
 ## [2.2.0] - 2026-08-07
 
 ### Added
