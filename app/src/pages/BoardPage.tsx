@@ -2,7 +2,7 @@ import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent } from 'react';
 import { useParams, Navigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
-import { Plus, SlidersHorizontal } from 'lucide-react';
+import { Plus, Settings2 } from 'lucide-react';
 import type { ColumnId, Task } from '@/data/types';
 import { useData } from '@/data/data-context';
 import { useTaskModal } from '@/components/modal-context';
@@ -331,7 +331,7 @@ export default function BoardPage() {
                 title={t('projects.actions', { name: project.name })}
                 className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-app bg-surface text-muted hover:text-text"
               >
-                <SlidersHorizontal className="w-4.5 h-4.5" aria-hidden="true" />
+                <Settings2 className="w-4.5 h-4.5" aria-hidden="true" />
               </button>
             )}
           </div>
