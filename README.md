@@ -27,6 +27,13 @@ small Node + SQLite service. It works for a couple, a family, a group of
 friends planning a trip, or a small team, without the complexity of the big
 tools and without your data on somebody else's cloud.
 
+## The name
+
+Deltos comes from the ancient Greek _δέλτος_ (déltos): a writing tablet, and
+by extension any written record or letter. Before paper, that was how you
+kept notes on what mattered. The name fit an app whose whole point is writing
+tasks down and keeping them where the people who share them can see them.
+
 ## Why does this exist?
 
 Deltos started as the board for a friends' trip: six people, a spreadsheet
