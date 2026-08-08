@@ -23,7 +23,7 @@
     "submit": "Entrar",
     "submitting": "Entrando…",
     "demo": "Entrar como demo",
-    "demoHint": "Explora Deltos con datos de ejemplo.",
+    "demoHint": "Explora Deltos con datos de ejemplo (solo lectura).",
     "errorRequired": "Indica usuario y contraseña",
     "errorGeneric": "No se ha podido iniciar sesión"
   },
@@ -269,9 +269,9 @@
     "installHint": "Añade Deltos a tu pantalla de inicio para abrirlo como una app.",
     "installUnavailable": "La instalación no está disponible en este navegador. Usa «Añadir a pantalla de inicio» desde el menú.",
     "installDone": "Deltos ya está instalado en este dispositivo.",
-    "demoMode": "Modo demo",
-    "demoHint": "Permite entrar con datos de ejemplo desde la pantalla de login.",
-    "demoError": "No se ha podido cambiar el modo demo",
+    "demoMode": "Botón demo en login",
+    "demoHint": "Muestra en el login el botón para entrar con datos de ejemplo.",
+    "demoError": "No se ha podido cambiar la visibilidad del botón demo",
     "demoSessionHint": "Estás en una sesión demo: este ajuste solo se puede cambiar desde la sesión de producción.",
     "password": "Contraseña",
     "pwCurrent": "Contraseña actual",
@@ -435,8 +435,8 @@
     "announce": "Avisos de movimientos de tarjetas"
   },
   "demo": {
-    "banner": "Modo demo — los cambios no se aplican al sistema",
-    "exit": "Salir del demo"
+    "banner": "Demostración (solo lectura): estás viendo datos de ejemplo. Sal para volver a tus tableros.",
+    "exit": "Salir de la demo"
   },
   "errors": {
     "BAD_REQUEST": "La petición es incorrecta",
@@ -452,9 +452,10 @@
     "AUTH_RATE_LIMITED": "Demasiados intentos, espera 5 minutos",
     "AUTH_FORBIDDEN": "Se requiere rol de administrador",
     "AUTH_WRONG_CURRENT_PASSWORD": "La contraseña actual es incorrecta",
-    "AUTH_DEMO_DISABLED": "El modo demo está desactivado",
+    "AUTH_DEMO_DISABLED": "El botón demo está desactivado",
     "CSRF_INVALID": "Token de seguridad no válido. Recarga la página.",
     "DEMO_UNAVAILABLE": "Modo demo no disponible",
+    "DEMO_READ_ONLY": "La demostración es de solo lectura: sal de la demo para hacer cambios",
     "USER_NOT_FOUND": "Usuario no encontrado",
     "USER_ALREADY_EXISTS": "Ya existe un usuario con ese nombre",
     "USER_LAST_ADMIN": "Debe quedar al menos un administrador",
