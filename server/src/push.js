@@ -60,6 +60,17 @@ const CATALOGO = {
     tarea_movida: { titulo: 'Tarea movida', cuerpo: (d) => `${d.usuario} movió «${d.titulo}» a ${COLUMNAS.es[d.columna] || d.columna}` },
     comentario: { titulo: 'Nuevo comentario', cuerpo: (d) => `${d.usuario} comentó en «${d.titulo}»` },
     asignacion: { titulo: 'Tarea asignada', cuerpo: (d) => `${d.usuario} te asignó «${d.titulo}»` },
+    mencion: { titulo: 'Te mencionaron', cuerpo: (d) => `${d.usuario} te mencionó en «${d.titulo}»` },
+    vencimiento: {
+      titulo: 'Resumen de tareas',
+      cuerpo: (d) => {
+        const p = []
+        if (d.vencidas) p.push(`${d.vencidas} vencida${d.vencidas > 1 ? 's' : ''}`)
+        if (d.hoy) p.push(`${d.hoy} vence hoy`)
+        if (d.pronto) p.push(`${d.pronto} en breve`)
+        return p.length ? p.join(' · ') : 'Sin tareas pendientes'
+      },
+    },
     resumen: { titulo: 'Actividad en Deltos', cuerpo: (d) => `${d.total} cambios mientras estabas en horas de silencio` },
   },
   en: {
@@ -67,6 +78,17 @@ const CATALOGO = {
     tarea_movida: { titulo: 'Task moved', cuerpo: (d) => `${d.usuario} moved “${d.titulo}” to ${COLUMNAS.en[d.columna] || d.columna}` },
     comentario: { titulo: 'New comment', cuerpo: (d) => `${d.usuario} commented on “${d.titulo}”` },
     asignacion: { titulo: 'Task assigned', cuerpo: (d) => `${d.usuario} assigned you “${d.titulo}”` },
+    mencion: { titulo: 'You were mentioned', cuerpo: (d) => `${d.usuario} mentioned you in “${d.titulo}”` },
+    vencimiento: {
+      titulo: 'Task summary',
+      cuerpo: (d) => {
+        const p = []
+        if (d.vencidas) p.push(`${d.vencidas} overdue`)
+        if (d.hoy) p.push(`${d.hoy} due today`)
+        if (d.pronto) p.push(`${d.pronto} soon`)
+        return p.length ? p.join(' · ') : 'No pending tasks'
+      },
+    },
     resumen: { titulo: 'Deltos activity', cuerpo: (d) => `${d.total} changes during your quiet hours` },
   },
 }
@@ -213,6 +235,18 @@ export function notifyAllExcept(db, demo, actorId, tipo, datos, opciones = {}) {
   const ids = db.prepare('SELECT id FROM users WHERE id != ?').all(actorId).map((r) => r.id)
   if (ids.length === 0) return
   notifyUsers(db, ids, tipo, datos, { ...opciones, demo }).catch((err) =>
+    log.error('push_notify_failed', { tipo, error: err })
+  )
+}
+
+// Avisa a las PARTES INTERESADAS en una tarea (asignado + creador) menos al
+// actor. Reemplaza notifyAllExcept para comentario/movida: menos ruido, solo a
+// quien le concierne la tarea. `task` debe traer assignee_id y created_by.
+export function notifyInterested(db, demo, task, actorId, tipo, datos, opciones = {}) {
+  const ids = [task.assignee_id, task.created_by].filter((id) => id && id !== actorId)
+  const unique = [...new Set(ids)]
+  if (unique.length === 0) return
+  notifyUsers(db, unique, tipo, datos, { ...opciones, demo }).catch((err) =>
     log.error('push_notify_failed', { tipo, error: err })
   )
 }
