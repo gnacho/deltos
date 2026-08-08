@@ -49,7 +49,20 @@ CREATE TABLE IF NOT EXISTS projects (
   emoji TEXT DEFAULT '',
   color TEXT DEFAULT 'sky',
   position INTEGER NOT NULL DEFAULT 0,
+  owner_id TEXT REFERENCES users(id) ON DELETE SET NULL,  -- creador; NULL = legado (todos los miembros pueden gestionar)
   created_at INTEGER NOT NULL
+);
+
+-- Membresía de proyecto: quién ve un proyecto. Un proyecto "personal" es
+-- simplemente uno sin más miembros que su owner. role: 'owner' (creador) |
+-- 'member'. Los proyectos legados (owner_id NULL) se migran con todos los
+-- usuarios existentes como miembros para no perder acceso nadie.
+CREATE TABLE IF NOT EXISTS project_members (
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('owner', 'member')),
+  added_at INTEGER NOT NULL,
+  PRIMARY KEY (project_id, user_id)
 );
 
 -- Etiquetas globales (no por proyecto)
@@ -157,6 +170,7 @@ CREATE TABLE IF NOT EXISTS notification_queue (
 
 CREATE INDEX IF NOT EXISTS idx_tasks_column ON tasks("column", position);
 CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id);
+CREATE INDEX IF NOT EXISTS idx_project_members_user ON project_members(user_id);
 CREATE INDEX IF NOT EXISTS idx_task_labels_task ON task_labels(task_id);
 CREATE INDEX IF NOT EXISTS idx_attachments_task ON attachments(task_id);
 CREATE INDEX IF NOT EXISTS idx_comments_task ON comments(task_id);
@@ -221,6 +235,28 @@ export function migrateSchema(db) {
   if (!taskCols.includes('deleted_at')) {
     db.exec('ALTER TABLE tasks ADD COLUMN deleted_at INTEGER')
     log.info('schema_migrated', { table: 'tasks', column: 'deleted_at' })
+  }
+  // Project membership: owner_id en projects + backfill de project_members.
+  // Los proyectos existentes (creados antes de esta feature) no tenían
+  // membresía: para no dejarlos invisibles, sembramos a TODOS los usuarios
+  // como miembros de TODOS los proyectos existentes (una sola vez, cuando
+  // project_members está vacía y hay proyectos). El owner_id queda NULL
+  // (legado): los miembros pueden gestionar esos proyectos.
+  const projectCols = db.prepare('PRAGMA table_info(projects)').all().map((c) => c.name)
+  if (!projectCols.includes('owner_id')) {
+    db.exec('ALTER TABLE projects ADD COLUMN owner_id TEXT REFERENCES users(id) ON DELETE SET NULL')
+    log.info('schema_migrated', { table: 'projects', column: 'owner_id' })
+  }
+  const memberCount = db
+    .prepare(
+      `INSERT OR IGNORE INTO project_members (project_id, user_id, role, added_at)
+       SELECT p.id, u.id, 'member', ?
+       FROM projects p CROSS JOIN users u
+       WHERE NOT EXISTS (SELECT 1 FROM project_members pm WHERE pm.project_id = p.id)`
+    )
+    .run(Date.now())
+  if (memberCount.changes > 0) {
+    log.info('project_members_backfilled', { rows: memberCount.changes })
   }
   // v2: activity_events.type gana el valor 'project' (cambiar proyecto desde el detalle).
   // SQLite no permite ALTER de CHECK → reconstrucción por tabla temporal.
