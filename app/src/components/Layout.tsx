@@ -126,16 +126,39 @@ function UpdateBanner() {
   const serverChanged = useUpdateAvailable(!demo);
   const checkResult = useUpdateBanner();
   const [applying, setApplying] = useState(false);
+  const [timedOut, setTimedOut] = useState(false);
 
   if (!serverChanged && !checkResult.available && !checkResult.swWaiting) return null;
+
+  const versionSig = () =>
+    fetch('/api/version', { credentials: 'same-origin' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => (j ? `${j.version}+${j.build}` : ''))
+      .catch(() => '');
 
   const applyRelease = async () => {
     if (!checkResult.applyRelease || applying) return;
     setApplying(true);
+    setTimedOut(false);
     try {
-      await checkResult.applyRelease();
-      // El servidor se reinicia; la app se recarga con el build nuevo.
-      setTimeout(() => location.reload(), 2500);
+      const before = await versionSig();
+      await checkResult.applyRelease(); // POST apply → flag → 202 (async)
+      // El root update service corre en segundo plano; sondea hasta que el
+      // build del servidor cambie (se reinicia con el código nuevo).
+      const deadline = Date.now() + 90000;
+      const poll = async () => {
+        const sig = await versionSig();
+        if (before && sig && sig !== before) {
+          location.reload();
+          return;
+        }
+        if (Date.now() < deadline) window.setTimeout(poll, 2500);
+        else {
+          setApplying(false);
+          setTimedOut(true);
+        }
+      };
+      window.setTimeout(poll, 3000);
     } catch {
       setApplying(false);
     }
@@ -151,14 +174,24 @@ function UpdateBanner() {
         {t('update.reload')}
       </button>
     ) : checkResult.available && checkResult.applyRelease ? (
-      <button
-        type="button"
-        onClick={() => void applyRelease()}
-        disabled={applying}
-        className="shrink-0 rounded-lg bg-sky-500 px-3 py-1 text-[12px] font-semibold text-white hover:brightness-110 disabled:opacity-60"
-      >
-        {applying ? t('update.applying') : t('update.installNow')}
-      </button>
+      timedOut ? (
+        <button
+          type="button"
+          onClick={() => location.reload()}
+          className="shrink-0 rounded-lg bg-sky-500 px-3 py-1 text-[12px] font-semibold text-white hover:brightness-110"
+        >
+          {t('update.reload')}
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={() => void applyRelease()}
+          disabled={applying}
+          className="shrink-0 rounded-lg bg-sky-500 px-3 py-1 text-[12px] font-semibold text-white hover:brightness-110 disabled:opacity-60"
+        >
+          {applying ? t('update.applying') : t('update.installNow')}
+        </button>
+      )
     ) : checkResult.available && checkResult.url ? (
       <a
         href={checkResult.url}
@@ -185,9 +218,11 @@ function UpdateBanner() {
     >
       <span className="h-2 w-2 shrink-0 rounded-full bg-sky-500 animate-ping" />
       <span className="flex-1">
-        {checkResult.available
-          ? t('update.bannerNew', { version: checkResult.version })
-          : t('update.banner')}
+        {timedOut
+          ? t('update.applyTimeout')
+          : checkResult.available
+            ? t('update.bannerNew', { version: checkResult.version })
+            : t('update.banner')}
       </span>
       {applyAction}
     </div>

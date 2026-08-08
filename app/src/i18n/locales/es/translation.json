@@ -482,6 +482,7 @@
     "openRelease": "Ver novedades",
     "installNow": "Actualizar ahora",
     "applying": "Actualizando…",
+    "applyTimeout": "La actualización sigue en curso. Recarga la página en unos minutos.",
     "reload": "Recargar"
   },
   "errorBoundary": {

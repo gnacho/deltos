@@ -396,10 +396,16 @@ if tarball_has deltos-update.sh; then
         $SUDO chmod 0755 "$OPT_DIR/deltos-update.sh"
         $SUDO cp "$OPT_DIR/current/deploy/deltos-update.service" "/etc/systemd/system/${SERVICE_NAME}-update.service"
         $SUDO cp "$OPT_DIR/current/deploy/deltos-update.timer" "/etc/systemd/system/${SERVICE_NAME}-update.timer"
+        # .path: el apply in-app escribe un flag en el dir de datos y este lo
+        # vigila para lanzar el servicio root on-demand (escapa del sandbox).
+        if [ -f "$OPT_DIR/current/deploy/deltos-update.path" ]; then
+            $SUDO cp "$OPT_DIR/current/deploy/deltos-update.path" "/etc/systemd/system/${SERVICE_NAME}-update.path"
+        fi
         $SUDO sed -i "s|/opt/deltos|$OPT_DIR|g" "/etc/systemd/system/${SERVICE_NAME}-update.service"
         $SUDO sed -i "s|/var/lib/deltos|$STATE_DIR|g" "/etc/systemd/system/${SERVICE_NAME}-update.service"
         $SUDO systemctl daemon-reload
         $SUDO systemctl enable --now "${SERVICE_NAME}-update.timer"
+        $SUDO systemctl enable --now "${SERVICE_NAME}-update.path" 2>/dev/null || true
         ok "update timer enabled (weekly)"
     fi
 fi

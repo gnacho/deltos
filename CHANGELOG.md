@@ -14,6 +14,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   secrets (SESSION_SECRET outside the DB), rate limits and body caps, and
   latent bugs. Each finding becomes its own issue/PR.
 
+## [2.3.3] - 2026-08-08
+
+### Fixed
+
+- **In-app "Update now" works again.** The apply used to run the update script
+  from inside the sandboxed service, which cannot write /opt/deltos or restart,
+  so it failed with 500. It now writes a flag file in the data directory; a
+  systemd `.path` unit watches it and starts the root update service on demand.
+  The apply is asynchronous: the page polls the server version until it changes.
+
 ## [2.3.2] - 2026-08-08
 
 ### Fixed

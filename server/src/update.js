@@ -5,13 +5,11 @@
 // marker semver). El server NO se auto-aplica en runtime: el script hace el
 // deploy y, con SKIP_RESTART=1, el server sale y systemd (Restart=on-failure)
 // relanza con el código nuevo.
-import { execFile } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { kvGet, kvSet } from './db.js'
 
 const REPO = process.env.GITHUB_REPO || 'gnacho/deltos'
 const MARKER = process.env.RELEASE_MARKER || '/opt/deltos/.release-id'
-const UPDATE_SCRIPT = process.env.UPDATE_SCRIPT || '/opt/deltos/deltos-update.sh'
 const CACHE_KEY = 'gh_latest_release'
 const CACHE_TTL = 5 * 60 * 1000
 
@@ -61,12 +59,4 @@ export async function updateStatus(prodDb) {
   const latest = await latestId(prodDb).catch(() => null)
   const available = Boolean(latest && current && compareSemver(latest, current) > 0)
   return { current, latest, available }
-}
-
-export function applyUpdate() {
-  return new Promise((resolve) => {
-    execFile(UPDATE_SCRIPT, { env: { ...process.env, SKIP_RESTART: '1' } }, (err) => {
-      resolve(!err)
-    })
-  })
 }

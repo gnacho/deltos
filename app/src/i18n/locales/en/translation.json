@@ -482,6 +482,7 @@
     "openRelease": "See what's new",
     "installNow": "Update now",
     "applying": "Updating…",
+    "applyTimeout": "The update is still running. Reload the page in a few minutes.",
     "reload": "Reload"
   },
   "errorBoundary": {
