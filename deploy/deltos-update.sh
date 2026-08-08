@@ -28,6 +28,11 @@ VER="$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" \
 [ -n "$VER" ] || { log "no se pudo resolver release latest"; exit 4; }
 VER_NO_V="$(printf '%s' "$VER" | sed 's/^v//')"
 
+# Limpiar el flag on-demand cuanto antes (lo escribe el apply in-app y systemd
+# .path nos lanzó al detectarlo). Así una próxima petición puede re-disparar.
+# Ambos layouts por si acaso.
+rm -f /var/lib/deltos/.update-requested /opt/deltos/data/.update-requested 2>/dev/null || true
+
 # Marker semver real (fuente de verdad para /api/update/status).
 if [ -f "$MARKER" ] && [ "$(cat "$MARKER" 2>/dev/null || true)" = "$VER_NO_V" ]; then
   log "al día ($VER_NO_V)"; exit 0

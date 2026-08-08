@@ -1,0 +1,14 @@
+[Unit]
+Description=Deltos — aplicar actualización on-demand (flag en el dir de datos)
+
+[Path]
+# Dos layouts: capistrano (/var/lib/deltos, StateDirectory del install.sh) y
+# plano (/opt/deltos/data, deploy manual tipo CT 226). El apply in-app escribe
+# el flag en el dir escribible correspondiente; cualquiera de los dos lo
+# dispara. systemd vigila por inotify (fuera del sandbox del servicio).
+PathExists=/var/lib/deltos/.update-requested
+PathExists=/opt/deltos/data/.update-requested
+Unit=deltos-update.service
+
+[Install]
+WantedBy=multi-user.target
