@@ -165,7 +165,7 @@ function MiPerfilCard() {
 
   return (
     <Card>
-      <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+      <div className="flex flex-wrap items-center gap-3 sm:gap-4 min-w-0">
         {/* Avatar */}
         <Avatar name={user.username} color={user.color} size="xl" />
 
@@ -221,7 +221,7 @@ function MiPerfilCard() {
         </div>
 
         {/* Email + acciones agrupadas a la izquierda */}
-        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 min-w-0">
           {editingEmail ? (
             <div className="flex items-center gap-2">
               <input
@@ -312,14 +312,14 @@ function MiPerfilCard() {
           </button>
         </div>
 
-        {/* Cerrar sesión — siempre a la derecha, con texto y rojo */}
+        {/* Cerrar sesión — siempre a la derecha, rojo; texto solo en ≥sm */}
         <button
           type="button"
           onClick={() => void logout()}
-          className="ml-auto inline-flex h-9 items-center gap-1.5 rounded-lg border border-danger/30 bg-danger/10 px-3 text-[13px] font-medium text-danger transition-colors hover:bg-danger/15 shrink-0"
+          className="ml-auto inline-flex h-9 items-center gap-1.5 rounded-lg border border-danger/30 bg-danger/10 px-2.5 sm:px-3 text-[13px] font-medium text-danger transition-colors hover:bg-danger/15 shrink-0"
         >
           <LogOut className="w-4 h-4" aria-hidden="true" />
-          {demo ? t('demo.exit') : t('settings.logout')}
+          <span className={actionTextCls}>{demo ? t('demo.exit') : t('settings.logout')}</span>
         </button>
       </div>
 
