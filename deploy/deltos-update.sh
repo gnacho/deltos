@@ -76,16 +76,26 @@ if [ -L "$OPT_DIR/current" ]; then
     rm -rf "$old"
   done
 else
-  # Plano: backup + copia directa (el patrón del CT 226).
+  # Plano: backup + reemplazo quirúrgico (preserva .env y config local).
+  # NUNCA volar server/ entero: el .env (DATA_DIR/PORT/VAPID) y otros ficheros
+  # locales viven ahí y el tarball NO los trae (bug #40: rm -rf server dejaba
+  # el servicio en crash-loop). Se reemplaza SOLO el código.
   [ -d "$OPT_DIR/app/dist" ] && cp -a "$OPT_DIR/app/dist" "$OPT_DIR/app.dist.bak-$TS"
   [ -d "$OPT_DIR/server" ] && cp -a "$OPT_DIR/server" "$OPT_DIR/server.bak-$TS"
+  # dist: reemplazo completo (no hay config local ahí).
   rm -rf "$OPT_DIR/app/dist"
   mkdir -p "$OPT_DIR/app/dist"
   cp -a "$TMP_DIR/pkg/dist/." "$OPT_DIR/app/dist/"
-  rm -rf "$OPT_DIR/server"
-  mkdir -p "$OPT_DIR/server"
-  cp -a "$TMP_DIR/pkg/server/." "$OPT_DIR/server/"
-  chown -R "$APP:$APP" "$OPT_DIR"
+  # server: reemplazar src, node_modules y package.json; dejar .env intacto.
+  rm -rf "$OPT_DIR/server/src"
+  cp -a "$TMP_DIR/pkg/server/src" "$OPT_DIR/server/src"
+  if [ -d "$TMP_DIR/pkg/server/node_modules" ]; then
+    rm -rf "$OPT_DIR/server/node_modules"
+    cp -a "$TMP_DIR/pkg/server/node_modules" "$OPT_DIR/server/node_modules"
+  fi
+  cp "$TMP_DIR/pkg/server/package.json" "$OPT_DIR/server/package.json"
+  chown -R "$APP:$APP" "$OPT_DIR/app/dist" "$OPT_DIR/server/src" \
+    "$OPT_DIR/server/node_modules" "$OPT_DIR/server/package.json" 2>/dev/null || true
 fi
 # Datos NUNCA se tocan: SQLite y uploads viven en $STATE_DIR (fuera de server/).
 
