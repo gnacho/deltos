@@ -91,7 +91,7 @@ export function DetailsTab({ detail, onClose }: { detail: TaskDetail; onClose: (
     }
   };
 
-  const users = data.getUsers();
+  const users = data.getProject(task.project_id)?.members ?? data.getUsers();
   const labels = data.getLabels();
   const projects = data.getProjects();
   const project = data.getProject(task.project_id);

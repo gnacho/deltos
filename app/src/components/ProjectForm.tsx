@@ -3,11 +3,13 @@ import type { FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { z } from 'zod';
 import { useData } from '@/data/data-context';
+import { useSession } from '@/auth/session-context';
 import type { Project } from '@/data/types';
 import { colorOf, PROJECT_COLORS } from '@/lib/colors';
 import { apiErrorText } from '@/lib/errors';
 import { PROJECT_ICONS } from '@/lib/project-icons';
 import { ProjectIcon } from '@/components/ProjectIcon';
+import { Avatar } from '@/components/Avatar';
 
 const nameSchema = z.string().trim().min(1).max(80);
 
@@ -27,17 +29,30 @@ export function ProjectForm({
 }) {
   const { t } = useTranslation();
   const data = useData();
+  const { user: me } = useSession();
   const editing = Boolean(initial);
+
+  // Owner del proyecto que se edita (los miembros se gestionan a su alrededor).
+  const ownerId = initial?.owner_id ?? null;
 
   const [form, setForm] = useState({
     name: initial?.name ?? '',
     emoji: initial?.emoji ?? 'home',
     color: initial?.color ?? 'sky',
   });
+  // Miembros adicionales seleccionados (sin contar el owner). Al editar
+  // arrancan desde la lista actual de miembros no-owner.
+  const [memberIds, setMemberIds] = useState<Set<string>>(
+    () => new Set((initial?.members ?? []).filter((m) => m.role !== 'owner').map((m) => m.id)),
+  );
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [iconOpen, setIconOpen] = useState(false);
   const iconRef = useRef<HTMLDivElement>(null);
+
+  // Usuarios elegibles para añadir como miembros: todos menos el owner y yo
+  // (el owner —o el creador, si es nuevo— se añade siempre en el servidor).
+  const users = data.getUsers().filter((u) => u.id !== ownerId && u.id !== me.id);
 
   useEffect(() => {
     if (!iconOpen) return;
@@ -67,12 +82,14 @@ export function ProjectForm({
           emoji: form.emoji.trim(),
           color: form.color,
         });
+        await data.setProjectMembers(initial.id, [...memberIds]);
         onSaved(initial);
       } else {
         const project = await data.createProject({
           name: parsed.data,
           emoji: form.emoji.trim(),
           color: form.color,
+          member_ids: [...memberIds],
         });
         onSaved(project);
       }
@@ -203,6 +220,44 @@ export function ProjectForm({
           })}
         </div>
       </div>
+      {users.length > 0 && (
+        <div>
+          <p className="text-[12px] font-semibold tracking-wide uppercase text-faint mb-1.5">
+            {t('projects.form.members')}
+          </p>
+          <p className="text-[12px] text-muted mb-2.5">{t('projects.form.membersHint')}</p>
+          <div
+            className="flex flex-wrap gap-1.5"
+            role="group"
+            aria-label={t('projects.form.members')}
+          >
+            {users.map((u) => {
+              const active = memberIds.has(u.id);
+              return (
+                <button
+                  key={u.id}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => {
+                    const next = new Set(memberIds);
+                    if (active) next.delete(u.id);
+                    else next.add(u.id);
+                    setMemberIds(next);
+                  }}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs ${
+                    active
+                      ? `${colorOf(u.color).chip} ring-1 ring-current font-medium`
+                      : 'bg-surface border border-app text-muted hover:bg-surface2'
+                  }`}
+                >
+                  <Avatar name={u.username} color={u.color} size="sm" />
+                  {u.username}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
       {error && (
         <p role="alert" className="text-[13px] font-medium text-rose-600 dark:text-rose-400">
           {error}

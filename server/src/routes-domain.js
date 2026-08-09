@@ -57,6 +57,7 @@ const projectSchema = z.object({
   name: z.string().min(1).max(80),
   emoji: z.string().max(40).default(''),
   color: colorSchema.default('sky'),
+  member_ids: z.array(z.string().min(1).max(64)).max(50).default([]),
 })
 // PATCH: campos explícitamente opcionales SIN default — zod v4 mantiene el
 // default del schema base dentro de .partial() y un PATCH que no envíe el
@@ -155,6 +156,53 @@ function auditLog(db, actorId, action, targetType, targetId, data = {}) {
   ).run(crypto.randomUUID(), actorId, action, targetType, targetId, JSON.stringify(data), Date.now())
 }
 
+// --- Membresía de proyecto (visibilidad y autorización) --------------------
+
+// ¿Es el usuario miembro del proyecto (lo ve)?
+function isMember(db, userId, projectId) {
+  return !!db
+    .prepare('SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ?')
+    .get(projectId, userId)
+}
+
+// Lanza 403 PROJECT_NOT_MEMBER si el usuario no es miembro.
+function requireMember(db, userId, projectId) {
+  if (!isMember(db, userId, projectId)) httpError(403, ERROR_CODES.PROJECT_NOT_MEMBER)
+}
+
+// ¿Puede gestionar el proyecto (editar/borrar/gestionar miembros)?
+// admin siempre; owner_id NULL (legado) → cualquier miembro; si no, solo owner.
+function canManageProject(db, user, project) {
+  if (user.role === 'admin') return true
+  if (project.owner_id == null) return isMember(db, user.id, project.id)
+  return project.owner_id === user.id
+}
+
+function requireProjectOwner(db, user, project) {
+  if (!canManageProject(db, user, project)) httpError(403, ERROR_CODES.PROJECT_NOT_OWNER)
+}
+
+// Lista de miembros hidratada (owner primero, luego por username).
+function memberList(db, projectId) {
+  return db
+    .prepare(
+      `SELECT u.id, u.username, u.color, pm.role
+       FROM project_members pm JOIN users u ON u.id = pm.user_id
+       WHERE pm.project_id = ?
+       ORDER BY (pm.role = 'owner') DESC, u.username`
+    )
+    .all(projectId)
+}
+
+// Valida que los ids sean usuarios reales; devuelve únicos válidos.
+function validUserIds(db, ids) {
+  const unique = [...new Set(ids)]
+  if (unique.length === 0) return []
+  const ph = unique.map(() => '?').join(',')
+  const rows = db.prepare(`SELECT id FROM users WHERE id IN (${ph})`).all(...unique)
+  return new Set(rows.map((r) => r.id))
+}
+
 // Hidrata tareas con labels[], assignee y counts {comments, attachments}
 function hydrateTasks(db, whereSql = '', params = []) {
   const filter = whereSql ? `t.deleted_at IS NULL AND (${whereSql})` : 't.deleted_at IS NULL'
@@ -226,44 +274,90 @@ function removeAttachmentFiles(db, uploadsDir, taskId) {
 // --- Rutas ------------------------------------------------------------------
 
 export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataDir }) {
-  // GET /api/bootstrap — UNA llamada para pintar el tablero
+  // GET /api/bootstrap — UNA llamada para pintar el tablero.
+  // Proyectos y tareas se filtran por membresía: cada usuario solo ve los
+  // proyectos de los que es miembro (y sus tareas).
   app.get('/api/bootstrap', (c) => {
     const db = c.get('db')
+    const user = c.get('user')
     const users = db.prepare('SELECT id, username, color FROM users ORDER BY username').all()
     const projects = db
       .prepare(
-        `SELECT p.id, p.name, p.emoji, p.color, p.position,
+        `SELECT p.id, p.name, p.emoji, p.color, p.position, p.owner_id,
                 COALESCE(SUM(CASE WHEN t."column" = 'nuevo' THEN 1 ELSE 0 END), 0) AS nuevo,
                 COALESCE(SUM(CASE WHEN t."column" = 'encurso' THEN 1 ELSE 0 END), 0) AS encurso,
                 COALESCE(SUM(CASE WHEN t."column" = 'hecho' THEN 1 ELSE 0 END), 0) AS hecho
          FROM projects p LEFT JOIN tasks t ON t.project_id = p.id AND t.deleted_at IS NULL
+         WHERE p.id IN (SELECT project_id FROM project_members WHERE user_id = ?)
          GROUP BY p.id ORDER BY p.position`
       )
-      .all()
+      .all(user.id)
       .map((p) => ({
         id: p.id,
         name: p.name,
         emoji: p.emoji,
         color: p.color,
         position: p.position,
+        owner_id: p.owner_id,
         counts: { nuevo: p.nuevo, encurso: p.encurso, hecho: p.hecho },
+        members: [],
       }))
+    // Hidratar miembros de los proyectos visibles en una sola consulta.
+    if (projects.length > 0) {
+      const ids = projects.map((p) => p.id)
+      const placeholders = ids.map(() => '?').join(',')
+      const rows = db
+        .prepare(
+          `SELECT pm.project_id, u.id, u.username, u.color, pm.role
+           FROM project_members pm JOIN users u ON u.id = pm.user_id
+           WHERE pm.project_id IN (${placeholders})
+           ORDER BY (pm.role = 'owner') DESC, u.username`
+        )
+        .all(...ids)
+      const byProject = new Map()
+      for (const r of rows) {
+        if (!byProject.has(r.project_id)) byProject.set(r.project_id, [])
+        byProject.get(r.project_id).push({ id: r.id, username: r.username, color: r.color, role: r.role })
+      }
+      for (const p of projects) p.members = byProject.get(p.id) ?? []
+    }
     const labels = db.prepare('SELECT id, name, color FROM labels ORDER BY name').all()
-    const tasks = hydrateTasks(db)
+    const tasks = hydrateTasks(
+      db,
+      't.project_id IN (SELECT project_id FROM project_members WHERE user_id = ?)',
+      [user.id]
+    )
     return c.json({ users, projects, labels, tasks })
   })
 
   // --- Proyectos ---
   app.post('/api/projects', zValidator('json', projectSchema, validationHook), (c) => {
     const db = c.get('db')
+    const user = c.get('user')
     const data = c.req.valid('json')
     const id = crypto.randomUUID()
     const pos = db.prepare('SELECT COALESCE(MAX(position) + 1, 0) AS p FROM projects').get().p
-    db.prepare('INSERT INTO projects (id, name, emoji, color, position, created_at) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(id, data.name, data.emoji, data.color, pos, Date.now())
+    const now = Date.now()
+    // Miembros adicionales (el owner se añade siempre). Se filtran a usuarios
+    // reales y se descarta el propio owner (se inserta aparte con role owner).
+    const validIds = validUserIds(db, data.member_ids.filter((mid) => mid !== user.id))
+    const ins = db.transaction(() => {
+      db.prepare(
+        'INSERT INTO projects (id, name, emoji, color, position, owner_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      ).run(id, data.name, data.emoji, data.color, pos, user.id, now)
+      db.prepare(
+        'INSERT INTO project_members (project_id, user_id, role, added_at) VALUES (?, ?, ?, ?)'
+      ).run(id, user.id, 'owner', now)
+      const insMember = db.prepare(
+        'INSERT OR IGNORE INTO project_members (project_id, user_id, role, added_at) VALUES (?, ?, ?, ?)'
+      )
+      for (const mid of validIds) insMember.run(id, mid, 'member', now)
+    })
+    ins()
     hub.broadcast('projects')
     c.header('Location', `/api/projects/${id}`)
-    return c.json({ project: db.prepare('SELECT * FROM projects WHERE id = ?').get(id) }, 201)
+    const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(id)
+    return c.json({ project: { ...project, members: memberList(db, id) } }, 201)
   })
 
   app.patch(
@@ -272,8 +366,10 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
     zValidator('json', projectPatchSchema, validationHook),
     (c) => {
       const db = c.get('db')
+      const user = c.get('user')
       const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(c.req.valid('param').id)
       if (!project) httpError(404, ERROR_CODES.PROJECT_NOT_FOUND)
+      requireProjectOwner(db, user, project)
       const data = c.req.valid('json')
       db.prepare('UPDATE projects SET name = ?, emoji = ?, color = ? WHERE id = ?').run(
         data.name ?? project.name,
@@ -288,15 +384,49 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
 
   app.delete('/api/projects/:id', zValidator('param', idParamSchema, validationHook), (c) => {
     const db = c.get('db')
-    const project = db.prepare('SELECT id FROM projects WHERE id = ?').get(c.req.valid('param').id)
+    const user = c.get('user')
+    const project = db.prepare('SELECT id, owner_id FROM projects WHERE id = ?').get(c.req.valid('param').id)
     if (!project) httpError(404, ERROR_CODES.PROJECT_NOT_FOUND)
+    requireProjectOwner(db, user, project)
     const taskIds = db.prepare('SELECT id FROM tasks WHERE project_id = ?').all(project.id)
     for (const t of taskIds) removeAttachmentFiles(db, uploadsDir, t.id)
-    db.prepare('DELETE FROM projects WHERE id = ?').run(project.id) // cascada a tareas
+    db.prepare('DELETE FROM projects WHERE id = ?').run(project.id) // cascada a tareas y miembros
     hub.broadcast('projects')
     hub.broadcast('tasks')
     return c.body(null, 204)
   })
+
+  // --- Miembros de un proyecto (gestión: solo owner/admin) ---
+  // PUT reemplaza la lista de miembros adicionales; el owner (y el propio
+  // usuario que gestiona) se retienen siempre para evitar bloquearse fuera.
+  const membersSchema = z.object({ member_ids: z.array(z.string().min(1).max(64)).max(50) })
+  app.put(
+    '/api/projects/:id/members',
+    zValidator('param', idParamSchema, validationHook),
+    zValidator('json', membersSchema, validationHook),
+    (c) => {
+      const db = c.get('db')
+      const user = c.get('user')
+      const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(c.req.valid('param').id)
+      if (!project) httpError(404, ERROR_CODES.PROJECT_NOT_FOUND)
+      requireProjectOwner(db, user, project)
+      const data = c.req.valid('json')
+      const validIds = validUserIds(db, data.member_ids)
+      const now = Date.now()
+      const tx = db.transaction(() => {
+        db.prepare("DELETE FROM project_members WHERE project_id = ? AND role = 'member'").run(project.id)
+        const ins = db.prepare(
+          'INSERT OR IGNORE INTO project_members (project_id, user_id, role, added_at) VALUES (?, ?, ?, ?)'
+        )
+        for (const mid of validIds) if (mid !== project.owner_id) ins.run(project.id, mid, 'member', now)
+        // Anti self-lockout: quien gestiona siempre se queda.
+        ins.run(project.id, user.id, project.owner_id === user.id ? 'owner' : 'member', now)
+      })
+      tx()
+      hub.broadcast('projects')
+      return c.json({ members: memberList(db, project.id) })
+    }
+  )
 
   // --- Etiquetas (globales) ---
   app.post('/api/labels', zValidator('json', labelSchema, validationHook), (c) => {
@@ -363,8 +493,16 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
     if (!db.prepare('SELECT id FROM projects WHERE id = ?').get(data.project_id)) {
       httpError(404, ERROR_CODES.PROJECT_NOT_FOUND)
     }
-    if (data.assignee_id && !db.prepare('SELECT id FROM users WHERE id = ?').get(data.assignee_id)) {
-      httpError(404, ERROR_CODES.ASSIGNEE_NOT_FOUND)
+    // Solo miembros del proyecto pueden crear tareas en él.
+    requireMember(db, user.id, data.project_id)
+    if (data.assignee_id) {
+      if (!db.prepare('SELECT id FROM users WHERE id = ?').get(data.assignee_id)) {
+        httpError(404, ERROR_CODES.ASSIGNEE_NOT_FOUND)
+      }
+      // El asignado debe poder ver la tarea: ser miembro del proyecto.
+      if (!isMember(db, data.assignee_id, data.project_id)) {
+        httpError(422, ERROR_CODES.ASSIGNEE_NOT_MEMBER)
+      }
     }
     const id = crypto.randomUUID()
     const now = Date.now()
@@ -402,9 +540,18 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
       const user = c.get('user')
       const task = getTask(db, c.req.valid('param').id)
       if (!task) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
+      // Solo miembros del proyecto de la tarea pueden editarla.
+      requireMember(db, user.id, task.project_id)
       const data = c.req.valid('json')
-      if (data.assignee_id && !db.prepare('SELECT id FROM users WHERE id = ?').get(data.assignee_id)) {
-        httpError(404, ERROR_CODES.ASSIGNEE_NOT_FOUND)
+      if (data.assignee_id) {
+        if (!db.prepare('SELECT id FROM users WHERE id = ?').get(data.assignee_id)) {
+          httpError(404, ERROR_CODES.ASSIGNEE_NOT_FOUND)
+        }
+        // El asignado debe ser miembro del proyecto efectivo (actual o destino).
+        const effProject = data.project_id !== undefined ? data.project_id : task.project_id
+        if (!isMember(db, data.assignee_id, effProject)) {
+          httpError(422, ERROR_CODES.ASSIGNEE_NOT_MEMBER)
+        }
       }
 
       const now = Date.now()
@@ -418,6 +565,7 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
           if (!db.prepare('SELECT id FROM projects WHERE id = ?').get(data.project_id)) {
             httpError(404, ERROR_CODES.PROJECT_NOT_FOUND)
           }
+          requireMember(db, user.id, data.project_id)
           db.prepare('UPDATE tasks SET project_id = ? WHERE id = ?').run(data.project_id, task.id)
           addEvent(db, task.id, user.id, 'project', { from: task.project_id, to: data.project_id })
         }
@@ -460,6 +608,7 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
       const user = c.get('user')
       const task = getTask(db, c.req.valid('param').id)
       if (!task) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
+      requireMember(db, user.id, task.project_id)
       const data = c.req.valid('json')
 
       const fromCol = task.column
@@ -501,8 +650,10 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
 
   app.delete('/api/tasks/:id', zValidator('param', idParamSchema, validationHook), (c) => {
     const db = c.get('db')
+    const user = c.get('user')
     const task = getTask(db, c.req.valid('param').id)
     if (!task) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
+    requireMember(db, user.id, task.project_id)
     const del = db.transaction(() => {
       db.prepare('UPDATE tasks SET deleted_at = ? WHERE id = ?').run(Date.now(), task.id)
       db.prepare('UPDATE tasks SET position = position - 1 WHERE "column" = ? AND position > ? AND deleted_at IS NULL')
@@ -516,8 +667,11 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
   // Detalle completo: task + labels + attachments + comments + activity (paginado LIMIT 50)
   app.get('/api/tasks/:id', zValidator('param', idParamSchema, validationHook), (c) => {
     const db = c.get('db')
+    const user = c.get('user')
     const hydrated = hydrateTasks(db, 't.id = ?', [c.req.valid('param').id])[0]
     if (!hydrated) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
+    // Sin membresía → 404 (no filtrar existencia para no revelarla).
+    if (!isMember(db, user.id, hydrated.project_id)) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
     const attachments = db
       .prepare(
         `SELECT a.id, a.filename, a.size, a.mime, a.created_at, a.uploaded_by, u.username AS uploaded_by_username
@@ -553,6 +707,7 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
       const user = c.get('user')
       const task = getTask(db, c.req.valid('param').id)
       if (!task) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
+      requireMember(db, user.id, task.project_id)
       const data = c.req.valid('json')
       const id = crypto.randomUUID()
       const now = Date.now()
@@ -597,6 +752,7 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
       const user = c.get('user')
       const task = getTask(db, c.req.valid('param').id)
       if (!task) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
+      requireMember(db, user.id, task.project_id)
       // Multipart: no va por zValidator('json'); se validan presencia y tamaño.
       const body = await c.req.parseBody().catch(() => null)
       const file = body?.file
@@ -657,17 +813,31 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
     return c.body(fs.readFileSync(filePath))
   })
 
-  // --- Export de datos (todos los datos del usuario en JSON) ---
+  // --- Export de datos (datos del usuario: solo proyectos visibles) ---
   app.get('/api/export', (c) => {
     const db = c.get('db')
     const user = c.get('user')
-    const projects = db.prepare('SELECT * FROM projects ORDER BY position').all()
+    const memberProjects = db
+      .prepare('SELECT project_id FROM project_members WHERE user_id = ?')
+      .all(user.id)
+      .map((r) => r.project_id)
+    // Helper: consulta sobre proyectos visibles (vacío si no hay ninguno).
+    const qByProject = (sql) =>
+      memberProjects.length
+        ? db.prepare(sql.replace('__IDS__', memberProjects.map(() => '?').join(','))).all(...memberProjects)
+        : []
+    const projects = qByProject('SELECT * FROM projects WHERE id IN (__IDS__) ORDER BY position')
     const labels = db.prepare('SELECT * FROM labels ORDER BY name').all()
-    const tasks = db.prepare('SELECT * FROM tasks WHERE deleted_at IS NULL ORDER BY "column", position').all()
-    const comments = db.prepare('SELECT * FROM comments ORDER BY created_at').all()
-    const attachments = db.prepare('SELECT id, task_id, filename, size, mime, created_at FROM attachments ORDER BY created_at').all()
-    const events = db.prepare('SELECT * FROM activity_events ORDER BY created_at').all()
-    const trash = db.prepare('SELECT * FROM tasks WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC').all()
+    const tasks = qByProject('SELECT * FROM tasks WHERE deleted_at IS NULL AND project_id IN (__IDS__) ORDER BY "column", position')
+    const taskIds = tasks.map((t) => t.id)
+    const qByTask = (sql) =>
+      taskIds.length
+        ? db.prepare(sql.replace('__IDS__', taskIds.map(() => '?').join(','))).all(...taskIds)
+        : []
+    const comments = qByTask('SELECT * FROM comments WHERE task_id IN (__IDS__) ORDER BY created_at')
+    const attachments = qByTask('SELECT id, task_id, filename, size, mime, created_at FROM attachments WHERE task_id IN (__IDS__) ORDER BY created_at')
+    const events = qByTask('SELECT * FROM activity_events WHERE task_id IN (__IDS__) ORDER BY created_at')
+    const trash = qByProject('SELECT * FROM tasks WHERE deleted_at IS NOT NULL AND project_id IN (__IDS__) ORDER BY deleted_at DESC')
     return c.json({
       exported_at: new Date().toISOString(),
       user: { id: user.id, username: user.username, email: user.email, language: user.language },
@@ -675,24 +845,28 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
     })
   })
 
-  // --- Papelera: tareas borradas (soft-delete) ---
+  // --- Papelera: tareas borradas (soft-delete), solo de proyectos visibles ---
   app.get('/api/trash', (c) => {
     const db = c.get('db')
+    const user = c.get('user')
     const tasks = db
       .prepare(
         `SELECT t.*, p.name AS project_name
          FROM tasks t LEFT JOIN projects p ON p.id = t.project_id
          WHERE t.deleted_at IS NOT NULL
+           AND t.project_id IN (SELECT project_id FROM project_members WHERE user_id = ?)
          ORDER BY t.deleted_at DESC`
       )
-      .all()
+      .all(user.id)
     return c.json({ tasks })
   })
 
   app.post('/api/trash/:id/restore', zValidator('param', idParamSchema, validationHook), (c) => {
     const db = c.get('db')
+    const user = c.get('user')
     const task = db.prepare('SELECT * FROM tasks WHERE id = ? AND deleted_at IS NOT NULL').get(c.req.valid('param').id)
     if (!task) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
+    requireMember(db, user.id, task.project_id)
     const pos = db.prepare('SELECT COALESCE(MAX(position) + 1, 0) AS p FROM tasks WHERE "column" = ? AND deleted_at IS NULL')
       .get(task.column).p
     db.prepare('UPDATE tasks SET deleted_at = NULL, position = ?, updated_at = ? WHERE id = ?').run(pos, Date.now(), task.id)
@@ -702,8 +876,10 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
 
   app.delete('/api/trash/:id', zValidator('param', idParamSchema, validationHook), (c) => {
     const db = c.get('db')
+    const user = c.get('user')
     const task = db.prepare('SELECT * FROM tasks WHERE id = ? AND deleted_at IS NOT NULL').get(c.req.valid('param').id)
     if (!task) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
+    requireMember(db, user.id, task.project_id)
     removeAttachmentFiles(db, uploadsDir, task.id)
     db.prepare('DELETE FROM tasks WHERE id = ?').run(task.id)
     hub.broadcast('tasks')
@@ -712,9 +888,19 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
 
   app.delete('/api/trash', (c) => {
     const db = c.get('db')
-    const taskIds = db.prepare('SELECT id FROM tasks WHERE deleted_at IS NOT NULL').all().map((r) => r.id)
+    const user = c.get('user')
+    const taskIds = db
+      .prepare(
+        `SELECT id FROM tasks WHERE deleted_at IS NOT NULL
+         AND project_id IN (SELECT project_id FROM project_members WHERE user_id = ?)`
+      )
+      .all(user.id)
+      .map((r) => r.id)
     for (const tid of taskIds) removeAttachmentFiles(db, uploadsDir, tid)
-    db.prepare('DELETE FROM tasks WHERE deleted_at IS NOT NULL').run()
+    db.prepare(
+      `DELETE FROM tasks WHERE deleted_at IS NOT NULL
+       AND project_id IN (SELECT project_id FROM project_members WHERE user_id = ?)`
+    ).run(user.id)
     hub.broadcast('tasks')
     return c.body(null, 204)
   })
@@ -731,6 +917,8 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
     const keyset = decoded
       ? 'WHERE (e.created_at < @cts OR (e.created_at = @cts AND e.id < @cid))'
       : ''
+    const visibilityJoin =
+      'JOIN project_members pm ON pm.project_id = t.project_id AND pm.user_id = @uid'
     const rows = db
       .prepare(
         `SELECT e.id, e.type, e.data, e.created_at, e.task_id,
@@ -739,6 +927,7 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
          FROM activity_events e
          JOIN tasks t ON t.id = e.task_id AND t.deleted_at IS NULL
          JOIN projects p ON p.id = t.project_id
+         ${visibilityJoin}
          LEFT JOIN users u ON u.id = e.user_id
          ${keyset}
          ORDER BY e.created_at DESC, e.id DESC
@@ -746,6 +935,7 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
       )
       .all({
         ...(decoded ? { cts: decoded.ts, cid: decoded.id } : {}),
+        uid: c.get('user').id,
         limitPlusOne: limit + 1,
       })
       .map((e) => ({ ...e, data: JSON.parse(e.data || '{}') }))
