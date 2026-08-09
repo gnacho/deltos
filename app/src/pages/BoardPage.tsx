@@ -259,7 +259,6 @@ export default function BoardPage() {
   /* ---------- Render ---------- */
 
   const title = isTodo ? t('nav.todo') : project!.name;
-  const subtitle = isTodo ? t('board.todoSubtitle') : t('board.projectSubtitle');
   // ¿Puede el usuario gestionar este proyecto (editar/borrar/miembros)?
   const canManage =
     isTodo ||
@@ -337,7 +336,6 @@ export default function BoardPage() {
               {!isTodo && project && <ProjectIcon name={project.emoji} className="w-6 h-6 text-muted" />}
               {title}
             </h1>
-            <p className="text-sm text-muted mt-0.5">{subtitle}</p>
           </div>
           <div className="flex items-center gap-2">
             <p className="tnum text-sm text-muted">{t('board.openTasks', { count: openCount })}</p>

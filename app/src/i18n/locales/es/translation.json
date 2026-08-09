@@ -59,8 +59,6 @@
     "none": "Sin fecha"
   },
   "board": {
-    "todoSubtitle": "Todos los proyectos en un solo tablero",
-    "projectSubtitle": "Tablero del proyecto",
     "openTasks_one": "{{count}} tarea abierta",
     "openTasks_other": "{{count}} tareas abiertas",
     "emptyColumn": "Sin tareas",

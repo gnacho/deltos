@@ -59,8 +59,6 @@
     "none": "No date"
   },
   "board": {
-    "todoSubtitle": "Every project on a single board",
-    "projectSubtitle": "Project board",
     "openTasks_one": "{{count}} open task",
     "openTasks_other": "{{count}} open tasks",
     "emptyColumn": "No tasks",
