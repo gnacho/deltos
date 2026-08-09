@@ -61,6 +61,8 @@
   "board": {
     "openTasks_one": "{{count}} open task",
     "openTasks_other": "{{count}} open tasks",
+    "moveTo": "Move to",
+    "current": "current",
     "emptyColumn": "No tasks",
     "emptyState": "No tasks in \"{{column}}\"",
     "addToColumn": "Add card to {{column}}",
