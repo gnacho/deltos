@@ -40,13 +40,18 @@ function Chip({
   );
 }
 
-/** Barra de filtros de la vista Todo: panel colapsable en móvil, siempre visible en desktop. */
+/** Barra de filtros de la vista Todo: panel colapsable en móvil, siempre visible en desktop.
+ *  Incluye el toggle "Mis tareas" en la misma barra. */
 export function Filters({
   filters,
   onChange,
+  mineOnly,
+  onToggleMine,
 }: {
   filters: FilterState;
   onChange: (f: FilterState) => void;
+  mineOnly?: boolean;
+  onToggleMine?: () => void;
 }) {
   const { t } = useTranslation();
   const data = useData();
@@ -58,6 +63,8 @@ export function Filters({
 
   const activeCount =
     filters.projects.size + filters.people.size + filters.priorities.size + filters.tags.size;
+
+  const labelMine = t('board.mineOnly');
 
   const toggle = (group: keyof FilterState, value: string) => {
     const next: FilterState = {
@@ -153,29 +160,40 @@ export function Filters({
 
   return (
     <div className="mb-6">
-      {/* Botón "Filtros" solo en móvil (<lg) */}
-      <div className="lg:hidden mb-3">
+      {/* Botón "Filtros" solo en móvil (<lg): icono + contador, sin texto */}
+      <div className="lg:hidden mb-3 flex items-center gap-2 flex-wrap">
         <button
           type="button"
           aria-expanded={open}
           aria-controls="filters-panel"
           onClick={() => setOpen((o) => !o)}
-          className={`inline-flex items-center gap-2 rounded-full border bg-surface px-3.5 py-2 text-[13px] font-medium shadow-soft ${
+          className={`inline-flex items-center gap-1.5 rounded-full border bg-surface px-2.5 py-2 shadow-soft ${
             activeCount
               ? 'border-brand/50 text-brand'
               : 'border-app text-muted hover:bg-surface2'
           }`}
         >
           <Funnel className="w-4 h-4" aria-hidden="true" />
-          <span>
-            {t('filters.toggle')}
-            {activeCount ? ` · ${activeCount}` : ''}
-          </span>
+          {activeCount > 0 && (
+            <span className="tnum text-[11px] font-semibold">{activeCount}</span>
+          )}
           <ChevronDown
             className={`w-3.5 h-3.5 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
             aria-hidden="true"
           />
         </button>
+        {mineOnly !== undefined && onToggleMine && (
+          <button
+            type="button"
+            onClick={onToggleMine}
+            aria-pressed={mineOnly}
+            className={`rounded-full border px-3 h-9 text-[13px] font-medium transition-colors ${
+              mineOnly ? 'border-brand/50 bg-brand/10 text-brand' : 'border-app bg-surface text-muted hover:bg-surface2'
+            }`}
+          >
+            {labelMine}
+          </button>
+        )}
       </div>
 
       <div
@@ -202,6 +220,18 @@ export function Filters({
               >
                 <X className="w-3 h-3" aria-hidden="true" />
                 {t('filters.clear', { count: activeCount })}
+              </button>
+            )}
+            {mineOnly !== undefined && onToggleMine && (
+              <button
+                type="button"
+                onClick={onToggleMine}
+                aria-pressed={mineOnly}
+                className={`ml-auto rounded-full border px-3.5 h-9 text-[13px] font-medium transition-colors ${
+                  mineOnly ? 'border-brand/50 bg-brand/10 text-brand' : 'border-app bg-surface2 text-muted hover:bg-surface'
+                }`}
+              >
+                {labelMine}
               </button>
             )}
           </div>

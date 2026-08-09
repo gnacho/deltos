@@ -28,7 +28,7 @@ export default function BoardPage() {
   const isTodo = view === 'todo';
 
   const [filters, setFilters] = useState<FilterState>(emptyFilters);
-  const [scope, setScope] = useState<'all' | 'mine' | 'others'>('all');
+  const [mineOnly, setMineOnly] = useState(false);
   const [seg, setSeg] = useState<ColumnId>('nuevo');
   const [projectActionsOpen, setProjectActionsOpen] = useState(false);
 
@@ -40,7 +40,7 @@ export default function BoardPage() {
   const tasks = data.getTasks();
   const project = isTodo ? undefined : data.getProject(view);
 
-  /* Tareas visibles según vista + filtros + alcance (todas/mías/de otras) */
+  /* Tareas visibles según vista + filtros + filtro "Mis tareas" */
   const visible = useMemo(() => {
     let list = isTodo ? tasks.slice() : tasks.filter((tk) => tk.project_id === view);
     if (isTodo) {
@@ -51,11 +51,9 @@ export default function BoardPage() {
         list = list.filter((tk) => tk.priority !== null && f.priorities.has(tk.priority));
       if (f.tags.size) list = list.filter((tk) => tk.labels.some((l) => f.tags.has(l.id)));
     }
-    if (scope === 'mine') list = list.filter((tk) => tk.assignee_id === me.id);
-    else if (scope === 'others')
-      list = list.filter((tk) => tk.assignee_id !== null && tk.assignee_id !== me.id);
+    if (mineOnly) list = list.filter((tk) => tk.assignee_id === me.id);
     return list;
-  }, [tasks, isTodo, view, filters, scope, me.id]);
+  }, [tasks, isTodo, view, filters, mineOnly, me.id]);
 
   const byColumn = useMemo(() => {
     const map = new Map<ColumnId, Task[]>();
@@ -266,12 +264,6 @@ export default function BoardPage() {
     project!.owner_id === me.id ||
     me.role === 'admin';
 
-  const scopes: Array<{ id: 'all' | 'mine' | 'others'; label: string }> = [
-    { id: 'all', label: t('board.scopeAll') },
-    { id: 'mine', label: t('board.scopeMine') },
-    { id: 'others', label: t('board.scopeOthers') },
-  ];
-
   return (
     <div className="pt-[52px] lg:pt-0">
       {/* ============ SEGMENTED CONTROL MÓVIL ============ */}
@@ -353,34 +345,23 @@ export default function BoardPage() {
           </div>
         </div>
 
-        {/* Alcance: Todas / Mías / De otras ( quién trabaja cada tarjeta) */}
-        <div className="mb-5">
-          <div
-            role="tablist"
-            aria-label={t('board.scopeAria')}
-            className="inline-flex items-center gap-1 rounded-full bg-surface2 p-1"
-          >
-            {scopes.map((s) => {
-              const active = scope === s.id;
-              return (
-                <button
-                  key={s.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={active}
-                  onClick={() => setScope(s.id)}
-                  className={`rounded-full px-3.5 h-9 text-[13px] font-medium whitespace-nowrap transition-colors ${
-                    active ? 'bg-surface shadow-soft text-text' : 'text-muted hover:text-text'
-                  }`}
-                >
-                  {s.label}
-                </button>
-              );
-            })}
-          </div>
+        {/* Filtros + toggle "Mis tareas" en la misma barra */}
+        <div className="mb-5 flex items-center gap-3 flex-wrap">
+          {isTodo && <Filters filters={filters} onChange={setFilters} mineOnly={mineOnly} onToggleMine={() => setMineOnly((v) => !v)} />}
+          {!isTodo && (
+            <label className="inline-flex items-center gap-2 rounded-full border border-app bg-surface px-3.5 h-9 text-[13px] font-medium cursor-pointer select-none hover:bg-surface2">
+              <input
+                type="checkbox"
+                checked={mineOnly}
+                onChange={(e) => setMineOnly(e.target.checked)}
+                className="sr-only"
+              />
+              <span className={mineOnly ? 'text-brand' : 'text-muted'}>
+                {t('board.mineOnly')}
+              </span>
+            </label>
+          )}
         </div>
-
-        {isTodo && <Filters filters={filters} onChange={setFilters} />}
 
         {/* Lista móvil (<lg): un solo estado, tarjetas simplificadas */}
         <div
