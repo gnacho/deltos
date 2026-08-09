@@ -591,40 +591,6 @@ function AppearanceCard() {
   );
 }
 
-/* ---------------- Instalar (solo si el navegador lo soporta) ---------------- */
-function InstallCard({
-  state,
-  install,
-}: {
-  state: ReturnType<typeof useInstallPrompt>['state'];
-  install: () => Promise<void>;
-}) {
-  const { t } = useTranslation();
-  return (
-    <Card>
-      <Heading icon={Download}>{t('settings.install')}</Heading>
-      {state === 'available' && (
-        <button
-          type="button"
-          onClick={() => void install()}
-          className="h-14 px-8 rounded-2xl bg-brand text-brandfg text-[16px] font-semibold inline-flex items-center gap-2.5 hover:brightness-110 shadow-soft"
-        >
-          <Download className="w-5 h-5" aria-hidden="true" />
-          {t('settings.installButton')}
-        </button>
-      )}
-      {state === 'installed' && (
-        <p className="inline-flex items-center gap-2 rounded-full border border-ok/30 bg-ok/10 px-4 py-2 text-[13px] font-medium text-ok">
-          <Check className="w-4 h-4" aria-hidden="true" />
-          {t('settings.installDone')}
-        </p>
-      )}
-      {state === 'ios' && <p className="text-[13px] text-faint">{t('settings.installIosHelp')}</p>}
-      {state === 'available' && <p className="text-[13px] text-faint mt-3">{t('settings.installHint')}</p>}
-    </Card>
-  );
-}
-
 /* ---------------- Modo demo (solo admin de producción) ---------------- */
 /* ---------------- Contraseña ---------------- */
 const pwSchema = z.object({
@@ -989,7 +955,7 @@ function formatUptime(totalSeconds: number) {
   return `${minutes}m`;
 }
 
-function AboutCard() {
+function AboutCard({ installState, install }: { installState?: string; install?: () => void }) {
   const { t } = useTranslation();
   const [serverInfo, setServerInfo] = useState<{ version: string; node: string; uptime: number } | null>(null);
 
@@ -1045,6 +1011,18 @@ function AboutCard() {
         {/* Fila 2: versión, licencia y runtime en una misma línea sin recuadros,
             alineada con la descripción (tras el logo) en escritorio */}
         <p className="md:pl-[54px] text-[11px] text-faint tnum">{releaseLine} · {runtimeLine}</p>
+        {install && installState !== 'hidden' && (
+          <div className="md:pl-[54px] mt-2">
+            <button
+              type="button"
+              onClick={install}
+              className="inline-flex items-center gap-2 rounded-lg border border-app bg-surface px-3 py-1.5 text-[12px] font-medium text-muted transition-colors hover:bg-surface2 hover:text-text"
+            >
+              <Download className="w-3.5 h-3.5" aria-hidden="true" />
+              {t('settings.install.title')}
+            </button>
+          </div>
+        )}
       </div>
     </Card>
   );
@@ -1055,7 +1033,6 @@ export default function SettingsPage() {
   const { t } = useTranslation();
   const { user, demo } = useSession();
   const { state: installState, install } = useInstallPrompt();
-  const installVisible = installState !== 'hidden';
   const isAdmin = user.role === 'admin' && !demo;
 
   return (
@@ -1087,13 +1064,8 @@ export default function SettingsPage() {
             <AdminBar />
           </div>
         )}
-        {installVisible && (
-          <div className="lg:col-span-12">
-            <InstallCard state={installState} install={install} />
-          </div>
-        )}
         <div className="lg:col-span-12">
-          <AboutCard />
+          <AboutCard installState={installState} install={install} />
         </div>
       </div>
     </div>
