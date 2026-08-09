@@ -234,14 +234,15 @@ body {
 }
 .card.dragging {
   animation: none;
-  opacity: 0.4;
-  transform: rotate(1.5deg) scale(0.98);
+  opacity: 0.55;
+  transform: scale(0.98);
   cursor: grabbing;
 }
 .drop-placeholder {
-  border: 2px dashed rgb(var(--accent, 148 163 184) / 0.55);
+  border: 2px dashed rgb(var(--accent, 148 163 184) / 0.45);
   border-radius: 1rem;
-  background: rgb(var(--accent, 148 163 184) / 0.08);
+  background: rgb(var(--accent, 148 163 184) / 0.06);
+  animation: placeholder-pulse 1.2s ease-in-out infinite;
 }
 section[data-col] {
   border-radius: 1rem;
@@ -251,7 +252,7 @@ section[data-col] {
 }
 section[data-col].col-target {
   background-color: var(--surface-2);
-  box-shadow: inset 0 0 0 1.5px rgb(var(--accent, 148 163 184) / 0.4);
+  box-shadow: inset 0 0 0 2px rgb(var(--accent, 148 163 184) / 0.35);
 }
 /* Durante un re-render con FLIP se desactiva la animación de entrada */
 .no-anim .card {
