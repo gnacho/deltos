@@ -72,10 +72,7 @@
     "segAria_other": "{{column}}, {{count}} tareas",
     "movedTo": "Tarjeta «{{title}}» movida a {{column}}",
     "reordered": "Tarjeta «{{title}}» reordenada en {{column}}",
-    "scopeAria": "Alcance del tablero",
-    "scopeAll": "Todas",
-    "scopeMine": "Mías",
-    "scopeOthers": "De otras"
+    "mineOnly": "Mis tareas"
   },
   "filters": {
     "toggle": "Filtros",
