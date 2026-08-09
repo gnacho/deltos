@@ -72,10 +72,7 @@
     "segAria_other": "{{column}}, {{count}} tasks",
     "movedTo": "Card \"{{title}}\" moved to {{column}}",
     "reordered": "Card \"{{title}}\" reordered in {{column}}",
-    "scopeAria": "Board scope",
-    "scopeAll": "All",
-    "scopeMine": "Mine",
-    "scopeOthers": "Others"
+    "mineOnly": "My tasks"
   },
   "filters": {
     "toggle": "Filters",
