@@ -418,7 +418,6 @@ function NotificationsInline() {
               <p className="text-[13px] font-medium text-faint">{t('settings.notifTipos')}</p>
               {TIPOS.map((tipo) => (
                 <div key={tipo} className="flex items-center justify-between gap-3">
-                  <span className="text-sm text-text-primary">{t(`settings.notifTipo.${tipo}`)}</span>
                   <CheckToggle
                     checked={prefs[tipo] !== false}
                     onChange={(checked) => cambiarPref(tipo, checked)}
