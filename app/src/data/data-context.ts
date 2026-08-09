@@ -18,6 +18,7 @@ export interface CreateProjectInput {
   name: string;
   emoji: string;
   color: string;
+  member_ids?: string[];
 }
 
 export interface UpdateProjectInput {
@@ -58,6 +59,7 @@ export interface DataApi {
   uploadAttachment: (id: string, file: File) => Promise<void>;
   createProject: (input: CreateProjectInput) => Promise<Project>;
   updateProject: (id: string, patch: UpdateProjectInput) => Promise<void>;
+  setProjectMembers: (id: string, memberIds: string[]) => Promise<void>;
   deleteProject: (id: string) => Promise<void>;
   createLabel: (input: { name: string; color: string }) => Promise<Label>;
   updateLabel: (id: string, patch: { name?: string; color?: string }) => Promise<void>;

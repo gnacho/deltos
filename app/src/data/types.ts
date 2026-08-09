@@ -24,12 +24,23 @@ export interface BoardUser {
   color: string;
 }
 
+export type ProjectRole = 'owner' | 'member';
+
+export interface ProjectMember {
+  id: string;
+  username: string;
+  color: string;
+  role: ProjectRole;
+}
+
 export interface Project {
   id: string;
   name: string;
   emoji: string;
   color: string;
   position: number;
+  owner_id: string | null;
+  members: ProjectMember[];
   counts: Record<ColumnId, number>;
 }
 

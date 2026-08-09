@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { Plus, Settings2 } from 'lucide-react';
 import type { ColumnId, Task } from '@/data/types';
 import { useData } from '@/data/data-context';
+import { useSession } from '@/auth/session-context';
 import { useTaskModal } from '@/components/modal-context';
 import { TaskCard, TaskCardMobile } from '@/components/TaskCard';
 import { Filters } from '@/components/Filters';
@@ -20,12 +21,14 @@ const reducedMotionMQ = window.matchMedia('(prefers-reduced-motion: reduce)');
 export default function BoardPage() {
   const { t } = useTranslation();
   const data = useData();
+  const { user: me } = useSession();
   const { openTask, openNewTask } = useTaskModal();
   const { projectId } = useParams<{ projectId: string }>();
   const view = projectId ?? 'todo';
   const isTodo = view === 'todo';
 
   const [filters, setFilters] = useState<FilterState>(emptyFilters);
+  const [scope, setScope] = useState<'all' | 'mine' | 'others'>('all');
   const [seg, setSeg] = useState<ColumnId>('nuevo');
   const [projectActionsOpen, setProjectActionsOpen] = useState(false);
 
@@ -37,7 +40,7 @@ export default function BoardPage() {
   const tasks = data.getTasks();
   const project = isTodo ? undefined : data.getProject(view);
 
-  /* Tareas visibles según vista + filtros */
+  /* Tareas visibles según vista + filtros + alcance (todas/mías/de otras) */
   const visible = useMemo(() => {
     let list = isTodo ? tasks.slice() : tasks.filter((tk) => tk.project_id === view);
     if (isTodo) {
@@ -48,8 +51,11 @@ export default function BoardPage() {
         list = list.filter((tk) => tk.priority !== null && f.priorities.has(tk.priority));
       if (f.tags.size) list = list.filter((tk) => tk.labels.some((l) => f.tags.has(l.id)));
     }
+    if (scope === 'mine') list = list.filter((tk) => tk.assignee_id === me.id);
+    else if (scope === 'others')
+      list = list.filter((tk) => tk.assignee_id !== null && tk.assignee_id !== me.id);
     return list;
-  }, [tasks, isTodo, view, filters]);
+  }, [tasks, isTodo, view, filters, scope, me.id]);
 
   const byColumn = useMemo(() => {
     const map = new Map<ColumnId, Task[]>();
@@ -254,6 +260,18 @@ export default function BoardPage() {
 
   const title = isTodo ? t('nav.todo') : project!.name;
   const subtitle = isTodo ? t('board.todoSubtitle') : t('board.projectSubtitle');
+  // ¿Puede el usuario gestionar este proyecto (editar/borrar/miembros)?
+  const canManage =
+    isTodo ||
+    project!.owner_id == null ||
+    project!.owner_id === me.id ||
+    me.role === 'admin';
+
+  const scopes: Array<{ id: 'all' | 'mine' | 'others'; label: string }> = [
+    { id: 'all', label: t('board.scopeAll') },
+    { id: 'mine', label: t('board.scopeMine') },
+    { id: 'others', label: t('board.scopeOthers') },
+  ];
 
   return (
     <div className="pt-[52px] lg:pt-0">
@@ -323,7 +341,7 @@ export default function BoardPage() {
           </div>
           <div className="flex items-center gap-2">
             <p className="tnum text-sm text-muted">{t('board.openTasks', { count: openCount })}</p>
-            {!isTodo && project && (
+            {!isTodo && project && canManage && (
               <button
                 type="button"
                 onClick={() => setProjectActionsOpen(true)}
@@ -334,6 +352,33 @@ export default function BoardPage() {
                 <Settings2 className="w-4.5 h-4.5" aria-hidden="true" />
               </button>
             )}
+          </div>
+        </div>
+
+        {/* Alcance: Todas / Mías / De otras ( quién trabaja cada tarjeta) */}
+        <div className="mb-5">
+          <div
+            role="tablist"
+            aria-label={t('board.scopeAria')}
+            className="inline-flex items-center gap-1 rounded-full bg-surface2 p-1"
+          >
+            {scopes.map((s) => {
+              const active = scope === s.id;
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setScope(s.id)}
+                  className={`rounded-full px-3.5 h-9 text-[13px] font-medium whitespace-nowrap transition-colors ${
+                    active ? 'bg-surface shadow-soft text-text' : 'text-muted hover:text-text'
+                  }`}
+                >
+                  {s.label}
+                </button>
+              );
+            })}
           </div>
         </div>
 

@@ -61,14 +61,25 @@ export function seedDemo(db, uploadsDir) {
     insUser.run('jordi', 'jordi', 'Jordi', hash, 'teal', 'auto', 'user', now - 30 * DAY)
     insUser.run('demo', 'demo', 'Demo', '!sin-contraseña', 'slate', 'auto', 'user', now - 30 * DAY)
 
-    // --- Proyectos (4, del mockup) ---
+    // --- Proyectos (4, del mockup). Demo = proyecto compartido: los 3
+    // usuarios son miembros de los 4, para que la demo siga mostrando datos.
     const insProject = db.prepare(
-      'INSERT INTO projects (id, name, emoji, color, position, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+      'INSERT INTO projects (id, name, emoji, color, position, owner_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
     )
-    insProject.run('p-casa', 'Casa', 'home', 'sky', 0, now - 30 * DAY)
-    insProject.run('p-trabajo', 'Trabajo', 'briefcase', 'blue', 1, now - 30 * DAY)
-    insProject.run('p-viaje', 'Viaje a Lisboa', 'plane', 'amber', 2, now - 30 * DAY)
-    insProject.run('p-huerto', 'Huerto', 'sprout', 'emerald', 3, now - 30 * DAY)
+    const insMember = db.prepare(
+      'INSERT INTO project_members (project_id, user_id, role, added_at) VALUES (?, ?, ?, ?)'
+    )
+    const seedProject = (id, name, emoji, color, pos, owner) => {
+      insProject.run(id, name, emoji, color, pos, owner, now - 30 * DAY)
+      // owner
+      insMember.run(id, owner, 'owner', now - 30 * DAY)
+      // los demás usuarios (incluida demo) como miembros
+      for (const u of ['mar', 'jordi', 'demo']) if (u !== owner) insMember.run(id, u, 'member', now - 30 * DAY)
+    }
+    seedProject('p-casa', 'Casa', 'home', 'sky', 0, 'mar')
+    seedProject('p-trabajo', 'Trabajo', 'briefcase', 'blue', 1, 'mar')
+    seedProject('p-viaje', 'Viaje a Lisboa', 'plane', 'amber', 2, 'jordi')
+    seedProject('p-huerto', 'Huerto', 'sprout', 'emerald', 3, 'jordi')
 
     // --- Etiquetas globales (6) ---
     const insLabel = db.prepare('INSERT INTO labels (id, name, color) VALUES (?, ?, ?)')

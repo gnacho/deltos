@@ -73,7 +73,11 @@
     "segAria_one": "{{column}}, {{count}} tarea",
     "segAria_other": "{{column}}, {{count}} tareas",
     "movedTo": "Tarjeta «{{title}}» movida a {{column}}",
-    "reordered": "Tarjeta «{{title}}» reordenada en {{column}}"
+    "reordered": "Tarjeta «{{title}}» reordenada en {{column}}",
+    "scopeAria": "Alcance del tablero",
+    "scopeAll": "Todas",
+    "scopeMine": "Mías",
+    "scopeOthers": "De otras"
   },
   "filters": {
     "toggle": "Filtros",
@@ -232,7 +236,9 @@
       "save": "Guardar cambios",
       "saving": "Guardando…",
       "error": "No se ha podido crear el proyecto",
-      "updateError": "No se ha podido guardar el proyecto"
+      "updateError": "No se ha podido guardar el proyecto",
+      "members": "Compartir con",
+      "membersHint": "Las personas que elijas podrán ver y editar las tareas de este proyecto."
     }
   },
   "activityPage": {
@@ -470,6 +476,9 @@
     "USER_SELF_ROLE": "No puedes cambiar tu propio rol",
     "USER_SELF_DELETE": "No puedes eliminarte a ti mismo",
     "PROJECT_NOT_FOUND": "Proyecto no encontrado",
+    "PROJECT_NOT_MEMBER": "No eres miembro de este proyecto",
+    "PROJECT_NOT_OWNER": "Solo el responsable del proyecto puede hacer esto",
+    "ASSIGNEE_NOT_MEMBER": "El asignado debe ser miembro del proyecto",
     "LABEL_NOT_FOUND": "Etiqueta no encontrada",
     "LABEL_NAME_TAKEN": "Ya existe una etiqueta con ese nombre",
     "TASK_NOT_FOUND": "Tarea no encontrada",

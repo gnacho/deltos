@@ -3,17 +3,25 @@ import { useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { ChevronRight, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useData } from '@/data/data-context';
+import { useSession } from '@/auth/session-context';
 import type { Project } from '@/data/types';
 import { COLUMNS } from '@/lib/constants';
 import { colorOf } from '@/lib/colors';
 import { apiErrorText } from '@/lib/errors';
 import { ProjectForm } from '@/components/ProjectForm';
 import { ProjectIcon } from '@/components/ProjectIcon';
+import { Avatar } from '@/components/Avatar';
+
+/** ¿Puede el usuario gestionar el proyecto? (owner, admin, o legado sin owner) */
+function canManage(p: Project, userId: string, isAdmin: boolean) {
+  return p.owner_id == null || p.owner_id === userId || isAdmin;
+}
 
 /** Vista Proyectos: contadores por estado + crear/editar/eliminar proyecto. */
 export default function ProjectsPage() {
   const { t } = useTranslation();
   const data = useData();
+  const { user: me } = useSession();
   const navigate = useNavigate();
 
   const [formOpen, setFormOpen] = useState(false);
@@ -73,6 +81,7 @@ export default function ProjectsPage() {
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 sm:items-start">
         {projects.map((p, i) => {
           const open = p.counts.nuevo + p.counts.encurso;
+          const manageable = canManage(p, me.id, me.role === 'admin');
           return (
             <div
               key={p.id}
@@ -128,47 +137,61 @@ export default function ProjectsPage() {
                       </span>
                     ))}
                   </span>
-                </button>
-                <span className="flex flex-col gap-1.5 shrink-0 pt-0.5">
-                  <button
-                    type="button"
-                    aria-label={t('projects.edit')}
-                    title={t('projects.edit')}
-                    onClick={() => startEdit(p)}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-app bg-surface text-muted hover:text-text"
-                  >
-                    <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
-                  </button>
-                  {confirmDelete === p.id ? (
-                    <span className="flex flex-col gap-1.5">
-                      <button
-                        type="button"
-                        disabled={deleting}
-                        onClick={() => void remove(p.id)}
-                        className="h-8 rounded-lg bg-rose-600 px-3 text-[12px] font-semibold text-white disabled:opacity-60"
-                      >
-                        {deleting ? t('projects.deleting') : t('common.confirm')}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setConfirmDelete(null)}
-                        className="h-8 rounded-lg border border-app px-3 text-[12px] text-muted"
-                      >
-                        {t('common.cancel')}
-                      </button>
+                  {p.members.length > 1 && (
+                    <span className="mt-2 pl-[22px] flex items-center gap-1">
+                      {p.members.slice(0, 5).map((m) => (
+                        <Avatar key={m.id} name={m.username} color={m.color} size="sm" />
+                      ))}
+                      {p.members.length > 5 && (
+                        <span className="text-[11px] text-faint ml-0.5">
+                          +{p.members.length - 5}
+                        </span>
+                      )}
                     </span>
-                  ) : (
+                  )}
+                </button>
+                {manageable && (
+                  <span className="flex flex-col gap-1.5 shrink-0 pt-0.5">
                     <button
                       type="button"
-                      aria-label={t('projects.delete')}
-                      title={t('projects.delete')}
-                      onClick={() => setConfirmDelete(p.id)}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-app bg-surface text-muted hover:text-rose-600 dark:hover:text-rose-400"
+                      aria-label={t('projects.edit')}
+                      title={t('projects.edit')}
+                      onClick={() => startEdit(p)}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-app bg-surface text-muted hover:text-text"
                     >
-                      <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                      <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
                     </button>
-                  )}
-                </span>
+                    {confirmDelete === p.id ? (
+                      <span className="flex flex-col gap-1.5">
+                        <button
+                          type="button"
+                          disabled={deleting}
+                          onClick={() => void remove(p.id)}
+                          className="h-8 rounded-lg bg-rose-600 px-3 text-[12px] font-semibold text-white disabled:opacity-60"
+                        >
+                          {deleting ? t('projects.deleting') : t('common.confirm')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDelete(null)}
+                          className="h-8 rounded-lg border border-app px-3 text-[12px] text-muted"
+                        >
+                          {t('common.cancel')}
+                        </button>
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        aria-label={t('projects.delete')}
+                        title={t('projects.delete')}
+                        onClick={() => setConfirmDelete(p.id)}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-app bg-surface text-muted hover:text-rose-600 dark:hover:text-rose-400"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                      </button>
+                    )}
+                  </span>
+                )}
               </div>
               {confirmDelete === p.id && (
                 <p role="alert" className="mt-2 pl-[2px] text-[12px] leading-snug text-muted">

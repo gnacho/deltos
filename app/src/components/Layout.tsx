@@ -478,9 +478,20 @@ export default function Layout() {
               </NavLink>
             </div>
             <div className="flex items-center justify-between px-2 pb-2">
-              <p className="text-[11px] font-semibold tracking-widest text-faint">{t('nav.projectsSection')}</p>
-              <Link to="/projects" className="text-[11px] font-medium text-faint hover:text-muted" aria-label={t('nav.projects')}>
-                +
+              <Link
+                to="/projects"
+                className="text-[11px] font-semibold tracking-widest text-faint hover:text-muted"
+                aria-label={t('nav.projects')}
+              >
+                {t('nav.projectsSection')}
+              </Link>
+              <Link
+                to="/projects"
+                aria-label={t('nav.projects')}
+                title={t('nav.projects')}
+                className="inline-flex w-7 h-7 items-center justify-center rounded-lg text-faint hover:bg-surface2 hover:text-text"
+              >
+                <LayoutGrid className="w-4 h-4" aria-hidden="true" />
               </Link>
             </div>
             <div className="space-y-0.5">

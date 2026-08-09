@@ -37,6 +37,9 @@ export const ERROR_CODES = {
 
   // Dominio
   PROJECT_NOT_FOUND: 'PROJECT_NOT_FOUND',
+  PROJECT_NOT_MEMBER: 'PROJECT_NOT_MEMBER', // 403, no eres miembro del proyecto
+  PROJECT_NOT_OWNER: 'PROJECT_NOT_OWNER', // 403, requiere ser owner (o admin)
+  ASSIGNEE_NOT_MEMBER: 'ASSIGNEE_NOT_MEMBER', // 422, el asignado no es miembro del proyecto
   LABEL_NOT_FOUND: 'LABEL_NOT_FOUND',
   LABEL_NAME_TAKEN: 'LABEL_NAME_TAKEN', // 409, labels.name UNIQUE
   TASK_NOT_FOUND: 'TASK_NOT_FOUND',
@@ -87,6 +90,9 @@ export const ERROR_MESSAGES_ES = {
   [ERROR_CODES.USER_SELF_DELETE]: 'No puedes eliminarte a ti mismo',
 
   [ERROR_CODES.PROJECT_NOT_FOUND]: 'Proyecto no encontrado',
+  [ERROR_CODES.PROJECT_NOT_MEMBER]: 'No eres miembro de este proyecto',
+  [ERROR_CODES.PROJECT_NOT_OWNER]: 'Solo el responsable del proyecto puede hacer esto',
+  [ERROR_CODES.ASSIGNEE_NOT_MEMBER]: 'El asignado debe ser miembro del proyecto',
   [ERROR_CODES.LABEL_NOT_FOUND]: 'Etiqueta no encontrada',
   [ERROR_CODES.LABEL_NAME_TAKEN]: 'Ya existe una etiqueta con ese nombre',
   [ERROR_CODES.TASK_NOT_FOUND]: 'Tarea no encontrada',

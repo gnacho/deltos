@@ -82,6 +82,35 @@ export const PROJECT_ICONS: ProjectIconDef[] = [
   { name: 'network', emoji: '🌐' },
   { name: 'tv', emoji: '📺' },
   { name: 'phone', emoji: '📞' },
+  // Herramientas y mantenimiento
+  { name: 'hammer', emoji: '🔨' },
+  { name: 'wrench', emoji: '🔧' },
+  { name: 'paint-roller', emoji: '🪣' },
+  { name: 'paintbrush', emoji: '🖌️' },
+  { name: 'plug', emoji: '🔌' },
+  { name: 'thermometer', emoji: '🌡️' },
+  { name: 'zap', emoji: '⚡' },
+  // Dinero y admin
+  { name: 'credit-card', emoji: '💳' },
+  { name: 'receipt', emoji: '🧾' },
+  { name: 'file-text', emoji: '📄' },
+  { name: 'file-signature', emoji: '✍️' },
+  // Viaje y exterior
+  { name: 'map', emoji: '🗺️' },
+  { name: 'compass', emoji: '🧭' },
+  { name: 'mountain', emoji: '⛰️' },
+  { name: 'ticket', emoji: '🎫' },
+  { name: 'fuel', emoji: '⛽' },
+  { name: 'sailboat', emoji: '⛵' },
+  { name: 'snowflake', emoji: '❄️' },
+  { name: 'map-pin', emoji: '📍' },
+  // Tech y media
+  { name: 'headphones', emoji: '🎧' },
+  // Familia y ocio
+  { name: 'cake', emoji: '🎂' },
+  { name: 'toy-brick', emoji: '🧱' },
+  { name: 'volleyball', emoji: '🏐' },
+  { name: 'megaphone', emoji: '📢' },
 ];
 
 export const PROJECT_ICON_NAMES = PROJECT_ICONS.map((i) => i.name);

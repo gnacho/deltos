@@ -14,6 +14,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   secrets (SESSION_SECRET outside the DB), rate limits and body caps, and
   latent bugs. Each finding becomes its own issue/PR.
 
+## [2.4.0] - 2026-08-09
+
+### Added
+
+- **Project sharing and membership (#50).** Projects now have members. A
+  personal project is simply a project with no other members, and you can share
+  a project with one or more specific people. Only members can see a project
+  and its tasks; creating or editing tasks requires membership, and the assignee
+  must be a member of the project. Existing projects are migrated so nobody
+  loses access on upgrade. Owners manage members from the project form; other
+  members get read-only project settings.
+- **Board scope filter (part of #50).** An "All / Mine / Others" control on the
+  board to focus on tasks assigned to you, to others, or all. Cards always show
+  the assignee, so it is clear whose task it is without greying the shared board.
+- **More project icons (#52).** The project icon picker ships ~25 additional
+  curated Lucide icons (tools and maintenance, money and admin, travel and
+  outdoors, tech and media, family and leisure).
+
+### Changed
+
+- **Sidebar entry to Projects (#51).** The tiny `+` text link next to the
+  Projects section is now a clear icon button with a tooltip, and the section
+  label is clickable too.
+
 ## [2.3.3] - 2026-08-08
 
 ### Fixed

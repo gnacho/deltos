@@ -31,11 +31,13 @@ export function NewTaskModal({
   const { t } = useTranslation();
   const data = useData();
   const projects = data.getProjects();
-  const users = data.getUsers();
   const labels = data.getLabels();
 
   const [title, setTitle] = useState('');
   const [projectId, setProjectId] = useState(defaults.projectId ?? projects[0]?.id ?? '');
+  // El asignable se restringe a miembros del proyecto elegido (los demás no
+  // verían la tarea); fallback a todos los usuarios si no hay membresía.
+  const users = projects.find((p) => p.id === projectId)?.members ?? data.getUsers();
   const [column, setColumn] = useState<ColumnId>(defaults.column ?? 'nuevo');
   const [priority, setPriority] = useState<Priority | null>(null);
   const [dueDate, setDueDate] = useState('');

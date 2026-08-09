@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { apiDelete, apiFetch, apiPatch, apiPost, apiUpload } from './api-client';
+import { apiDelete, apiFetch, apiPatch, apiPost, apiPut, apiUpload } from './api-client';
 import {
   DataContext,
   type ConnectionStatus,
@@ -9,7 +9,7 @@ import {
   type DataApi,
   type UpdateProjectInput,
 } from './data-context';
-import type { Bootstrap, Label, Project, Task, TaskDetail, TaskPatch } from './types';
+import type { Bootstrap, Label, Project, ProjectMember, Task, TaskDetail, TaskPatch } from './types';
 
 /**
  * Capa de datos desacoplada (contrato síncrono):
@@ -222,6 +222,16 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [fetchBootstrap],
   );
 
+  const setProjectMembers = useCallback(
+    async (id: string, memberIds: string[]): Promise<void> => {
+      await apiPut<{ members: ProjectMember[] }>(`/api/projects/${encodeURIComponent(id)}/members`, {
+        member_ids: memberIds,
+      });
+      await fetchBootstrap();
+    },
+    [fetchBootstrap],
+  );
+
   const deleteProject = useCallback(
     async (id: string): Promise<void> => {
       await apiDelete(`/api/projects/${encodeURIComponent(id)}`);
@@ -297,6 +307,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       uploadAttachment,
       createProject,
       updateProject,
+      setProjectMembers,
       deleteProject,
       createLabel,
       updateLabel,
