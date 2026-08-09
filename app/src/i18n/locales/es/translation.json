@@ -61,6 +61,8 @@
   "board": {
     "openTasks_one": "{{count}} tarea abierta",
     "openTasks_other": "{{count}} tareas abiertas",
+    "moveTo": "Mover a",
+    "current": "actual",
     "emptyColumn": "Sin tareas",
     "emptyState": "Sin tareas en «{{column}}»",
     "addToColumn": "Añadir tarjeta a {{column}}",
