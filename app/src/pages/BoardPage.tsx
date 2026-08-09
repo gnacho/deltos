@@ -376,6 +376,7 @@ export default function BoardPage() {
               project={data.getProject(tk.project_id)}
               index={i}
               onOpen={(id) => openTask(id)}
+              onMove={(id, toCol) => { void doMove(id, toCol, null); }}
             />
           ))}
           {(byColumn.get(seg) ?? []).length === 0 && (
