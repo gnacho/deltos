@@ -73,7 +73,11 @@
     "segAria_one": "{{column}}, {{count}} task",
     "segAria_other": "{{column}}, {{count}} tasks",
     "movedTo": "Card \"{{title}}\" moved to {{column}}",
-    "reordered": "Card \"{{title}}\" reordered in {{column}}"
+    "reordered": "Card \"{{title}}\" reordered in {{column}}",
+    "scopeAria": "Board scope",
+    "scopeAll": "All",
+    "scopeMine": "Mine",
+    "scopeOthers": "Others"
   },
   "filters": {
     "toggle": "Filters",
@@ -232,7 +236,9 @@
       "save": "Save changes",
       "saving": "Saving…",
       "error": "Could not create the project",
-      "updateError": "Could not update the project"
+      "updateError": "Could not update the project",
+      "members": "Share with",
+      "membersHint": "The people you pick will be able to see and edit this project's tasks."
     }
   },
   "activityPage": {
@@ -470,6 +476,9 @@
     "USER_SELF_ROLE": "You cannot change your own role",
     "USER_SELF_DELETE": "You cannot delete yourself",
     "PROJECT_NOT_FOUND": "Project not found",
+    "PROJECT_NOT_MEMBER": "You are not a member of this project",
+    "PROJECT_NOT_OWNER": "Only the project owner can do this",
+    "ASSIGNEE_NOT_MEMBER": "The assignee must be a member of the project",
     "LABEL_NOT_FOUND": "Label not found",
     "LABEL_NAME_TAKEN": "A label with that name already exists",
     "TASK_NOT_FOUND": "Task not found",
