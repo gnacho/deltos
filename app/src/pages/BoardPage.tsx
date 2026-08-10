@@ -139,7 +139,11 @@ export default function BoardPage() {
     boardRef.current
       ?.querySelectorAll('.col-target')
       .forEach((s) => s.classList.remove('col-target'));
-    boardRef.current?.querySelectorAll('.dragging').forEach((c) => c.classList.remove('dragging'));
+    boardRef.current?.querySelectorAll('.dragging').forEach((c) => {
+      c.classList.remove('dragging');
+      c.classList.add('card-dropped');
+      c.addEventListener('animationend', () => c.classList.remove('card-dropped'), { once: true });
+    });
     boardRef.current?.querySelectorAll<HTMLElement>('[data-empty]').forEach((p) => {
       p.style.display = '';
     });
@@ -151,6 +155,18 @@ export default function BoardPage() {
     dragId.current = card.dataset.task ?? null;
     e.dataTransfer.setData('text/plain', dragId.current ?? '');
     e.dataTransfer.effectAllowed = 'move';
+
+    /* Ghost personalizado: clon opaco + sombra, no el semi-transparente del navegador */
+    const ghost = card.cloneNode(true) as HTMLElement;
+    ghost.classList.add('lift-ghost');
+    ghost.style.width = `${card.offsetWidth}px`;
+    ghost.style.position = 'fixed';
+    ghost.style.top = '-9999px';
+    ghost.style.left = '-9999px';
+    document.body.appendChild(ghost);
+    e.dataTransfer.setDragImage(ghost, card.offsetWidth / 2, 20);
+    window.setTimeout(() => ghost.remove(), 0);
+
     const ph = document.createElement('div');
     ph.className = 'drop-placeholder';
     ph.style.height = `${card.offsetHeight}px`;
@@ -159,7 +175,7 @@ export default function BoardPage() {
     window.setTimeout(
       () => card.classList.add('dragging'),
       0,
-    ); /* no ensuciar la imagen de arrastre */
+    );
   };
 
   const onDragOver = (e: DragEvent) => {
