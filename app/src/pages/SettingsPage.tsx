@@ -342,6 +342,21 @@ function MiPerfilCard() {
         </div>
       )}
 
+      <div className="mt-4 border-t border-app pt-4">
+        <CheckToggle
+          checked={user.expenses_enabled !== false}
+          onChange={async (checked) => {
+            try {
+              await apiPut('/api/auth/profile', { expenses_enabled: checked });
+              setUser({ ...user, expenses_enabled: checked });
+            } catch {}
+          }}
+          label={t('settings.server.pluginExpenses')}
+          size="sm"
+          variant="switch"
+        />
+      </div>
+
       {showNotif && (
         <div className="mt-4 border-t border-app pt-4">
           <NotificationsInline />

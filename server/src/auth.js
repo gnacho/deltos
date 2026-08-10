@@ -70,7 +70,7 @@ export function destroySession(db, sessionId) {
   db.prepare('DELETE FROM sessions WHERE id = ?').run(sessionId)
 }
 
-const USER_PUBLIC_COLS = 'id, username, display_name, email, phone, color, language, role, created_at'
+const USER_PUBLIC_COLS = 'id, username, display_name, email, phone, color, language, role, expenses_enabled, created_at'
 
 // Resuelve la cookie de sesión contra la BD de producción y, si no está,
 // contra la BD demo. Devuelve { db, demo, user, sessionId } o null.
@@ -161,7 +161,7 @@ export async function registerUser(db, username, password, { color = 'slate', la
 export function updateUser(db, id, updates) {
   const fields = []
   const values = []
-  for (const key of ['display_name', 'email', 'phone', 'language', 'color']) {
+  for (const key of ['display_name', 'email', 'phone', 'language', 'color', 'expenses_enabled']) {
     if (updates[key] !== undefined) {
       fields.push(`${key} = ?`)
       values.push(updates[key])

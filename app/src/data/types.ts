@@ -16,6 +16,7 @@ export interface SessionUser {
   color: string;
   language: Language;
   role: Role;
+  expenses_enabled?: boolean;
   created_at: number;
 }
 

@@ -46,6 +46,7 @@ const profileSchema = z
     phone: z.string().max(30).nullable(),
     language: z.enum(['auto', 'es', 'en']),
     color: z.string().regex(/^[a-z]{2,20}$/),
+    expenses_enabled: z.boolean(),
   })
   .partial()
 
