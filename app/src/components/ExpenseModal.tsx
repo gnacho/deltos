@@ -60,6 +60,17 @@ export function ExpenseModal(props: Props) {
   const [shareStr, setShareStr] = useState<Map<string, string>>(
     () => new Map((expense?.shares ?? []).map((sh) => [sh.user_id, fromCents(sh.share_cents)])),
   );
+  const [customSplit, setCustomSplit] = useState(() => {
+    const shares = expense?.shares ?? [];
+    if (shares.length < 2) return false;
+    const eq = equalSplit(expense?.amount_cents ?? 0, shares.length);
+    return !shares.every(
+      (sh, i) =>
+        sh.share_cents === eq[i] ||
+        sh.share_cents === eq[0] ||
+        sh.share_cents === eq[eq.length - 1],
+    );
+  });
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [deleteArmed, setDeleteArmed] = useState(false);
@@ -67,6 +78,18 @@ export function ExpenseModal(props: Props) {
 
   const amountCents = toCents(amountStr);
   const participants = useMemo(() => [...shareStr.keys()], [shareStr]);
+
+  /* Reparto equitativo en vivo salvo modo importes por persona */
+  useEffect(() => {
+    if (customSplit || amountCents === null || participants.length === 0) return;
+    const eq = equalSplit(amountCents, participants.length);
+    setShareStr((prev) => {
+      const next = new Map(prev);
+      participants.forEach((uid, i) => next.set(uid, fromCents(eq[i])));
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [amountCents, participants.length, customSplit]);
 
   const onClose = props.onClose;
   useEffect(() => {
@@ -334,31 +357,38 @@ export function ExpenseModal(props: Props) {
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <span className="block text-[12px] font-semibold tracking-wide uppercase text-faint">{t('expenses.form.participants')}</span>
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => { const el = document.getElementById('modal-add-participant-dropdown'); if (el) el.classList.toggle('hidden'); }}
-                  className="w-6 h-6 rounded-lg text-faint hover:bg-surface2 hover:text-brand flex items-center justify-center"
-                  aria-label={t('expenses.addParticipant')}
-                >
-                  <Plus className="w-3.5 h-3.5" aria-hidden="true" />
-                </button>
-                <div id="modal-add-participant-dropdown" className="hidden absolute right-0 top-full mt-1 z-30 rounded-xl bg-surface border border-app shadow-2xl py-1 min-w-[160px]">
-                  {users.filter((u) => !shareStr.has(u.id)).length === 0 ? (
-                    <p className="px-3 py-2 text-[13px] text-muted">{t('expenses.allUsersAdded')}</p>
-                  ) : (
-                    users.filter((u) => !shareStr.has(u.id)).map((u) => (
-                      <button
-                        key={u.id}
-                        type="button"
-                        onClick={() => { toggleParticipant(u.id); const el = document.getElementById('modal-add-participant-dropdown'); if (el) el.classList.add('hidden'); }}
-                        className="w-full flex items-center gap-2 px-3 py-2 text-[13px] text-left hover:bg-surface2"
-                      >
-                        <Avatar name={u.username} color={u.color} size="sm" />
-                        <span>{u.username}</span>
-                      </button>
-                    ))
-                  )}
+              <div className="flex items-center gap-2">
+                {participants.length > 1 && (
+                  <button type="button" onClick={() => setCustomSplit((v) => !v)} className="text-[12px] font-medium text-brand hover:underline">
+                    {customSplit ? t('expenses.form.splitEqual') : t('expenses.form.splitCustom')}
+                  </button>
+                )}
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => { const el = document.getElementById('modal-add-participant-dropdown'); if (el) el.classList.toggle('hidden'); }}
+                    className="w-6 h-6 rounded-lg text-faint hover:bg-surface2 hover:text-brand flex items-center justify-center"
+                    aria-label={t('expenses.addParticipant')}
+                  >
+                    <Plus className="w-3.5 h-3.5" aria-hidden="true" />
+                  </button>
+                  <div id="modal-add-participant-dropdown" className="hidden absolute right-0 top-full mt-1 z-30 rounded-xl bg-surface border border-app shadow-2xl py-1 min-w-[160px]">
+                    {users.filter((u) => !shareStr.has(u.id)).length === 0 ? (
+                      <p className="px-3 py-2 text-[13px] text-muted">{t('expenses.allUsersAdded')}</p>
+                    ) : (
+                      users.filter((u) => !shareStr.has(u.id)).map((u) => (
+                        <button
+                          key={u.id}
+                          type="button"
+                          onClick={() => { toggleParticipant(u.id); const el = document.getElementById('modal-add-participant-dropdown'); if (el) el.classList.add('hidden'); }}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-[13px] text-left hover:bg-surface2"
+                        >
+                          <Avatar name={u.username} color={u.color} size="sm" />
+                          <span>{u.username}</span>
+                        </button>
+                      ))
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -374,8 +404,9 @@ export function ExpenseModal(props: Props) {
                       type="text"
                       inputMode="decimal"
                       value={shareStr.get(u.id) ?? ''}
+                      disabled={!customSplit}
                       onChange={(e) => setShareStr((prev) => new Map(prev).set(u.id, e.target.value))}
-                      className="tnum w-20 rounded-lg bg-surface border border-app px-2 py-1 text-right text-[13px] outline-none focus:border-brand"
+                      className="tnum w-20 rounded-lg bg-surface border border-app px-2 py-1 text-right text-[13px] outline-none focus:border-brand disabled:opacity-70"
                       aria-label={t('expenses.form.shareOf', { name: u.username })}
                     />
                     <button
@@ -389,22 +420,6 @@ export function ExpenseModal(props: Props) {
                   </li>
                 ))}
               </ul>
-            )}
-            {participants.length > 1 && amountCents !== null && (
-              <button
-                type="button"
-                onClick={() => {
-                  const eq = equalSplit(amountCents, participants.length);
-                  setShareStr((prev) => {
-                    const next = new Map(prev);
-                    participants.forEach((uid, i) => next.set(uid, fromCents(eq[i])));
-                    return next;
-                  });
-                }}
-                className="mt-2 text-[12px] text-brand hover:underline"
-              >
-                {t('expenses.splitEqually')}
-              </button>
             )}
             {participants.length > 0 && !sumOk && amountCents !== null && (
               <p className="mt-1 text-[12px] text-rose-600 dark:text-rose-400">
