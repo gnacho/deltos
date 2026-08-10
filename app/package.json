@@ -1,7 +1,7 @@
 {
   "name": "deltos-app",
   "private": true,
-  "version": "2.4.1",
+  "version": "2.4.6",
   "type": "module",
   "scripts": {
     "dev": "vite",
