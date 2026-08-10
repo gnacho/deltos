@@ -288,7 +288,7 @@ export function createApp(ctx) {
   registerExpenseRoutes(app, { prod, hub, uploadsDir: ctx.uploadsDir })
   registerPushRoutes(app)
   registerHealth(app, { prod, demo })
-  app.route('/', inviteRoutes(ctx.db, demo))
+  app.route('/', inviteRoutes(prod, demo))
 
   // --- Estáticos + SPA fallback (excluyendo /api/* y /assets/*) ---
   // Caché (canon webapp-shell/actualizaciones): assets con hash = immutable;
