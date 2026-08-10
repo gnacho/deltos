@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Deltos | La vida de casa, en un tablero. En vivo, sin nube.</title>
-  <meta name="description" content="Kanban self-hosted para tareas cotidianas en familia o con colegas: lista de la compra, reforma, viajes, cole. Sincroniza en vivo, notifica al móvil y guarda tus datos en tu propio servidor. Sin cuentas, sin suscripción. AGPL-3.0." />
+  <title>Deltos | Tareas y gastos de casa, en un tablero. En vivo, sin nube.</title>
+  <meta name="description" content="Kanban self-hosted para tareas cotidianas y gastos compartidos en familia o con colegas: lista de la compra, reforma, viajes, cole, división de pagos. Sincroniza en vivo, notifica al móvil, invita a quien quieras sin cuenta. Sin nube, sin suscripción. AGPL-3.0." />
   <meta name="theme-color" content="#f6f1e8" />
   <link rel="canonical" href="https://deltos.cloudless.club/" />
   <link rel="alternate" hreflang="es" href="https://deltos.cloudless.club/" />
@@ -12,8 +12,8 @@
   <link rel="alternate" hreflang="x-default" href="https://deltos.cloudless.club/" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Deltos" />
-  <meta property="og:title" content="Deltos | La vida de casa, en un tablero. En vivo, sin nube." />
-  <meta property="og:description" content="Kanban self-hosted para tareas de cada día, en familia o con colegas. Sincroniza en vivo, notifica al móvil y guarda tus datos en tu servidor. Sin cuentas ni suscripción." />
+  <meta property="og:title" content="Deltos | Tareas y gastos de casa, en un tablero. En vivo, sin nube." />
+  <meta property="og:description" content="Kanban self-hosted para tareas de cada día y gastos compartidos, en familia o con colegas. Sincroniza en vivo, notifica al móvil e invita sin cuenta. Sin nube ni suscripción." />
   <meta property="og:url" content="https://deltos.cloudless.club/" />
   <meta property="og:image" content="https://deltos.cloudless.club/og.png" />
   <meta property="og:image:width" content="1200" />
@@ -21,14 +21,14 @@
   <meta property="og:locale" content="es_ES" />
   <meta property="og:locale:alternate" content="en_US" />
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="Deltos | La vida de casa, en un tablero. En vivo, sin nube." />
-  <meta name="twitter:description" content="Kanban self-hosted para tareas de cada día, en familia o con colegas. En vivo, sin nube, sin suscripción." />
+  <meta name="twitter:title" content="Deltos | Tareas y gastos de casa, en un tablero. En vivo, sin nube." />
+  <meta name="twitter:description" content="Kanban self-hosted para tareas y gastos compartidos. En vivo, sin nube, sin suscripción." />
   <meta name="twitter:image" content="https://deltos.cloudless.club/og.png" />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'%3E%3Crect x='4' y='4' width='88' height='88' rx='26' fill='%230f8a62'/%3E%3Cpath d='M28 50l14 14 26-30' fill='none' stroke='%23ffffff' stroke-width='10' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500&family=Space+Grotesk:wght@400;500;700&family=Caveat:wght@500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=2" />
+  <link rel="stylesheet" href="styles.css?v=3" />
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -47,7 +47,7 @@
         "operatingSystem": "Linux",
         "url": "https://github.com/gnacho/deltos",
         "license": "https://www.gnu.org/licenses/agpl-3.0.html",
-        "description": "PWA kanban self-hosted para tareas de cada día: sincronización en vivo, notificaciones push, comentarios, adjuntos, etiquetas, prioridad y fechas. Un servicio Node + SQLite. Sin nube.",
+        "description": "PWA kanban self-hosted para tareas de cada día y gastos compartidos: sincronización en vivo, notificaciones push, comentarios, adjuntos, etiquetas, prioridad, fechas y división de pagos con invitaciones públicas. Un servicio Node + SQLite. Sin nube.",
         "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" },
         "isAccessibleForFree": true
       },
@@ -83,6 +83,11 @@
             "@type": "Question",
             "name": "¿Dónde están mis datos?",
             "acceptedAnswer": { "@type": "Answer", "text": "En tu servidor, en un único fichero SQLite bajo /var/lib/deltos. Una copia de seguridad es copiar un fichero." }
+          },
+          {
+            "@type": "Question",
+            "name": "¿Deltos gestiona gastos compartidos?",
+            "acceptedAnswer": { "@type": "Answer", "text": "Sí. El plugin de gastos permite dividir pagos entre varias personas, elegir método (Bizum, transferencia, efectivo), invitar a gente sin cuenta con un enlace y saldar cuentas de un clic." }
           }
         ]
       }
@@ -154,12 +159,14 @@
             <span class="sticky s1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="4" y1="4" x2="20" y2="20"/></svg><b data-i18n="hero.note1">sin nube</b></span>
             <span class="sticky s2"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg><b data-i18n="hero.note2">libre siempre</b></span>
             <span class="sticky s3"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg><b data-i18n="hero.note3">avisa al móvil</b></span>
+            <span class="sticky s4"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg><b data-i18n="hero.note4">gastos a medias</b></span>
           </div>
         </div>
       </div>
       <div class="container hero-facts" aria-hidden="false">
         <span class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="rgb(var(--accent))" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><span data-i18n="facts.stack">Un servicio · Node + SQLite</span></span>
         <span class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="rgb(var(--accent))" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg><span data-i18n="facts.pwa">PWA instalable</span></span>
+        <span class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="rgb(var(--accent))" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg><span data-i18n="facts.expenses">Gastos compartidos (plugin)</span></span>
         <span class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="rgb(var(--accent))" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg><span data-i18n="facts.free">100% libre · AGPL-3.0</span></span>
       </div>
     </header>
@@ -223,6 +230,23 @@
             <img id="shotTrabajo" src="assets/shot-trabajo-es-light.webp" alt="Tablero del proyecto Trabajo con la presentación del trimestre, una factura y un bug de inicio de sesión" width="1440" height="900">
           </figure>
         </div>
+
+        <div class="scene reveal">
+          <div class="scene-text">
+            <span class="scene-emoji" aria-hidden="true">💰</span>
+            <h3 class="font-display" data-i18n="scene4.t">Los gastos de casa</h3>
+            <p data-i18n="scene4.p">Quién pagó qué y cuánto debe cada uno, sin el Excel de turno. Reparto equitativo o a medida, método de pago y saldar cuentas de un clic. Y si alguien no tiene cuenta, le mandas un enlace y marca su parte desde fuera.</p>
+            <ul class="scene-tags" aria-label="features">
+              <li data-i18n="scene4.f1">división de gastos</li>
+              <li data-i18n="scene4.f2">invita sin cuenta</li>
+              <li data-i18n="scene4.f3">saldar de un clic</li>
+            </ul>
+            <p class="scene-plugin-tag text-muted" data-i18n="scene4.plugin">(plugin opcional, se activa en Ajustes)</p>
+          </div>
+          <figure class="taped scene-shot">
+            <img id="shotExpenses" src="assets/shot-expenses-es-light.webp" alt="Tablero de gastos de Deltos con la compra del Mercadona, una cena y la factura de la luz, con división de pagos" width="1440" height="900">
+          </figure>
+        </div>
       </div>
     </section>
 
@@ -277,6 +301,21 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="rgb(var(--fg))" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.64 5.64l1.41 1.41M16.95 16.95l1.41 1.41M5.64 18.36l1.41-1.41M16.95 7.05l1.41-1.41"/><circle cx="12" cy="12" r="4"/></svg>
             <h3 data-i18n="notes.n8t">Tus datos, tuyos</h3>
             <p data-i18n="notes.n8p">Export a JSON, respaldos automáticos con retención y registro de auditoría de cada acción de admin.</p>
+          </div>
+          <div class="sticky note n9 reveal">
+            <svg viewBox="0 0 24 24" fill="none" stroke="rgb(var(--fg))" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+            <h3 data-i18n="notes.n9t">Gastos compartidos</h3>
+            <p data-i18n="notes.n9p">Quién pagó qué y a cuánto toca cada uno. División equitativa o importes por persona, con Bizum, transferencia o efectivo.</p>
+          </div>
+          <div class="sticky note n10 reveal">
+            <svg viewBox="0 0 24 24" fill="none" stroke="rgb(var(--fg))" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M22 13V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h9"/><path d="M22 7l-7.7 7.7a2.2 2.2 0 0 1-3.1 0L8 11.5"/></svg>
+            <h3 data-i18n="notes.n10t">Invita a quien quieras</h3>
+            <p data-i18n="notes.n10p">Un enlace para que cualquiera vea su parte, los adjuntos y comente. Sin registro, sin contraseña. Marca como pagado y listo.</p>
+          </div>
+          <div class="sticky note n11 reveal">
+            <svg viewBox="0 0 24 24" fill="none" stroke="rgb(var(--fg))" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            <h3 data-i18n="notes.n11t">Saldar cuentas</h3>
+            <p data-i18n="notes.n11p">Un clic para marcar todo como pagado entre dos personas. La app calcula quién debe a quién y te lo resume en un panel.</p>
           </div>
         </div>
       </div>
@@ -336,6 +375,7 @@
                   <tr><th data-i18n="compare.rExport">Export de datos</th><td class="hl">✓</td><td>◐ solo premium</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
                   <tr><th data-i18n="compare.rDemo">Modo demo</th><td class="hl">✓</td><td>plantillas</td><td>✗ no doc.</td><td>✓</td><td>✗ no doc.</td><td>✓</td></tr>
                   <tr><th data-i18n="compare.rPwa">PWA instalable</th><td class="hl">✓</td><td>apps nativas</td><td>apps nativas</td><td>✗ no doc.</td><td>apps nativas</td><td>✗ no doc.</td></tr>
+                  <tr><th data-i18n="compare.rExpenses">Gastos compartidos con splits</th><td class="hl">✓</td><td>✗ no doc.</td><td>✗ no doc.</td><td>✗ no doc.</td><td>✗ no doc.</td><td>✗ no doc.</td></tr>
                   <tr><th data-i18n="compare.rI18n">i18n ES/EN</th><td class="hl">✓</td><td>multi</td><td>multi</td><td>✗ no doc.</td><td>multi</td><td>multi</td></tr>
                 </tbody>
               </table>
@@ -455,7 +495,7 @@
       </div>
       <div class="foot-bottom">
         <span data-i18n="footer.rights">AGPL-3.0 · Hecho en casa, para la vida de casa.</span>
-        <span class="font-mono">v1.9.2 · 4 proyectos · 15 tareas · en vivo</span>
+        <span class="font-mono">v2.5.0 · 4 proyectos · 15 tareas · 3 gastos · en vivo</span>
       </div>
     </div>
   </footer>
@@ -469,7 +509,7 @@
     <p class="lightbox-caption" id="lightboxCaption"></p>
   </div>
 
-  <script src="i18n.js?v=2"></script>
-  <script src="app.js?v=2"></script>
+  <script src="i18n.js?v=3"></script>
+  <script src="app.js?v=3"></script>
 </body>
 </html>
