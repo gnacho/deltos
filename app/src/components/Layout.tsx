@@ -627,7 +627,14 @@ export default function Layout() {
         className={`hidden md:flex fixed top-0 inset-x-0 h-14 bg-surface/85 backdrop-blur-[16px] border-b border-app z-30 items-center justify-between gap-3 px-6 md:ml-16 ${lgMargin}`}
         style={{ paddingTop: 'env(safe-area-inset-top)' }}
       >
-        <h1 className="font-display font-bold text-lg tracking-tight truncate">{title}</h1>
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="flex items-center gap-2 shrink-0">
+            <Avatar name={user.username} color={user.color} size="sm" />
+            <span className="text-sm font-medium truncate max-w-[120px]">{user.username}</span>
+          </div>
+          <span className="h-5 w-px bg-app shrink-0" />
+          <h1 className="font-display font-bold text-lg tracking-tight truncate">{title}</h1>
+        </div>
         <div className="flex items-center gap-3">
           {boardSelect}
           <ThemeToggleButton mobile />
