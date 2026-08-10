@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import type { DragEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Plus } from 'lucide-react'
 import type { ExpenseStep } from '@/data/types'
@@ -8,6 +9,7 @@ import { ExpenseCard } from '@/components/ExpenseCard'
 import { ExpenseDetailModal } from '@/components/ExpenseDetailModal'
 import { ExpenseModal } from '@/components/ExpenseModal'
 import { colorOf } from '@/lib/colors'
+import { announce } from '@/lib/announce'
 
 const STEPS: { id: ExpenseStep; color: string }[] = [
   { id: 'nuevo', color: 'sky' },
@@ -21,6 +23,8 @@ const STEP_ACCENT_RGB: Record<string, string> = {
   emerald: '16 185 129',
 }
 
+const reducedMotionMQ = window.matchMedia('(prefers-reduced-motion: reduce)')
+
 type FilterType = 'all' | 'mine' | 'others'
 
 export default function ExpenseBoard() {
@@ -32,6 +36,11 @@ export default function ExpenseBoard() {
   const [filter, setFilter] = useState<FilterType>('all')
   const [defaultStep, setDefaultStep] = useState<ExpenseStep>('nuevo')
   const [seg, setSeg] = useState<ExpenseStep>('nuevo')
+
+  const boardRef = useRef<HTMLDivElement>(null)
+  const dragId = useRef<string | null>(null)
+  const placeholder = useRef<HTMLDivElement | null>(null)
+  const flipRects = useRef<Map<string, DOMRect> | null>(null)
 
   const expenses = data.getExpenses()
 
@@ -52,9 +61,151 @@ export default function ExpenseBoard() {
 
   const openCount = visible.filter((e) => e.step !== 'hecho').length
 
+  /* FLIP: animar desde la posición anterior tras DnD */
+  useLayoutEffect(() => {
+    const before = flipRects.current
+    if (!before) return
+    flipRects.current = null
+    if (reducedMotionMQ.matches || !boardRef.current) return
+    boardRef.current.querySelectorAll<HTMLElement>('[data-task]').forEach((el) => {
+      const old = before.get(el.dataset.task ?? '')
+      if (!old) return
+      const now = el.getBoundingClientRect()
+      const dx = old.left - now.left
+      const dy = old.top - now.top
+      if (!dx && !dy) return
+      el.style.transition = 'none'
+      el.style.transform = `translate(${dx}px,${dy}px)`
+      requestAnimationFrame(() => {
+        el.style.transition = 'transform .28s ease'
+        el.style.transform = ''
+        el.addEventListener('transitionend', () => (el.style.transition = ''), { once: true })
+      })
+    })
+  }, [expenses])
+
   const handleOpenNew = (step: ExpenseStep) => {
     setDefaultStep(step)
     setCreating(true)
+  }
+
+  /* ---------- DnD (HTML5, delegado - copia exacta de BoardPage) ---------- */
+
+  const cleanupDrag = () => {
+    dragId.current = null
+    if (placeholder.current) {
+      placeholder.current.remove()
+      placeholder.current = null
+    }
+    boardRef.current
+      ?.querySelectorAll('.col-target')
+      .forEach((s) => s.classList.remove('col-target'))
+    boardRef.current?.querySelectorAll('.dragging').forEach((c) => c.classList.remove('dragging'))
+    boardRef.current?.querySelectorAll<HTMLElement>('[data-empty]').forEach((p) => {
+      p.style.display = ''
+    })
+  }
+
+  const onDragStart = (e: DragEvent) => {
+    const card = (e.target as HTMLElement).closest<HTMLElement>('[data-task]')
+    if (!card) return
+    dragId.current = card.dataset.task ?? null
+    e.dataTransfer.setData('text/plain', dragId.current ?? '')
+    e.dataTransfer.effectAllowed = 'move'
+    const ph = document.createElement('div')
+    ph.className = 'drop-placeholder'
+    ph.style.height = `${card.offsetHeight}px`
+    ph.setAttribute('aria-hidden', 'true')
+    placeholder.current = ph
+    window.setTimeout(() => card.classList.add('dragging'), 0)
+  }
+
+  const onDragOver = (e: DragEvent) => {
+    if (!dragId.current) return
+    const section = (e.target as HTMLElement).closest<HTMLElement>('section[data-col]')
+    if (!section) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    boardRef.current?.querySelectorAll('.col-target').forEach((s) => {
+      if (s !== section) s.classList.remove('col-target')
+    })
+    section.classList.add('col-target')
+    const list = section.querySelector('[data-list]')
+    if (!list || !placeholder.current) return
+    const cards = Array.from(list.querySelectorAll<HTMLElement>('[data-task]')).filter(
+      (c) => c.dataset.task !== dragId.current,
+    )
+    let ref: HTMLElement | null = null
+    for (const c of cards) {
+      const r = c.getBoundingClientRect()
+      if (e.clientY < r.top + r.height / 2) {
+        ref = c
+        break
+      }
+    }
+    const empty = list.querySelector<HTMLElement>('[data-empty]')
+    if (empty) empty.style.display = 'none'
+    if (ref) list.insertBefore(placeholder.current, ref)
+    else list.appendChild(placeholder.current)
+  }
+
+  const onDrop = (e: DragEvent) => {
+    if (!dragId.current) return
+    e.preventDefault()
+    const section = (e.target as HTMLElement).closest<HTMLElement>('section[data-col]')
+    if (!section) {
+      cleanupDrag()
+      return
+    }
+    let refId: string | null = null
+    if (placeholder.current?.parentElement) {
+      let n = placeholder.current.nextElementSibling as HTMLElement | null
+      while (n) {
+        if (n.dataset?.task) {
+          refId = n.dataset.task
+          break
+        }
+        n = n.nextElementSibling as HTMLElement | null
+      }
+    }
+    const id = dragId.current
+    const toCol = section.dataset.col as ExpenseStep
+    cleanupDrag()
+    void doMove(id, toCol, refId)
+  }
+
+  const doMove = async (id: string, toCol: ExpenseStep, refId: string | null) => {
+    const expense = data.getExpense(id)
+    if (!expense) return
+    const colExpenses = expenses
+      .filter((e) => e.step === toCol && e.id !== id)
+      .sort((a, b) => a.position - b.position)
+    let position = colExpenses.length
+    if (refId) {
+      const ri = colExpenses.findIndex((e) => e.id === refId)
+      if (ri !== -1) position = ri
+    }
+    const fromCol = expense.step
+
+    if (!reducedMotionMQ.matches && boardRef.current) {
+      const map = new Map<string, DOMRect>()
+      boardRef.current.querySelectorAll<HTMLElement>('[data-task]').forEach((el) => {
+        map.set(el.dataset.task ?? '', el.getBoundingClientRect())
+      })
+      flipRects.current = map
+    }
+
+    try {
+      await data.moveExpense(id, toCol, position)
+      const colName = t(`expenseSteps.${toCol}`)
+      announce(
+        fromCol !== toCol
+          ? t('board.movedTo', { title: expense.title, column: colName })
+          : t('board.reordered', { title: expense.title, column: colName }),
+      )
+    } catch {
+      announce(t('common.error'))
+    }
   }
 
   if (!data.ready) return null
@@ -143,8 +294,16 @@ export default function ExpenseBoard() {
           )}
         </div>
 
-        {/* Tablero escritorio (lg+): kanban 3 columnas */}
-        <div className="hidden lg:grid lg:grid-cols-3 lg:items-start gap-4" aria-live="polite">
+        {/* Tablero escritorio (lg+): kanban 3 columnas con drag & drop */}
+        <div
+          ref={boardRef}
+          className="hidden lg:grid lg:grid-cols-3 lg:items-start gap-4"
+          aria-live="polite"
+          onDragStart={onDragStart}
+          onDragOver={onDragOver}
+          onDrop={onDrop}
+          onDragEnd={cleanupDrag}
+        >
           {STEPS.map((st) => {
             const list = byStep.get(st.id) ?? []
             return (
