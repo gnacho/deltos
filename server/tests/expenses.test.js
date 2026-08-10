@@ -244,3 +244,47 @@ describe('expenses — comentarios y papelera', () => {
     expect(dump).toHaveProperty('expense_trash')
   })
 })
+
+describe('expenses — saldar cuentas', () => {
+  it('salda todas las deudas pendientes entre dos usuarios y transiciona a hecho', async () => {
+    const { app, admin } = await makeExpenseInstance()
+    const ana = await createUser(app, admin, 'ana')
+    const anaId = (await (await app.request('/api/auth/me', { headers: { cookie: ana.cookie } })).json()).user.id
+    // dos deudas de ana hacia admin (creador ya pagó) y una sin pagar por el creador
+    await createExpense(app, admin, { title: 'A', requested_user_id: anaId, split_type: 'half', paid_by_creator: true })
+    await createExpense(app, admin, { title: 'B', requested_user_id: anaId, split_type: 'full', paid_by_creator: true })
+    const c3 = await createExpense(app, admin, { title: 'C', requested_user_id: anaId, split_type: 'half' })
+
+    const res = await app.request(
+      '/api/expenses/settle',
+      jsonReq(ana, 'POST', '/api/expenses/settle', { other_user_id: (await (await app.request('/api/auth/me', { headers: { cookie: admin.cookie } })).json()).user.id })
+    )
+    expect(res.status).toBe(200)
+    expect((await res.json()).settled).toBe(3)
+
+    const list = (await (await app.request('/api/expenses', { headers: { cookie: admin.cookie } })).json()).expenses
+    for (const e of list) expect(e.paid_by_requested).toBe(true)
+    expect(list.find((e) => e.title === 'A').step).toBe('hecho')
+    expect(list.find((e) => e.title === 'B').step).toBe('hecho')
+    // C: el creador no ha pagado aún → no pasa a hecho
+    expect(list.find((e) => e.id === c3.id).step).toBe(c3.step)
+  })
+
+  it('sin deudas pendientes devuelve settled 0; saldarse a uno mismo es 422', async () => {
+    const { app, admin } = await makeExpenseInstance()
+    const ana = await createUser(app, admin, 'ana')
+    const anaId = (await (await app.request('/api/auth/me', { headers: { cookie: ana.cookie } })).json()).user.id
+    const empty = await app.request(
+      '/api/expenses/settle',
+      jsonReq(admin, 'POST', '/api/expenses/settle', { other_user_id: anaId })
+    )
+    expect(empty.status).toBe(200)
+    expect((await empty.json()).settled).toBe(0)
+    const meId = (await (await app.request('/api/auth/me', { headers: { cookie: admin.cookie } })).json()).user.id
+    const self = await app.request(
+      '/api/expenses/settle',
+      jsonReq(admin, 'POST', '/api/expenses/settle', { other_user_id: meId })
+    )
+    expect(self.status).toBe(422)
+  })
+})
