@@ -217,3 +217,10 @@ export interface ExpensePatch {
   payment_method?: PaymentMethod | null;
   step?: ExpenseStep;
 }
+
+export interface ExpenseDetail {
+  expense: Expense;
+  attachments: Attachment[];
+  comments: Comment[];
+  activity: ActivityEvent[];
+}

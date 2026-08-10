@@ -480,6 +480,12 @@ export default function Layout() {
                 </span>
                 <span className="flex-1 text-left">{t('nav.activity')}</span>
               </NavLink>
+              <NavLink to="/expenses" className={sideItemCls}>
+                <span className="text-faint">
+                  <Receipt className="w-4 h-4" aria-hidden="true" />
+                </span>
+                <span className="flex-1 text-left">{t('nav.expenses')}</span>
+              </NavLink>
             </div>
             <div className="flex items-center justify-between px-2 pb-2">
               <Link

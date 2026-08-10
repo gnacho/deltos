@@ -5,6 +5,7 @@ import { useSession } from '@/auth/session-context'
 import type { Expense, ExpenseStep } from '@/data/types'
 import { ExpenseCard } from '@/components/ExpenseCard'
 import { ExpenseModal } from '@/components/ExpenseModal'
+import { ExpenseDetailModal } from '@/components/ExpenseDetailModal'
 import { colorOf } from '@/lib/colors'
 import { Plus } from 'lucide-react'
 
@@ -23,7 +24,7 @@ export default function ExpenseBoard() {
   const data = useData()
   const { user } = useSession()
   const [creating, setCreating] = useState(false)
-  const [editing, setEditing] = useState<Expense | null>(null)
+  const [detailExpense, setDetailExpense] = useState<Expense | null>(null)
   const [filter, setFilter] = useState<FilterType>('all')
 
   const expenses = data.getExpenses()
@@ -51,8 +52,12 @@ export default function ExpenseBoard() {
     setCreating(false)
   }
 
-  const handleUpdated = () => {
-    setEditing(null)
+  const handleDetailClose = () => {
+    setDetailExpense(null)
+  }
+
+  const handleDeleted = () => {
+    setDetailExpense(null)
   }
 
   const handleMove = (id: string, step: ExpenseStep) => {
@@ -131,7 +136,7 @@ export default function ExpenseBoard() {
                       <ExpenseCard
                         key={expense.id}
                         expense={expense}
-                        onClick={() => setEditing(expense)}
+                        onClick={() => setDetailExpense(expense)}
                         onMove={handleMove}
                       />
                     ))
@@ -150,12 +155,11 @@ export default function ExpenseBoard() {
           onCreated={handleCreated}
         />
       )}
-      {editing && (
-        <ExpenseModal
-          mode="edit"
-          expense={editing}
-          onClose={() => setEditing(null)}
-          onUpdated={handleUpdated}
+      {detailExpense && (
+        <ExpenseDetailModal
+          expense={detailExpense}
+          onClose={handleDetailClose}
+          onDeleted={handleDeleted}
         />
       )}
     </div>

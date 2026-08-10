@@ -9,7 +9,7 @@ import {
   type DataApi,
   type UpdateProjectInput,
 } from './data-context';
-import type { Bootstrap, Expense, ExpenseInput, ExpensePatch, Label, Project, ProjectMember, Task, TaskDetail, TaskPatch } from './types';
+import type { Bootstrap, Expense, ExpenseDetail, ExpenseInput, ExpensePatch, Label, Project, ProjectMember, Task, TaskDetail, TaskPatch } from './types';
 
 /**
  * Capa de datos desacoplada (contrato síncrono):
@@ -49,6 +49,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const bootstrapInFlight = useRef<Promise<void> | null>(null);
   const expensesRef = useRef<Expense[]>([]);
   const expensesInFlight = useRef<Promise<void> | null>(null);
+  const expenseDetailCache = useRef(new Map<string, ExpenseDetail>());
+  const expenseDetailPending = useRef(new Set<string>());
   const mounted = useRef(true);
 
   const bump = useCallback(() => setVersion((v) => v + 1), []);
@@ -120,6 +122,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     void fetchBootstrap();
     void fetchExpenses();
     for (const id of detailCache.current.keys()) void fetchDetail(id);
+    for (const id of expenseDetailCache.current.keys()) void fetchExpenseDetail(id);
   }, [fetchBootstrap, fetchExpenses, fetchDetail]);
 
   const scheduleRefresh = useCallback(() => {
@@ -321,10 +324,61 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const deleteExpense = useCallback(
     async (id: string): Promise<void> => {
       await apiDelete(`/api/expenses/${encodeURIComponent(id)}`);
+      expenseDetailCache.current.delete(id);
       await fetchExpenses();
     },
     [fetchExpenses],
   );
+
+  const fetchExpenseDetail = useCallback(
+    async (id: string): Promise<void> => {
+      if (expenseDetailPending.current.has(id)) return;
+      expenseDetailPending.current.add(id);
+      try {
+        const detail = await apiFetch<ExpenseDetail>(`/api/expenses/${encodeURIComponent(id)}/detail`);
+        if (!mounted.current) return;
+        expenseDetailCache.current.set(id, detail);
+        bump();
+      } catch { /* se reintenta al reabrir */ }
+      finally { expenseDetailPending.current.delete(id); }
+    },
+    [bump],
+  );
+
+  const addExpenseComment = useCallback(
+    async (id: string, body: string): Promise<void> => {
+      await apiPost(`/api/expenses/${encodeURIComponent(id)}/comments`, { body });
+      await Promise.all([fetchExpenses(), fetchExpenseDetail(id)]);
+    },
+    [fetchExpenses, fetchExpenseDetail],
+  );
+
+  const uploadExpenseAttachment = useCallback(
+    async (id: string, file: File): Promise<void> => {
+      const form = new FormData();
+      form.append('file', file);
+      await apiUpload(`/api/expenses/${encodeURIComponent(id)}/attachments`, form);
+      await Promise.all([fetchExpenses(), fetchExpenseDetail(id)]);
+    },
+    [fetchExpenses, fetchExpenseDetail],
+  );
+
+  const deleteExpenseAttachment = useCallback(
+    async (expenseId: string, attId: string): Promise<void> => {
+      await apiDelete(`/api/expenses/${encodeURIComponent(expenseId)}/attachments/${encodeURIComponent(attId)}`);
+      await Promise.all([fetchExpenses(), fetchExpenseDetail(expenseId)]);
+    },
+    [fetchExpenses, fetchExpenseDetail],
+  );
+
+  const refreshExpenseDetail = useCallback(
+    (id: string) => { expenseDetailCache.current.delete(id); void fetchExpenseDetail(id); },
+    [fetchExpenseDetail],
+  );
+
+  const releaseExpenseDetail = useCallback((id: string) => {
+    expenseDetailCache.current.delete(id);
+  }, []);
 
   const refreshTaskDetail = useCallback(
     (id: string) => {
@@ -379,6 +433,16 @@ export function DataProvider({ children }: { children: ReactNode }) {
       updateExpense,
       moveExpense,
       deleteExpense,
+      getExpenseDetail: (id) => {
+        const cached = expenseDetailCache.current.get(id);
+        if (!cached) void fetchExpenseDetail(id);
+        return cached ?? null;
+      },
+      refreshExpenseDetail,
+      releaseExpenseDetail,
+      addExpenseComment,
+      uploadExpenseAttachment,
+      deleteExpenseAttachment,
     };
     // version es el disparador de recomputo (cachés en refs)
     // eslint-disable-next-line react-hooks/exhaustive-deps

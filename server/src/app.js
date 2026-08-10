@@ -284,7 +284,7 @@ export function createApp(ctx) {
   })
 
   registerDomainRoutes(app, { hub, uploadsDir: ctx.uploadsDir, prod, config, dataDir: ctx.dataDir })
-  registerExpenseRoutes(app, { prod, hub })
+  registerExpenseRoutes(app, { prod, hub, uploadsDir: ctx.uploadsDir })
   registerPushRoutes(app)
   registerHealth(app, { prod, demo })
 
