@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { X, Info, Paperclip, MessageCircle, Clock, Trash2, Link } from 'lucide-react';
 import type { FormEvent } from 'react';
 import { useData } from '@/data/data-context';
-import { getCsrfToken, apiPost } from '@/data/api-client';
+import { getCsrfToken } from '@/data/api-client';
 import { useSession } from '@/auth/session-context';
 import type { Expense, ExpenseStep } from '@/data/types';
 import type { Attachment, ActivityEvent, Comment } from '@/data/types';
@@ -266,16 +266,23 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
   };
   const handleInvite = async () => {
     if (!inviteName.trim()) { setInviteError(t('invite.nameRequired')); return; }
-    if (inviteCents < 0) { setInviteError(t('expenses.form.amountRequired')); return; }
     setInviteSending(true);
     setInviteError(null);
     try {
-      const respData = await apiPost<{ invite: { token: string } }>('/api/invite/create', {
-        invite_name: inviteName.trim(),
-        share_cents: inviteCents,
-        expense_id: expense.id,
-        notes: inviteNotes.trim(),
+      const csrf = getCsrfToken();
+      const res = await fetch('/api/invite/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrf ?? '' },
+        body: JSON.stringify({ invite_name: inviteName.trim(), share_cents: inviteCents, expense_id: expense.id, notes: inviteNotes.trim() }),
+        credentials: 'same-origin',
       });
+      if (!res.ok) {
+        const info = await res.json().catch(() => ({}));
+        const msg = (info as any)?.error?.message || `Error ${res.status}`;
+        setInviteError(msg);
+        return;
+      }
+      const respData = await res.json();
       await navigator.clipboard.writeText(`${window.location.origin}/invite/${respData.invite.token}`);
       setInviteDone(true);
       announce(t('invite.linkCopied'));
@@ -283,8 +290,8 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
         .then((r) => r.json())
         .then((d) => setInvites(d.invites ?? []))
         .catch(() => {});
-    } catch (e) {
-      setInviteError(e instanceof Error ? e.message : t('common.error'));
+    } catch (e: any) {
+      setInviteError(e?.message || t('common.error'));
     } finally {
       setInviteSending(false);
     }
@@ -667,6 +674,21 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
                     {t('expenses.splitEqually')}
                   </button>
                 )}
+                {(() => {
+                  const sharesSum = (expense.shares ?? []).reduce((s, sh) => s + sh.share_cents, 0);
+                  if (expense.shares?.length && sharesSum !== expense.amount_cents) {
+                    const diff = Math.abs(sharesSum - expense.amount_cents);
+                    return (
+                      <p className="mt-2 rounded-lg bg-amber-50 dark:bg-amber-500/10 px-3 py-2 text-[13px] font-medium text-amber-700 dark:text-amber-300">
+                        {sharesSum > expense.amount_cents
+                          ? t('expenses.form.sharesSumOver', { sum: fmtMoney(sharesSum, i18n.language), total: fmtMoney(expense.amount_cents, i18n.language), over: fmtMoney(diff, i18n.language) })
+                          : t('expenses.form.sharesSumUnder', { sum: fmtMoney(sharesSum, i18n.language), total: fmtMoney(expense.amount_cents, i18n.language), under: fmtMoney(diff, i18n.language) })
+                        }
+                      </p>
+                    );
+                  }
+                  return null;
+                })()}
                 <p className="mt-1.5 text-[12px] text-faint">
                   {t('expenses.paidBy', { name: expense.payer_username })} ·{' '}
                   {new Date(expense.spent_at).toLocaleDateString(i18n.language)}
@@ -763,7 +785,7 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
                     <button
                       type="button"
                       onClick={handleInvite}
-                      disabled={inviteSending || !inviteName.trim() || inviteCents < 0}
+                      disabled={inviteSending || !inviteName.trim()}
                       className="w-full h-9 rounded-lg bg-brand text-brandfg text-[13px] font-semibold hover:brightness-110 disabled:opacity-60"
                     >
                       {inviteSending ? '...' : t('invite.copyLink')}
