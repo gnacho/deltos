@@ -5,6 +5,7 @@ const HOLD_MS = 350;
 const SCROLL_SLOP = 12; /* px de movimiento antes del hold → es un scroll */
 const FLICK_VY = -0.55; /* px/ms hacia arriba para contar como lanzamiento */
 const FLICK_DY = -48;
+const CLEANUP_GUARD_MS = 500; /* red de seguridad: nada queda pegado */
 
 const reducedMotionMQ = window.matchMedia('(prefers-reduced-motion: reduce)');
 
@@ -18,19 +19,24 @@ interface Props {
 }
 
 /**
- * Movimiento móvil de tarjetas: mantener pulsado levanta la tarjeta (vibración
- * + velo), arrastrarla hasta la barra de etapas ([data-segbar]) resalta la
- * etapa bajo el dedo ([data-seg]); al soltar, la tarjeta vuela hasta la
- * pestaña y el contador da un salto. Un flick hacia arriba la manda a la
- * siguiente etapa sin apuntar. Genérico: sirve para gastos y para tareas.
+ * Movimiento móvil de tarjetas: mantener pulsado crea un CLON fijo a nivel de
+ * body (opaco, inclinado, con sombra) que sigue al dedo por encima del velo y
+ * de la barra de etapas ([data-segbar]); la etapa bajo el dedo ([data-seg]) se
+ * enciende con el acento. Al soltar sobre una etapa el clon vuela hasta la
+ * pestaña y el contador salta; un flick hacia arriba avanza a la siguiente;
+ * soltar sin destino lo devuelve elástico a su sitio. La tarjeta original solo
+ * se atenúa (sin z-index): no puede quedar por encima de nada.
  */
 export function MobileMoveCard({ id, current, steps, onMove, children }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const timer = useRef<number | null>(null);
+  const guard = useRef<number | null>(null);
   const start = useRef<{ x: number; y: number } | null>(null);
   const last = useRef<{ y: number; t: number; vy: number }>({ y: 0, t: 0, vy: 0 });
   const lifted = useRef(false);
-  const flying = useRef(false);
+  const clone = useRef<HTMLElement | null>(null);
+  const origin = useRef<DOMRect | null>(null);
+  const grab = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const justDragged = useRef(false);
   const raf = useRef<number | null>(null);
   const [dim, setDim] = useState(false);
@@ -48,37 +54,37 @@ export function MobileMoveCard({ id, current, steps, onMove, children }: Props) 
     return el?.closest<HTMLElement>('[data-seg]') ?? null;
   };
 
-  const reset = (spring: boolean) => {
-    const card = cardEl();
+  /** Limpieza total e idempotente; guard la fuerza aunque falle un transitionend. */
+  const cleanup = () => {
+    if (guard.current !== null) {
+      window.clearTimeout(guard.current);
+      guard.current = null;
+    }
+    if (raf.current !== null) cancelAnimationFrame(raf.current);
     clearTarget();
     document.body.classList.remove('mm-dragging');
     setDim(false);
     lifted.current = false;
     start.current = null;
-    if (raf.current !== null) cancelAnimationFrame(raf.current);
-    if (!card) return;
-    if (spring && !reducedMotionMQ.matches) {
-      card.style.transition = 'transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1)';
-      card.style.transform = '';
-      card.addEventListener(
-        'transitionend',
-        () => {
-          card.classList.remove('mm-lift');
-          card.style.transition = '';
-        },
-        { once: true },
-      );
-    } else {
-      card.classList.remove('mm-lift');
-      card.style.transition = '';
-      card.style.transform = '';
-      card.style.opacity = '';
-    }
+    clone.current?.remove();
+    clone.current = null;
+    origin.current = null;
+    cardEl()?.classList.remove('mm-origin');
   };
 
-  /** La tarjeta vuela hasta la pestaña, el contador salta y se ejecuta el move. */
+  const scheduleCleanup = (ms: number) => {
+    if (guard.current !== null) window.clearTimeout(guard.current);
+    guard.current = window.setTimeout(cleanup, ms);
+  };
+
+  const setCloneTransform = (x: number, y: number, extra = 'rotate(2deg) scale(1.05)') => {
+    if (!clone.current) return;
+    clone.current.style.transform = `translate(${x}px, ${y}px) ${extra}`;
+  };
+
+  /** El clon vuela hasta la pestaña, el contador salta y se ejecuta el move. */
   const flyTo = (tab: HTMLElement, step: string) => {
-    const card = cardEl();
+    const c = clone.current;
     const commit = () => {
       navigator.vibrate?.(8);
       const count = tab.querySelector('.tnum');
@@ -90,32 +96,49 @@ export function MobileMoveCard({ id, current, steps, onMove, children }: Props) 
       }
       onMove(id, step);
     };
+    if (!c || reducedMotionMQ.matches) {
+      cleanup();
+      commit();
+      return;
+    }
     clearTarget();
     document.body.classList.remove('mm-dragging');
     setDim(false);
     lifted.current = false;
-    if (!card || reducedMotionMQ.matches) {
-      reset(false);
+    const cr = c.getBoundingClientRect();
+    const tr = tab.getBoundingClientRect();
+    const dx = tr.left + tr.width / 2 - cr.width / 2;
+    const dy = tr.top + tr.height / 2 - cr.height / 2;
+    c.style.transition = 'transform 0.38s cubic-bezier(0.3, 0.7, 0.3, 1), opacity 0.38s ease';
+    setCloneTransform(dx, dy, 'rotate(8deg) scale(0.1)');
+    c.style.opacity = '0.15';
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      cleanup();
       commit();
+    };
+    c.addEventListener('transitionend', finish, { once: true });
+    window.setTimeout(finish, CLEANUP_GUARD_MS); /* red: si transitionend no llega */
+  };
+
+  /** Vuelta elástica del clon al hueco de origen. */
+  const springBack = () => {
+    const c = clone.current;
+    const o = origin.current;
+    clearTarget();
+    document.body.classList.remove('mm-dragging');
+    setDim(false);
+    lifted.current = false;
+    if (!c || !o || reducedMotionMQ.matches) {
+      cleanup();
       return;
     }
-    flying.current = true;
-    const c = card.getBoundingClientRect();
-    const tr = tab.getBoundingClientRect();
-    const dx = tr.left + tr.width / 2 - (c.left + c.width / 2);
-    const dy = tr.top + tr.height / 2 - (c.top + c.height / 2);
-    card.style.transition = 'transform 0.38s cubic-bezier(0.3, 0.7, 0.3, 1), opacity 0.38s ease';
-    card.style.transform = `translate(${dx}px, ${dy}px) scale(0.12) rotate(6deg)`;
-    card.style.opacity = '0.15';
-    card.addEventListener(
-      'transitionend',
-      () => {
-        flying.current = false;
-        reset(false);
-        commit();
-      },
-      { once: true },
-    );
+    c.style.transition = 'transform 0.32s cubic-bezier(0.34, 1.56, 0.64, 1)';
+    setCloneTransform(o.left, o.top, 'rotate(0deg) scale(1)');
+    c.addEventListener('transitionend', cleanup, { once: true });
+    scheduleCleanup(CLEANUP_GUARD_MS);
   };
 
   useEffect(() => {
@@ -129,20 +152,49 @@ export function MobileMoveCard({ id, current, steps, onMove, children }: Props) 
       }
     };
 
+    const lift = () => {
+      const card = cardEl();
+      if (!card) return;
+      lifted.current = true;
+      justDragged.current = true;
+      navigator.vibrate?.(12);
+      const rect = card.getBoundingClientRect();
+      origin.current = rect;
+      grab.current = start.current
+        ? { x: start.current.x - rect.left, y: start.current.y - rect.top }
+        : { x: rect.width / 2, y: rect.height / 2 };
+      const c = card.cloneNode(true) as HTMLElement;
+      c.classList.remove('card');
+      c.classList.add('mm-clone');
+      c.style.transition = 'none'; /* mata transiciones heredadas por cloneNode */
+      c.style.animation = 'none';
+      c.style.width = `${rect.width}px`;
+      c.style.transform = `translate(${rect.left}px, ${rect.top}px) rotate(0deg) scale(1)`;
+      document.body.appendChild(c);
+      clone.current = c;
+      /* Pop de levantamiento con overshoot; después el clon sigue al dedo sin transición */
+      requestAnimationFrame(() => {
+        if (!clone.current) return;
+        c.style.transition = 'transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1)';
+        setCloneTransform(rect.left, rect.top);
+        window.setTimeout(() => {
+          if (clone.current) clone.current.style.transition = '';
+        }, 190);
+      });
+      card.classList.add('mm-origin');
+      document.body.classList.add('mm-dragging');
+      setDim(true);
+    };
+
     const onTouchStart = (e: TouchEvent) => {
-      if (flying.current || e.touches.length !== 1) return;
+      if (clone.current || e.touches.length !== 1) return;
       const t = e.touches[0];
       start.current = { x: t.clientX, y: t.clientY };
       last.current = { y: t.clientY, t: performance.now(), vy: 0 };
       justDragged.current = false;
       timer.current = window.setTimeout(() => {
         timer.current = null;
-        lifted.current = true;
-        justDragged.current = true;
-        navigator.vibrate?.(12);
-        cardEl()?.classList.add('mm-lift');
-        document.body.classList.add('mm-dragging');
-        setDim(true);
+        lift();
       }, HOLD_MS);
     };
 
@@ -164,9 +216,8 @@ export function MobileMoveCard({ id, current, steps, onMove, children }: Props) 
       last.current = { y: t.clientY, t: now, vy: (t.clientY - last.current.y) / dt };
       if (raf.current !== null) cancelAnimationFrame(raf.current);
       raf.current = requestAnimationFrame(() => {
-        const card = cardEl();
-        if (!card) return;
-        card.style.transform = `translate(${dx}px, ${dy}px) scale(1.05) rotate(1.2deg)`;
+        if (!origin.current) return;
+        setCloneTransform(t.clientX - grab.current.x, t.clientY - grab.current.y);
         clearTarget();
         const tab = tabUnder(t.clientX, t.clientY);
         if (tab && tab.dataset.seg !== current) tab.classList.add('mm-target');
@@ -195,7 +246,7 @@ export function MobileMoveCard({ id, current, steps, onMove, children }: Props) 
           return;
         }
       }
-      reset(true);
+      springBack();
     };
 
     /* touchmove no pasivo: hay que poder bloquear el scroll al levantar */
@@ -205,8 +256,7 @@ export function MobileMoveCard({ id, current, steps, onMove, children }: Props) 
     wrap.addEventListener('touchcancel', onTouchEnd, { passive: true });
     return () => {
       cancelHold();
-      if (raf.current !== null) cancelAnimationFrame(raf.current);
-      document.body.classList.remove('mm-dragging');
+      cleanup();
       wrap.removeEventListener('touchstart', onTouchStart);
       wrap.removeEventListener('touchmove', onTouchMove);
       wrap.removeEventListener('touchend', onTouchEnd);

@@ -1,5 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { DragEvent } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Plus } from 'lucide-react';
 import type { ExpenseStep } from '@/data/types';
@@ -10,6 +9,7 @@ import { ExpenseDetailModal } from '@/components/ExpenseDetailModal';
 import { ExpenseModal } from '@/components/ExpenseModal';
 import { BalanceStrip, ExpenseSummary } from '@/components/ExpenseSummary';
 import { MobileMoveCard } from '@/components/MobileMoveCard';
+import { useKanbanDnD } from '@/hooks/useKanbanDnD';
 import { colorOf } from '@/lib/colors';
 import { announce } from '@/lib/announce';
 
@@ -25,8 +25,6 @@ const STEP_ACCENT_RGB: Record<string, string> = {
   emerald: '16 185 129',
 };
 
-const reducedMotionMQ = window.matchMedia('(prefers-reduced-motion: reduce)');
-
 type FilterType = 'all' | 'mine' | 'others';
 
 export default function ExpenseBoard() {
@@ -41,14 +39,6 @@ export default function ExpenseBoard() {
   const [view, setView] = useState<'tablero' | 'resumen'>('tablero');
 
   const boardRef = useRef<HTMLDivElement>(null);
-  const dragId = useRef<string | null>(null);
-  const placeholder = useRef<HTMLDivElement | null>(null);
-  const flipRects = useRef<Map<string, DOMRect> | null>(null);
-  const dragClone = useRef<HTMLElement | null>(null);
-  const dragOrigin = useRef<DOMRect | null>(null);
-  const dropped = useRef(false);
-  const movedId = useRef<string | null>(null);
-  const docMove = useRef<((ev: globalThis.DragEvent) => void) | null>(null);
 
   const expenses = data.getExpenses();
 
@@ -74,186 +64,12 @@ export default function ExpenseBoard() {
 
   const openCount = visible.filter((e) => e.step !== 'hecho').length;
 
-  /* FLIP: animar desde la posición anterior tras DnD */
-  useLayoutEffect(() => {
-    const before = flipRects.current;
-    if (!before) return;
-    flipRects.current = null;
-    if (reducedMotionMQ.matches || !boardRef.current) return;
-    boardRef.current.querySelectorAll<HTMLElement>('[data-task]').forEach((el) => {
-      const old = before.get(el.dataset.task ?? '');
-      if (!old) return;
-      const now = el.getBoundingClientRect();
-      const dx = old.left - now.left;
-      const dy = old.top - now.top;
-      if (!dx && !dy) return;
-      el.style.transition = 'none';
-      el.style.transform = `translate(${dx}px,${dy}px)`;
-      requestAnimationFrame(() => {
-        el.style.transition = 'transform .28s ease';
-        el.style.transform = '';
-        el.addEventListener('transitionend', () => (el.style.transition = ''), { once: true });
-      });
-    });
-    const landedId = movedId.current;
-    if (landedId) {
-      movedId.current = null;
-      const el = boardRef.current?.querySelector<HTMLElement>(`[data-task="${landedId}"]`);
-      if (el) {
-        el.classList.add('card-landed');
-        el.addEventListener('animationend', () => el.classList.remove('card-landed'), {
-          once: true,
-        });
-      }
-    }
-  }, [expenses]);
-
   const handleOpenNew = (step: ExpenseStep) => {
     setDefaultStep(step);
     setCreating(true);
   };
 
-  /* ---------- DnD (HTML5, delegado - copia exacta de BoardPage) ---------- */
-
-  const cleanupDrag = () => {
-    dragId.current = null;
-    if (placeholder.current) {
-      placeholder.current.remove();
-      placeholder.current = null;
-    }
-    if (docMove.current) {
-      document.removeEventListener('dragover', docMove.current);
-      docMove.current = null;
-    }
-    boardRef.current
-      ?.querySelectorAll('.col-target')
-      .forEach((s) => s.classList.remove('col-target'));
-    boardRef.current?.querySelectorAll('.dragging').forEach((c) => c.classList.remove('dragging'));
-    boardRef.current?.querySelectorAll<HTMLElement>('[data-empty]').forEach((p) => {
-      p.style.display = '';
-    });
-    /* El clon: si hubo drop se desvanece en el sitio; si no, vuelve elástico al origen */
-    const clone = dragClone.current;
-    if (clone) {
-      dragClone.current = null;
-      if (dropped.current || reducedMotionMQ.matches || !dragOrigin.current) {
-        clone.style.transition = 'opacity 0.15s ease, transform 0.15s ease';
-        clone.style.opacity = '0';
-        clone.style.transform += ' scale(0.9)';
-      } else {
-        const o = dragOrigin.current;
-        clone.style.transition =
-          'transform 0.32s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.32s ease';
-        clone.style.transform = `translate(${o.left}px, ${o.top}px) rotate(0deg) scale(1)`;
-        clone.style.opacity = '0.4';
-      }
-      window.setTimeout(() => clone.remove(), 360);
-    }
-    dragOrigin.current = null;
-    dropped.current = false;
-  };
-
-  const onDragStart = (e: DragEvent) => {
-    const card = (e.target as HTMLElement).closest<HTMLElement>('[data-task]');
-    if (!card) return;
-    dragId.current = card.dataset.task ?? null;
-    e.dataTransfer.setData('text/plain', dragId.current ?? '');
-    e.dataTransfer.effectAllowed = 'move';
-    const ph = document.createElement('div');
-    ph.className = 'drop-placeholder';
-    ph.style.height = `${card.offsetHeight}px`;
-    ph.setAttribute('aria-hidden', 'true');
-    placeholder.current = ph;
-
-    /* Imagen de arrastre nativa invisible: el navegador SIEMPRE la pinta
-       semitransparente, así que la anulamos y movemos un clon propio. */
-    const blank = document.createElement('div');
-    blank.style.cssText = 'position:fixed;top:-10px;left:-10px;width:1px;height:1px;opacity:0';
-    document.body.appendChild(blank);
-    e.dataTransfer.setDragImage(blank, 0, 0);
-    window.setTimeout(() => blank.remove(), 0);
-
-    /* Clon opaco e inclinado (estilo Odoo) pegado al cursor */
-    const rect = card.getBoundingClientRect();
-    dragOrigin.current = rect;
-    const clone = card.cloneNode(true) as HTMLElement;
-    clone.classList.remove('card');
-    clone.classList.add('drag-clone');
-    clone.style.width = `${rect.width}px`;
-    clone.style.transform = `translate(${rect.left}px, ${rect.top}px) rotate(2.5deg) scale(1.03)`;
-    document.body.appendChild(clone);
-    dragClone.current = clone;
-    const grabX = e.clientX - rect.left;
-    const grabY = e.clientY - rect.top;
-    const mover = (ev: globalThis.DragEvent) => {
-      if (!dragClone.current || ev.clientX === 0) return; /* FF emite (0,0) al final */
-      dragClone.current.style.transform = `translate(${ev.clientX - grabX}px, ${ev.clientY - grabY}px) rotate(2.5deg) scale(1.03)`;
-    };
-    docMove.current = mover;
-    document.addEventListener('dragover', mover);
-
-    /* La original desaparece dejando el hueco punteado en su sitio */
-    window.setTimeout(() => {
-      card.parentElement?.insertBefore(ph, card);
-      card.classList.add('dragging');
-    }, 0);
-  };
-
-  const onDragOver = (e: DragEvent) => {
-    if (!dragId.current) return;
-    const section = (e.target as HTMLElement).closest<HTMLElement>('section[data-col]');
-    if (!section) return;
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    boardRef.current?.querySelectorAll('.col-target').forEach((s) => {
-      if (s !== section) s.classList.remove('col-target');
-    });
-    section.classList.add('col-target');
-    const list = section.querySelector('[data-list]');
-    if (!list || !placeholder.current) return;
-    const cards = Array.from(list.querySelectorAll<HTMLElement>('[data-task]')).filter(
-      (c) => c.dataset.task !== dragId.current,
-    );
-    let ref: HTMLElement | null = null;
-    for (const c of cards) {
-      const r = c.getBoundingClientRect();
-      if (e.clientY < r.top + r.height / 2) {
-        ref = c;
-        break;
-      }
-    }
-    const empty = list.querySelector<HTMLElement>('[data-empty]');
-    if (empty) empty.style.display = 'none';
-    if (ref) list.insertBefore(placeholder.current, ref);
-    else list.appendChild(placeholder.current);
-  };
-
-  const onDrop = (e: DragEvent) => {
-    if (!dragId.current) return;
-    e.preventDefault();
-    const section = (e.target as HTMLElement).closest<HTMLElement>('section[data-col]');
-    if (!section) {
-      cleanupDrag();
-      return;
-    }
-    let refId: string | null = null;
-    if (placeholder.current?.parentElement) {
-      let n = placeholder.current.nextElementSibling as HTMLElement | null;
-      while (n) {
-        if (n.dataset?.task) {
-          refId = n.dataset.task;
-          break;
-        }
-        n = n.nextElementSibling as HTMLElement | null;
-      }
-    }
-    const id = dragId.current;
-    const toCol = section.dataset.col as ExpenseStep;
-    dropped.current = true;
-    movedId.current = id;
-    cleanupDrag();
-    void doMove(id, toCol, refId);
-  };
+  /* ---------- DnD compartido (hook) ---------- */
 
   const doMove = async (id: string, toCol: ExpenseStep, refId: string | null) => {
     const expense = data.getExpense(id);
@@ -267,15 +83,6 @@ export default function ExpenseBoard() {
       if (ri !== -1) position = ri;
     }
     const fromCol = expense.step;
-
-    if (!reducedMotionMQ.matches && boardRef.current) {
-      const map = new Map<string, DOMRect>();
-      boardRef.current.querySelectorAll<HTMLElement>('[data-task]').forEach((el) => {
-        map.set(el.dataset.task ?? '', el.getBoundingClientRect());
-      });
-      flipRects.current = map;
-    }
-
     try {
       await data.moveExpense(id, toCol, position);
       const colName = t(`expenseSteps.${toCol}`);
@@ -288,6 +95,12 @@ export default function ExpenseBoard() {
       announce(t('common.error'));
     }
   };
+
+  const dnd = useKanbanDnD<ExpenseStep>({
+    boardRef,
+    items: expenses,
+    onMove: (id, toCol, refId) => void doMove(id, toCol, refId),
+  });
 
   const doMoveMobile = (id: string, toStep: string) => {
     const expense = data.getExpense(id);
@@ -509,10 +322,10 @@ export default function ExpenseBoard() {
               ref={boardRef}
               className="hidden lg:grid lg:grid-cols-3 lg:items-start gap-4"
               aria-live="polite"
-              onDragStart={onDragStart}
-              onDragOver={onDragOver}
-              onDrop={onDrop}
-              onDragEnd={cleanupDrag}
+              onDragStart={dnd.onDragStart}
+              onDragOver={dnd.onDragOver}
+              onDrop={dnd.onDrop}
+              onDragEnd={dnd.onDragEnd}
             >
               {STEPS.map((st) => {
                 const list = byStep.get(st.id) ?? [];
