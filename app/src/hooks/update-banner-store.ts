@@ -15,6 +15,8 @@ export interface UpdateBannerState {
   applySw: (() => void) | null;
   /** Aplica la release nueva en el servidor (deltos-update.sh, solo admin). */
   applyRelease: (() => Promise<void>) | null;
+  /** Descarta el ribbon para esta versión (vuelve a salir con otra más nueva). */
+  dismissVersion: (() => void) | null;
 }
 
 const EMPTY: UpdateBannerState = {
@@ -24,6 +26,7 @@ const EMPTY: UpdateBannerState = {
   swWaiting: false,
   applySw: null,
   applyRelease: null,
+  dismissVersion: null,
 };
 
 let state: UpdateBannerState = EMPTY;

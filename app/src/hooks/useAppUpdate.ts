@@ -4,11 +4,15 @@
  * a api.github.com SOLO al pulsar el botón: no sale ningún dato de la instalación.
  * Si el admin ya desplegó un build nuevo (SW en waiting), se ofrece
  * "Actualizar y recargar" sin pasar por GitHub.
+ * Incluye dismiss de versión (#119): el ribbon se puede descartar por versión
+ * y vuelve a salir solo si aparece una más nueva.
  */
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { apiPost } from '../data/api-client';
 
 export type UpdateState = 'idle' | 'checking' | 'up-to-date' | 'available' | 'error';
+
+const DISMISS_KEY = 'deltos-release-dismissed';
 
 /** a vs b semver ('1.10.0' > '1.9.0'); prefijo 'v' ignorado. */
 export function compareSemver(a: string, b: string): number {
@@ -20,11 +24,16 @@ export function compareSemver(a: string, b: string): number {
   return 0;
 }
 
+function getDismissed(): string {
+  try { return window.localStorage.getItem(DISMISS_KEY) ?? ''; } catch { return ''; }
+}
+
 export function useAppUpdate(currentVersion: string, repoUrl?: string) {
   const swSupported = 'serviceWorker' in navigator;
   const [state, setState] = useState<UpdateState>('idle');
   const [latest, setLatest] = useState<{ version: string; url: string } | null>(null);
   const [swWaiting, setSwWaiting] = useState<ServiceWorker | null>(null);
+  const [dismissed, setDismissed] = useState(getDismissed());
 
   useEffect(() => {
     if (!swSupported) return;
@@ -65,10 +74,13 @@ export function useAppUpdate(currentVersion: string, repoUrl?: string) {
       } else {
         throw new Error(`github ${res.status}`); // 403 = rate-limit 60/h por IP
       }
+      const ver = version.replace(/^v/, '');
       if (!version || compareSemver(version, currentVersion) <= 0) {
         setState('up-to-date');
+      } else if (ver === getDismissed()) {
+        setState('up-to-date'); // versión descartada: no mostrar ribbon
       } else {
-        setLatest({ version: version.replace(/^v/, ''), url });
+        setLatest({ version: ver, url });
         setState('available');
       }
     } catch {
@@ -90,5 +102,14 @@ export function useAppUpdate(currentVersion: string, repoUrl?: string) {
     await apiPost<{ ok: boolean }>('/api/update/apply');
   };
 
-  return { supported: !!repo || swSupported, state, latest, check, swWaiting, applySw, applyRelease };
+  const dismissVersion = useCallback(() => {
+    if (!latest) return;
+    try { window.localStorage.setItem(DISMISS_KEY, latest.version); } catch { /* sin storage */ }
+    setDismissed(latest.version);
+    setState('up-to-date');
+  }, [latest]);
+
+  const isDismissed = latest ? dismissed === latest.version : false;
+
+  return { supported: !!repo || swSupported, state, latest, check, swWaiting, applySw, applyRelease, dismissVersion, isDismissed };
 }
