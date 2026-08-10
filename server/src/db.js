@@ -230,6 +230,7 @@ CREATE TABLE IF NOT EXISTS expense_invites (
   id TEXT PRIMARY KEY,
   expense_id TEXT NOT NULL REFERENCES expenses(id) ON DELETE CASCADE,
   token_hash TEXT UNIQUE NOT NULL,
+  token TEXT,
   invite_name TEXT NOT NULL,
   share_cents INTEGER NOT NULL,
   paid INTEGER NOT NULL DEFAULT 0,
@@ -257,6 +258,7 @@ CREATE TABLE IF NOT EXISTS expense_comments (
   id TEXT PRIMARY KEY,
   expense_id TEXT NOT NULL REFERENCES expenses(id) ON DELETE CASCADE,
   user_id TEXT REFERENCES users(id),
+  author_name TEXT,
   body TEXT NOT NULL,
   created_at INTEGER NOT NULL
 );
@@ -399,6 +401,15 @@ export function migrateSchema(db) {
   if (!inviteCols.includes('notes')) {
     db.exec("ALTER TABLE expense_invites ADD COLUMN notes TEXT DEFAULT ''")
     log.info('schema_migrated', { table: 'expense_invites', column: 'notes' })
+  }
+  if (!inviteCols.includes('token')) {
+    db.exec('ALTER TABLE expense_invites ADD COLUMN token TEXT')
+    log.info('schema_migrated', { table: 'expense_invites', column: 'token' })
+  }
+  const exCommentCols = db.prepare('PRAGMA table_info(expense_comments)').all().map((c) => c.name)
+  if (!exCommentCols.includes('author_name')) {
+    db.exec('ALTER TABLE expense_comments ADD COLUMN author_name TEXT')
+    log.info('schema_migrated', { table: 'expense_comments', column: 'author_name' })
   }
 }
 
