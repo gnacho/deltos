@@ -446,43 +446,6 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
                 </div>
               </div>
 
-              {/* Método de pago + Pagado */}
-              <div className="flex items-center gap-4">
-                <div className="flex-1">
-                  <p className="text-[12px] font-semibold tracking-wide uppercase text-faint mb-1">
-                    {t('expenses.paymentMethod')}
-                  </p>
-                  <div className="flex gap-1.5">
-                    {(['bizum', 'transfer', 'efectivo'] as const).map((m) => (
-                      <button
-                        key={m}
-                        onClick={() =>
-                          patch({ payment_method: expense.payment_method === m ? null : m })
-                        }
-                        className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
-                          expense.payment_method === m
-                            ? 'bg-brand/15 text-brand'
-                            : 'text-muted hover:bg-surface2 border border-app'
-                        }`}
-                      >
-                        {t(`expenses.${m}`)}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <button
-                    type="button"
-                    onClick={() => patch({ paid_by_creator: !expense.paid_by_creator })}
-                    className={`shrink-0 px-3.5 py-2 rounded-xl text-[13px] font-medium transition-colors ${
-                      expense.paid_by_creator
-                        ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300 hover:bg-emerald-100'
-                        : 'bg-surface2 text-muted border border-app hover:bg-surface'
-                    }`}
-                  >
-                    {expense.paid_by_creator ? t('expenses.paid') : t('expenses.notPaid')}
-                  </button>
-              </div>
-
               {/* Notas */}
               <div>
                 <p className="text-[12px] font-semibold tracking-wide uppercase text-faint mb-1">
