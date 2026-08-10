@@ -292,7 +292,9 @@
     "minTransfers": "Liquidación con transferencias mínimas",
     "splitEqually": "Reparto equitativo",
     "addParticipant": "Añadir persona",
-    "allUsersAdded": "Todas las personas añadidas"
+    "allUsersAdded": "Todas las personas añadidas",
+    "moveConfirm": "¿Quieres mover este gasto de «{{from}}» a «{{to}}»?",
+    "moveConfirmReopen": "Se reabrirá el gasto. ¿Confirmas?"
   },
   "expenseEvents": {
     "created": "creó el gasto",
