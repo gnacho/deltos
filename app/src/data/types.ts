@@ -1,6 +1,9 @@
 /** Tipos del dominio Deltos — snake_case, igual que la API (ver server/README.md). */
 
 export type ColumnId = 'nuevo' | 'encurso' | 'hecho';
+export type ExpenseStep = 'nuevo' | 'en-curso' | 'hecho';
+export type ExpenseSplitType = 'half' | 'custom' | 'full';
+export type PaymentMethod = 'bizum' | 'transfer' | 'efectivo';
 export type Priority = 'alta' | 'media' | 'baja';
 export type Language = 'auto' | 'es' | 'en';
 export type Role = 'admin' | 'user';
@@ -161,4 +164,64 @@ export interface TaskPatch {
   assignee_id?: string | null;
   labels?: string[];
   project_id?: string;
+}
+
+export interface Expense {
+  id: string;
+  title: string;
+  amount_cents: number;
+  label_id: string | null;
+  label_name: string | null;
+  label_color: string | null;
+  notes: string;
+  paid_by_creator: boolean;
+  requested_user_id: string | null;
+  requested_username: string | null;
+  requested_color: string | null;
+  split_type: ExpenseSplitType | null;
+  split_amount_cents: number | null;
+  paid_by_requested: boolean;
+  payment_method: PaymentMethod | null;
+  step: ExpenseStep;
+  position: number;
+  created_by: string;
+  created_by_username: string;
+  created_by_color: string;
+  created_at: number;
+  updated_at: number;
+  counts: { comments: number; attachments: number };
+}
+
+export interface ExpenseInput {
+  title: string;
+  amount_cents: number;
+  label_id?: string | null;
+  notes?: string;
+  paid_by_creator?: boolean;
+  requested_user_id?: string | null;
+  split_type?: ExpenseSplitType | null;
+  split_amount_cents?: number | null;
+  payment_method?: PaymentMethod | null;
+  step?: ExpenseStep;
+}
+
+export interface ExpensePatch {
+  title?: string;
+  amount_cents?: number;
+  label_id?: string | null;
+  notes?: string;
+  paid_by_creator?: boolean;
+  requested_user_id?: string | null;
+  split_type?: ExpenseSplitType | null;
+  split_amount_cents?: number | null;
+  paid_by_requested?: boolean;
+  payment_method?: PaymentMethod | null;
+  step?: ExpenseStep;
+}
+
+export interface ExpenseDetail {
+  expense: Expense;
+  attachments: Attachment[];
+  comments: Comment[];
+  activity: ActivityEvent[];
 }
