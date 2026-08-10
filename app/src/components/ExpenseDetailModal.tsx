@@ -515,46 +515,6 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
                   {expense.project_name ? ` · ${expense.project_name}` : ''}
                 </p>
               </div>
-              </div>
-
-              {/* Reparto (v2): resumen compacto */}
-              <div>
-                <p className="text-[12px] font-semibold tracking-wide uppercase text-faint mb-1">
-                  {t('expenses.form.participants')}
-                </p>
-                {expense.shares.length === 0 ? (
-                  <p className="text-sm text-muted">{t('expenses.noShares')}</p>
-                ) : (
-                  <ul className="space-y-1.5">
-                    {expense.shares.map((sh) => (
-                      <li key={sh.user_id} className="flex items-center gap-2 text-sm">
-                        <Avatar name={sh.username} color={sh.user_color} />
-                        <span className="flex-1 min-w-0 truncate">{sh.username}</span>
-                        <span className="tnum font-semibold">
-                          {fmtMoney(sh.share_cents, i18n.language)}
-                        </span>
-                        {sh.paid ? (
-                          <span className="text-emerald-600 dark:text-emerald-400 text-[12px] font-medium">
-                            {t('expenses.paid')}
-                          </span>
-                        ) : sh.user_id === user?.id ? (
-                          <button
-                            type="button"
-                            onClick={handlePayMyPart}
-                            className="px-2 py-0.5 rounded-lg text-[12px] font-medium bg-brand text-brandfg hover:brightness-110"
-                          >
-                            {t('expenses.payMyPart')}
-                          </button>
-                        ) : (
-                          <span className="text-amber-600 dark:text-amber-400 text-[12px] font-medium">
-                            {t('expenses.pending')}
-                          </span>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
 
               {/* Delete */}
               {isCreator && (
