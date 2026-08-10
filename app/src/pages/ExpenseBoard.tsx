@@ -6,6 +6,7 @@ import type { ExpenseStep } from '@/data/types';
 import { useData } from '@/data/data-context';
 import { useSession } from '@/auth/session-context';
 import { ExpenseCard, ExpenseCardMobile } from '@/components/ExpenseCard';
+import { MobileMoveCard } from '@/components/MobileMoveCard';
 import { ExpenseDetailModal } from '@/components/ExpenseDetailModal';
 import { ExpenseModal } from '@/components/ExpenseModal';
 import { BalanceStrip, ExpenseSummary } from '@/components/ExpenseSummary';
@@ -107,7 +108,11 @@ export default function ExpenseBoard() {
     boardRef.current
       ?.querySelectorAll('.col-target')
       .forEach((s) => s.classList.remove('col-target'));
-    boardRef.current?.querySelectorAll('.dragging').forEach((c) => c.classList.remove('dragging'));
+    boardRef.current?.querySelectorAll('.dragging').forEach((c) => {
+      c.classList.remove('dragging');
+      c.classList.add('card-dropped');
+      c.addEventListener('animationend', () => c.classList.remove('card-dropped'), { once: true });
+    });
     boardRef.current?.querySelectorAll<HTMLElement>('[data-empty]').forEach((p) => {
       p.style.display = '';
     });
@@ -125,6 +130,17 @@ export default function ExpenseBoard() {
     ph.setAttribute('aria-hidden', 'true');
     placeholder.current = ph;
     window.setTimeout(() => card.classList.add('dragging'), 0);
+
+    /* Ghost personalizado: clon opaco + sombra, no el semi-transparente del navegador */
+    const ghost = card.cloneNode(true) as HTMLElement;
+    ghost.classList.add('lift-ghost');
+    ghost.style.width = `${card.offsetWidth}px`;
+    ghost.style.position = 'fixed';
+    ghost.style.top = '-9999px';
+    ghost.style.left = '-9999px';
+    document.body.appendChild(ghost);
+    e.dataTransfer.setDragImage(ghost, card.offsetWidth / 2, 20);
+    window.setTimeout(() => ghost.remove(), 0);
   };
 
   const onDragOver = (e: DragEvent) => {
@@ -215,6 +231,20 @@ export default function ExpenseBoard() {
     }
   };
 
+  const doMoveMobile = (id: string, toStep: string) => {
+    const expense = data.getExpense(id);
+    if (!expense || expense.step === toStep) return;
+    const position = expenses.filter((e) => e.step === toStep && e.id !== id).length;
+    void (async () => {
+      try {
+        await data.moveExpense(id, toStep, position);
+        announce(t('board.movedTo', { title: expense.title, column: t(`expenseSteps.${toStep}`) }));
+      } catch {
+        announce(t('common.error'));
+      }
+    })();
+  };
+
   if (!data.ready) {
     if (data.bootstrapError) {
       return (
@@ -262,6 +292,7 @@ export default function ExpenseBoard() {
       >
         <div
           role="tablist"
+          data-segbar
           aria-label={t('board.statesAria')}
           className="flex items-center gap-1 rounded-full bg-surface2 p-1"
           onKeyDown={(e) => {
@@ -394,12 +425,19 @@ export default function ExpenseBoard() {
               aria-label={t('board.listAria')}
             >
               {(byStep.get(seg) ?? []).map((exp, i) => (
-                <ExpenseCardMobile
+                <MobileMoveCard
                   key={exp.id}
-                  expense={exp}
-                  index={i}
-                  onOpen={(id) => setDetailExpense({ id })}
-                />
+                  id={exp.id}
+                  current={exp.step}
+                  steps={STEPS.map((st) => st.id)}
+                  onMove={doMoveMobile}
+                >
+                  <ExpenseCardMobile
+                    expense={exp}
+                    index={i}
+                    onOpen={(id) => setDetailExpense({ id })}
+                  />
+                </MobileMoveCard>
               ))}
               {(byStep.get(seg) ?? []).length === 0 && (
                 <p className="rounded-2xl border border-dashed border-app px-4 py-8 text-center text-[15px] text-muted">
