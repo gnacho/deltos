@@ -320,8 +320,8 @@
     "markAsPaid": "Mark as paid",
     "noAccount": "No account needed",
     "shareLink": "Share invite link",
-    "linkCopied": "Link copied!",
-    "copyLink": "Copy link",
+    "linkCopied": "Link copied to clipboard",
+    "copyLink": "Create link",
     "revoke": "Revoke",
     "namePlaceholder": "Person's name",
     "notesPlaceholder": "Note for the invited person"

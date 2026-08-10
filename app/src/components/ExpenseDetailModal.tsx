@@ -181,6 +181,7 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
   const [inviteCents, setInviteCents] = useState(Math.round(expense.amount_cents / 2));
   const [inviteNotes, setInviteNotes] = useState('');
   const [inviteSending, setInviteSending] = useState(false);
+  const [inviteDone, setInviteDone] = useState(false);
   const [invites, setInvites] = useState<Array<{ id: string; invite_name: string; share_cents: number; paid: boolean; notes?: string }>>([]);
 
   useEffect(() => {
@@ -270,8 +271,7 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
       if (!res.ok) throw res;
       const data = await res.json();
       await navigator.clipboard.writeText(`${window.location.origin}/invite/${data.invite.token}`);
-      setInviteName('');
-      setInviteNotes('');
+      setInviteDone(true);
       announce(t('invite.linkCopied'));
       fetch(`/api/expenses/${expense.id}/invites`, { credentials: 'same-origin' })
         .then((r) => r.json())
@@ -722,7 +722,7 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
                     ))}
                   </ul>
                 )}
-                {inviteOpen && (
+                {inviteOpen && !inviteDone && (
                   <div className="rounded-xl border border-app bg-surface2/50 p-3 space-y-2">
                     <div className="flex gap-2">
                       <input
@@ -758,6 +758,20 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
                       className="w-full h-9 rounded-lg bg-brand text-brandfg text-[13px] font-semibold hover:brightness-110 disabled:opacity-60"
                     >
                       {inviteSending ? '...' : t('invite.copyLink')}
+                    </button>
+                  </div>
+                )}
+                {inviteOpen && inviteDone && (
+                  <div className="rounded-xl border border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 p-3 space-y-2">
+                    <p className="text-[13px] text-emerald-700 dark:text-emerald-300 font-medium">
+                      {t('invite.linkCopied')}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => { setInviteDone(false); setInviteName(''); setInviteNotes(''); }}
+                      className="text-[12px] text-brand hover:underline"
+                    >
+                      {t('invite.shareLink')}
                     </button>
                   </div>
                 )}
