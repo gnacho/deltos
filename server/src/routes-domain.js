@@ -128,6 +128,7 @@ const serverSettingsSchema = z.object({
   backup_enabled: z.boolean(),
   backup_retention_days: z.number().int().min(1).max(365),
   max_attachments_per_task: z.number().int().min(5).max(50),
+  plugin_expenses_enabled: z.boolean(),
 })
 
 // Query del feed de actividad: keyset por cursor opaco (sin page/offset).
@@ -838,10 +839,12 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
     const attachments = qByTask('SELECT id, task_id, filename, size, mime, created_at FROM attachments WHERE task_id IN (__IDS__) ORDER BY created_at')
     const events = qByTask('SELECT * FROM activity_events WHERE task_id IN (__IDS__) ORDER BY created_at')
     const trash = qByProject('SELECT * FROM tasks WHERE deleted_at IS NOT NULL AND project_id IN (__IDS__) ORDER BY deleted_at DESC')
+    const expenses = db.prepare('SELECT * FROM expenses ORDER BY step, position').all()
+    const expenseTrash = db.prepare('SELECT * FROM expenses WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC').all()
     return c.json({
       exported_at: new Date().toISOString(),
       user: { id: user.id, username: user.username, email: user.email, language: user.language },
-      projects, labels, tasks, comments, attachments, events, trash,
+      projects, labels, tasks, comments, attachments, events, trash, expenses, expense_trash: expenseTrash,
     })
   })
 
@@ -858,7 +861,16 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
          ORDER BY t.deleted_at DESC`
       )
       .all(user.id)
-    return c.json({ tasks })
+    const expenses = db
+      .prepare(
+        `SELECT e.*, u.username AS created_by_username
+         FROM expenses e JOIN users u ON u.id = e.created_by
+         WHERE e.deleted_at IS NOT NULL
+         ORDER BY e.deleted_at DESC`
+      )
+      .all()
+      .map((e) => ({ ...e, paid_by_creator: !!e.paid_by_creator, paid_by_requested: !!e.paid_by_requested }))
+    return c.json({ tasks, expenses })
   })
 
   app.post('/api/trash/:id/restore', zValidator('param', idParamSchema, validationHook), (c) => {
@@ -902,6 +914,36 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
        AND project_id IN (SELECT project_id FROM project_members WHERE user_id = ?)`
     ).run(user.id)
     hub.broadcast('tasks')
+    return c.body(null, 204)
+  })
+
+  // --- Papelera de gastos ---
+  app.post('/api/trash/expense/:id/restore', zValidator('param', idParamSchema, validationHook), (c) => {
+    const db = c.get('db')
+    const id = c.req.valid('param').id
+    const exp = db.prepare('SELECT * FROM expenses WHERE id = ? AND deleted_at IS NOT NULL').get(id)
+    if (!exp) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
+    const pos = db.prepare('SELECT COALESCE(MAX(position) + 1, 0) AS p FROM expenses WHERE step = ? AND deleted_at IS NULL')
+      .get(exp.step).p
+    db.prepare('UPDATE expenses SET deleted_at = NULL, position = ?, updated_at = ? WHERE id = ?').run(pos, Date.now(), id)
+    hub.broadcast('expenses')
+    return c.json({ ok: true })
+  })
+
+  app.delete('/api/trash/expense/:id', zValidator('param', idParamSchema, validationHook), (c) => {
+    const db = c.get('db')
+    const id = c.req.valid('param').id
+    const exp = db.prepare('SELECT * FROM expenses WHERE id = ? AND deleted_at IS NOT NULL').get(id)
+    if (!exp) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
+    db.prepare('DELETE FROM expenses WHERE id = ?').run(id)
+    hub.broadcast('expenses')
+    return c.body(null, 204)
+  })
+
+  app.delete('/api/trash/expenses', (c) => {
+    const db = c.get('db')
+    db.prepare('DELETE FROM expenses WHERE deleted_at IS NOT NULL').run()
+    hub.broadcast('expenses')
     return c.body(null, 204)
   })
 
@@ -1122,6 +1164,7 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
       backup_last_run: kvGet(prod, 'backup_last_run'),
       backup_path: kvGet(prod, 'backup_path'),
       backup_timer_active: await isBackupTimerActive(),
+      plugin_expenses_enabled: kvGet(prod, 'plugin_expenses_enabled', '0') === '1',
     })
   })
 
@@ -1132,12 +1175,14 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
     kvSet(prod, 'backup_enabled', data.backup_enabled ? '1' : '0')
     kvSet(prod, 'backup_retention_days', String(data.backup_retention_days))
     kvSet(prod, 'max_attachments_per_task', String(data.max_attachments_per_task))
+    kvSet(prod, 'plugin_expenses_enabled', data.plugin_expenses_enabled ? '1' : '0')
     auditLog(prod, c.get('user').id, 'server_settings_changed', 'setting', 'server', data)
     hub.broadcast('settings')
     return c.json({
       backup_enabled: data.backup_enabled,
       backup_retention_days: data.backup_retention_days,
       max_attachments_per_task: data.max_attachments_per_task,
+      plugin_expenses_enabled: data.plugin_expenses_enabled,
     })
   })
 

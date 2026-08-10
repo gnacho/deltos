@@ -23,5 +23,8 @@
   },
   "devDependencies": {
     "vitest": "^4.1.10"
+  },
+  "allowScripts": {
+    "better-sqlite3@13.0.3": true
   }
 }

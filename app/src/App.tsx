@@ -11,6 +11,7 @@ import { lazyRetry } from '@/lib/lazy-retry';
 
 /* React.lazy por ruta desde el día 1, con reintento anti pantalla-negra */
 const BoardPage = lazyRetry(() => import('@/pages/BoardPage'));
+const ExpenseBoard = lazyRetry(() => import('@/pages/ExpenseBoard'));
 const ProjectsPage = lazyRetry(() => import('@/pages/ProjectsPage'));
 const ActivityPage = lazyRetry(() => import('@/pages/ActivityPage'));
 const SettingsPage = lazyRetry(() => import('@/pages/SettingsPage'));
@@ -78,6 +79,16 @@ export default function App() {
                     <ErrorBoundary>
                       <Suspense fallback={<RouteFallback />}>
                         <SettingsPage />
+                      </Suspense>
+                    </ErrorBoundary>
+                  }
+                />
+                <Route
+                  path="expenses"
+                  element={
+                    <ErrorBoundary>
+                      <Suspense fallback={<RouteFallback />}>
+                        <ExpenseBoard />
                       </Suspense>
                     </ErrorBoundary>
                   }

@@ -38,12 +38,18 @@
     "projectsSection": "PROJECTS",
     "boardSelect": "Project",
     "collapse": "Collapse menu",
-    "expand": "Expand menu"
+    "expand": "Expand menu",
+    "expenses": "Expenses"
   },
   "columns": {
     "nuevo": "New",
     "encurso": "In progress",
     "hecho": "Done"
+  },
+  "expenseSteps": {
+    "nuevo": "New",
+    "en-curso": "In progress",
+    "hecho": "Settled"
   },
   "priority": {
     "alta": "High",
@@ -191,6 +197,51 @@
       "project": "<strong>{{user}}</strong> moved \"{{task}}\" to project {{to}}"
     },
     "project": "<strong>{{user}}</strong> moved the card to project {{to}}"
+  },
+  "expenses": {
+    "title": "Expenses",
+    "subtitle": "Shared expense tracking with payment splits.",
+    "empty": "No expenses yet. Create the first one with the button above.",
+    "filterOwe": "I owe",
+    "filterOwed": "I'm owed",
+    "filterUnpaid": "Unpaid",
+    "filterPaid": "Paid",
+    "amount": "Amount",
+    "category": "Category",
+    "notes": "Notes",
+    "paid": "Paid",
+    "requested": "Requests from",
+    "owes": "owes you",
+    "youOwe": "You owe",
+    "split": "Payment split",
+    "splitHalf": "Half",
+    "splitCustom": "Custom",
+    "splitFull": "Full",
+    "splitAmount": "Amount",
+    "iPaid": "I've already paid",
+    "theyPaid": "{{name}} has paid their share",
+    "payMyPart": "I've paid my share",
+    "payMyPartDone": "Your share is paid",
+    "paymentMethod": "Payment method",
+    "bizum": "Bizum",
+    "transfer": "Bank transfer",
+    "efectivo": "Cash",
+    "requestPayment": "Request payment from",
+    "requestTo": "User",
+    "noRequest": "No request",
+    "form": {
+      "createTitle": "New expense",
+      "editTitle": "Edit expense",
+      "titleLabel": "Title",
+      "titlePlaceholder": "What was paid?",
+      "amountPlaceholder": "12.50",
+      "notesPlaceholder": "Expense details…",
+      "create": "Create expense",
+      "creating": "Creating…",
+      "delete": "Delete expense",
+      "deleteConfirm": "Are you sure? Press to confirm",
+      "deleting": "Deleting…"
+    }
   },
   "newTask": {
     "title": "New task",
@@ -386,7 +437,9 @@
       "attachments": "Attachments",
       "attachmentsHint": "Maximum number of files per task.",
       "attachmentsLimit": "Max per task",
-      "saveError": "Could not save settings"
+      "saveError": "Could not save settings",
+      "pluginExpenses": "Expense plugin",
+      "pluginExpensesHint": "Enable shared expense tracking with payment splits."
     },
     "notifications": "Notifications",
     "notifHint": "Get notified when the other person creates, moves, comments on or assigns you cards, even with the app closed.",
@@ -406,7 +459,9 @@
       "comentario": "Comment on your task",
       "tarea_movida": "Your task moved",
       "mencion": "You are mentioned",
-      "vencimiento": "Due-date summary"
+      "vencimiento": "Due-date summary",
+      "pago_requerido": "Payment requested",
+      "pago_completado": "Payment received"
     },
     "accent": {
       "title": "Accent color",
@@ -491,7 +546,8 @@
     "SETTINGS_PROD_ONLY": "This setting can only be changed from the production session",
     "SSE_TOO_MANY_CLIENTS": "Too many connected clients",
     "PUSH_NOT_CONFIGURED": "The server has no push keys configured",
-    "PUSH_DEMO_UNAVAILABLE": "Push notifications are not available in demo mode"
+    "PUSH_DEMO_UNAVAILABLE": "Push notifications are not available in demo mode",
+    "EXPENSE_NOT_FOUND": "Expense not found"
   },
   "update": {
     "banner": "A new version of Deltos is on the server.",

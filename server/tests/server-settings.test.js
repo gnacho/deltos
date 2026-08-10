@@ -16,6 +16,7 @@ describe('ajustes del servidor', () => {
     expect(body.max_attachments_per_task).toBe(50)
     expect(body.backup_last_run).toBeNull()
     expect(typeof body.backup_timer_active).toBe('boolean')
+    expect(body.plugin_expenses_enabled).toBe(false)
   })
 
   it('GET /api/settings/server → 403 para usuario no-admin', async () => {
@@ -34,6 +35,7 @@ describe('ajustes del servidor', () => {
       backup_enabled: false,
       backup_retention_days: 30,
       max_attachments_per_task: 20,
+      plugin_expenses_enabled: false,
     }))
     expect(res.status).toBe(200)
     const body = await res.json()
@@ -49,6 +51,7 @@ describe('ajustes del servidor', () => {
       backup_enabled: true,
       backup_retention_days: 0,
       max_attachments_per_task: 50,
+      plugin_expenses_enabled: false,
     }))
     expect(bad1.status).toBe(422)
 
@@ -56,6 +59,7 @@ describe('ajustes del servidor', () => {
       backup_enabled: true,
       backup_retention_days: 7,
       max_attachments_per_task: 999,
+      plugin_expenses_enabled: false,
     }))
     expect(bad2.status).toBe(422)
   })
@@ -81,6 +85,7 @@ describe('ajustes del servidor', () => {
       backup_enabled: true,
       backup_retention_days: 7,
       max_attachments_per_task: 5,
+      plugin_expenses_enabled: false,
     }))
     const project = (
       await (await app.request('/api/projects', jsonReq(auth, 'POST', '', { name: 'Casa' }))).json()

@@ -192,6 +192,32 @@ CREATE TABLE IF NOT EXISTS admin_audit (
 );
 CREATE INDEX IF NOT EXISTS idx_admin_audit_created ON admin_audit(created_at DESC);
 
+-- Gastos (plugin activable): gastos globales sin proyecto, con flujo kanban
+-- (nuevo → en-curso → hecho) y splits de pago entre usuarios.
+CREATE TABLE IF NOT EXISTS expenses (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  amount_cents INTEGER NOT NULL,
+  label_id TEXT REFERENCES labels(id) ON DELETE SET NULL,
+  notes TEXT DEFAULT '',
+  paid_by_creator INTEGER NOT NULL DEFAULT 0,
+  requested_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  split_type TEXT CHECK (split_type IN ('half','custom','full')),
+  split_amount_cents INTEGER,
+  paid_by_requested INTEGER NOT NULL DEFAULT 0,
+  payment_method TEXT CHECK (payment_method IN ('bizum','transfer','efectivo')),
+  step TEXT NOT NULL DEFAULT 'nuevo' CHECK (step IN ('nuevo','en-curso','hecho')),
+  position INTEGER NOT NULL DEFAULT 0,
+  created_by TEXT NOT NULL REFERENCES users(id),
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  deleted_at INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_expenses_step ON expenses(step, position);
+CREATE INDEX IF NOT EXISTS idx_expenses_created_by ON expenses(created_by);
+CREATE INDEX IF NOT EXISTS idx_expenses_requested ON expenses(requested_user_id);
+
 -- Idempotency: cache de respuestas POST para reintentos seguros (TTL 24h).
 CREATE TABLE IF NOT EXISTS idempotency_keys (
   key TEXT PRIMARY KEY,
@@ -281,6 +307,15 @@ export function migrateSchema(db) {
     db.exec('CREATE INDEX IF NOT EXISTS idx_activity_created ON activity_events(created_at)')
     log.info('schema_migrated', { table: 'activity_events', change: 'type CHECK + project' })
   }
+  const expenseCols = db.prepare('PRAGMA table_info(expenses)').all().map((c) => c.name)
+  if (!expenseCols.includes('deleted_at')) {
+    db.exec('ALTER TABLE expenses ADD COLUMN deleted_at INTEGER')
+    log.info('schema_migrated', { table: 'expenses', column: 'deleted_at' })
+  }
+  if (!expenseCols.includes('payment_method')) {
+    db.exec("ALTER TABLE expenses ADD COLUMN payment_method TEXT CHECK (payment_method IN ('bizum','transfer','efectivo'))")
+    log.info('schema_migrated', { table: 'expenses', column: 'payment_method' })
+  }
 }
 
 // Checkpoint WAL periódico (llamado cada hora desde index.js): sin esto el WAL
@@ -292,6 +327,8 @@ export function hourlyMaintenance(db, label) {
   const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000
   const { changes: trashChanges } = db.prepare('DELETE FROM tasks WHERE deleted_at IS NOT NULL AND deleted_at < ?').run(thirtyDaysAgo)
   if (trashChanges > 0) log.info('trash_purged', { db: label, count: trashChanges })
+  const { changes: expenseTrashChanges } = db.prepare('DELETE FROM expenses WHERE deleted_at IS NOT NULL AND deleted_at < ?').run(thirtyDaysAgo)
+  if (expenseTrashChanges > 0) log.info('expense_trash_purged', { db: label, count: expenseTrashChanges })
   const oneHourAgo = Date.now() - 3600 * 1000
   const { changes: attChanges } = db.prepare('DELETE FROM login_attempts WHERE locked_until > 0 AND locked_until < ?').run(oneHourAgo)
   if (attChanges > 0) log.info('login_attempts_purged', { db: label, count: attChanges })

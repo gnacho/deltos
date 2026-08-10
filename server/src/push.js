@@ -54,6 +54,19 @@ const COLUMNAS = {
   en: { nuevo: 'To do', encurso: 'In progress', hecho: 'Done' },
 }
 
+export const EXPENSE_STEPS = {
+  es: { nuevo: 'Nuevo', 'en-curso': 'En curso', hecho: 'Hecho' },
+  en: { nuevo: 'New', 'en-curso': 'In progress', hecho: 'Done' },
+}
+
+function fmtEur(cents) {
+  return (cents / 100).toFixed(2).replace('.', ',') + ' €'
+}
+
+function fmtEurEn(cents) {
+  return '€' + (cents / 100).toFixed(2)
+}
+
 const CATALOGO = {
   es: {
     tarea_creada: { titulo: 'Nueva tarea', cuerpo: (d) => `${d.usuario} creó «${d.titulo}»` },
@@ -72,6 +85,18 @@ const CATALOGO = {
       },
     },
     resumen: { titulo: 'Actividad en Deltos', cuerpo: (d) => `${d.total} cambios mientras estabas en horas de silencio` },
+    pago_requerido: {
+      titulo: 'Te piden un pago',
+      cuerpo: (d) => {
+        if (d.split_type === 'full') return `${d.usuario} te pide ${fmtEur(d.importe)} por «${d.titulo}»`
+        if (d.split_type === 'custom') return `${d.usuario} te pide ${fmtEur(d.split_amount)} por «${d.titulo}»`
+        return `${d.usuario} te pide ${fmtEur(Math.round(d.importe / 2))} (mitad de ${fmtEur(d.importe)}) por «${d.titulo}»`
+      },
+    },
+    pago_completado: {
+      titulo: 'Pago recibido',
+      cuerpo: (d) => `${d.usuario} ha pagado su parte de «${d.titulo}»`,
+    },
   },
   en: {
     tarea_creada: { titulo: 'New task', cuerpo: (d) => `${d.usuario} created “${d.titulo}”` },
@@ -90,6 +115,18 @@ const CATALOGO = {
       },
     },
     resumen: { titulo: 'Deltos activity', cuerpo: (d) => `${d.total} changes during your quiet hours` },
+    pago_requerido: {
+      titulo: 'Payment requested',
+      cuerpo: (d) => {
+        if (d.split_type === 'full') return `${d.usuario} asks you for ${fmtEurEn(d.importe)} for "${d.titulo}"`
+        if (d.split_type === 'custom') return `${d.usuario} asks you for ${fmtEurEn(d.split_amount)} for "${d.titulo}"`
+        return `${d.usuario} asks you for ${fmtEurEn(Math.round(d.importe / 2))} (half of ${fmtEurEn(d.importe)}) for "${d.titulo}"`
+      },
+    },
+    pago_completado: {
+      titulo: 'Payment received',
+      cuerpo: (d) => `${d.usuario} has paid their share of "${d.titulo}"`,
+    },
   },
 }
 

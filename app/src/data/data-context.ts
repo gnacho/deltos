@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import type { BoardUser, Label, Project, Task, TaskDetail, TaskPatch } from './types';
+import type { BoardUser, Label, Project, Task, TaskDetail, TaskPatch, Expense, ExpenseInput, ExpensePatch } from './types';
 
 export type ConnectionStatus = 'connected' | 'reconnecting';
 
@@ -64,6 +64,13 @@ export interface DataApi {
   createLabel: (input: { name: string; color: string }) => Promise<Label>;
   updateLabel: (id: string, patch: { name?: string; color?: string }) => Promise<void>;
   deleteLabel: (id: string) => Promise<void>;
+
+  getExpenses: () => Expense[];
+  getExpense: (id: string) => Expense | undefined;
+  createExpense: (input: ExpenseInput) => Promise<Expense>;
+  updateExpense: (id: string, patch: ExpensePatch) => Promise<void>;
+  moveExpense: (id: string, step: string, position: number) => Promise<void>;
+  deleteExpense: (id: string) => Promise<void>;
 }
 
 export const DataContext = createContext<DataApi | null>(null);

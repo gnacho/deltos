@@ -14,6 +14,7 @@ import { z } from 'zod'
 import * as auth from './auth.js'
 import { kvGet } from './db.js'
 import { registerDomainRoutes } from './routes-domain.js'
+import { registerExpenseRoutes } from './routes-expenses.js'
 import { registerPushRoutes } from './routes-push.js'
 import { registerHealth } from './health.js'
 import { wideEvent } from './wide-event.js'
@@ -283,6 +284,7 @@ export function createApp(ctx) {
   })
 
   registerDomainRoutes(app, { hub, uploadsDir: ctx.uploadsDir, prod, config, dataDir: ctx.dataDir })
+  registerExpenseRoutes(app, { prod, hub })
   registerPushRoutes(app)
   registerHealth(app, { prod, demo })
 

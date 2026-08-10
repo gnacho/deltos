@@ -10,6 +10,7 @@ import {
   Moon,
   ChevronsLeft,
   ChevronsRight,
+  Receipt,
 } from 'lucide-react';
 import { useData } from '@/data/data-context';
 import { useSession } from '@/auth/session-context';
@@ -425,6 +426,9 @@ export default function Layout() {
             </IconNavLink>
             <IconNavLink to="/activity" label={t('nav.activity')}>
               <Clock className="w-[18px] h-[18px]" aria-hidden="true" />
+            </IconNavLink>
+            <IconNavLink to="/expenses" label={t('nav.expenses')}>
+              <Receipt className="w-[18px] h-[18px]" aria-hidden="true" />
             </IconNavLink>
             <IconNavLink to="/settings" label={t('nav.settings')}>
               <Settings className="w-[18px] h-[18px]" aria-hidden="true" />
