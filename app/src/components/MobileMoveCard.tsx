@@ -220,6 +220,11 @@ export function MobileMoveCard({ id, current, steps, onMove, children }: Props) 
       {dim && <div className="mm-dim" aria-hidden="true" />}
       <div
         ref={wrapRef}
+        className="select-none [-webkit-touch-callout:none]"
+        onContextMenu={(e) => {
+          /* El menú contextual nativo (~500ms) interrumpiría el arrastre */
+          if (lifted.current || justDragged.current) e.preventDefault();
+        }}
         onClickCapture={(e) => {
           if (justDragged.current) {
             e.preventDefault();
