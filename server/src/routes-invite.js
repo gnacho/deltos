@@ -2,7 +2,6 @@ import { Hono } from 'hono';
 import crypto from 'node:crypto';
 import { z } from 'zod';
 import { zValidator } from '@hono/zod-validator';
-import { requireAuth } from './auth.js';
 import { logger } from './logger.js';
 import { httpError } from './errors.js';
 import { ERROR_CODES } from './error-codes.js';
@@ -26,10 +25,10 @@ export function inviteRoutes(db, demo) {
   const router = new Hono();
 
   // POST /api/expenses/:id/invite — generar link de invitación (autenticado)
-  router.post('/api/expenses/:id/invite', requireAuth, zValidator('json', createSchema), (c) => {
-    try {
+  router.post('/api/expenses/:id/invite', zValidator('json', createSchema), (c) => {
     const expenseId = c.req.param('id');
     const user = c.get('user');
+    if (!user) httpError(401, ERROR_CODES.AUTH_REQUIRED);
     const { invite_name, share_cents } = c.req.valid('json');
 
     const expense = db.prepare('SELECT id, created_by, amount_cents FROM expenses WHERE id = ? AND deleted_at IS NULL').get(expenseId);
@@ -57,14 +56,12 @@ export function inviteRoutes(db, demo) {
         url: `${c.req.header('origin') || ''}/invite/${token}`,
       },
     }, 201);
-    } catch (e) {
-      log.error('invite_create_error', { error: String(e), stack: e.stack });
-      throw e;
-    }
   });
 
-  // DELETE /api/expenses/:id/invite — revocar invitación (autenticado)
-  router.delete('/api/invite/:inviteId', requireAuth, (c) => {
+  // DELETE /api/expenses/:id/invite — revocar invitación (autenticado vía middleware global)
+  router.delete('/api/invite/:inviteId', (c) => {
+    const user = c.get('user');
+    if (!user) httpError(401, ERROR_CODES.AUTH_REQUIRED);
     const inviteId = c.req.param('inviteId');
     const invite = db.prepare('SELECT * FROM expense_invites WHERE id = ?').get(inviteId);
     if (!invite) httpError(404, ERROR_CODES.EXPENSE_NOT_FOUND);
