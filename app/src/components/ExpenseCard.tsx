@@ -4,6 +4,9 @@ import type { Expense } from '@/data/types';
 import { Avatar } from '@/components/Avatar';
 import { TagChip, UnassignedAvatar } from '@/components/badges';
 import { fmtMoney } from '@/lib/format';
+import { useData } from '@/data/data-context';
+import { useSession } from '@/auth/session-context';
+import { announce } from '@/lib/announce';
 
 interface CardProps {
   expense: Expense;
@@ -15,7 +18,7 @@ interface CardProps {
 const BADGE_OK = 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300';
 const BADGE_PENDING = 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300';
 
-function SplitBadge({ expense, big }: { expense: Expense; big?: boolean }) {
+function SplitBadge({ expense, big, onSettle }: { expense: Expense; big?: boolean; onSettle?: () => void }) {
   const { t, i18n } = useTranslation();
   if (!expense.requested_user_id) return null;
   const label =
@@ -24,23 +27,47 @@ function SplitBadge({ expense, big }: { expense: Expense; big?: boolean }) {
       : expense.split_type === 'custom'
         ? fmtMoney(expense.split_amount_cents ?? 0, i18n.language)
         : t('expenses.splitFull');
-  return (
-    <span
-      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-medium ${big ? 'text-[12px]' : 'text-[11px]'} ${
-        expense.paid_by_requested ? BADGE_OK : BADGE_PENDING
-      }`}
-    >
+  const cls = `inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-medium ${big ? 'text-[12px]' : 'text-[11px]'} ${
+    expense.paid_by_requested ? BADGE_OK : BADGE_PENDING
+  }`;
+  const content = (
+    <>
       {label} → {expense.requested_username}
       {expense.paid_by_requested && <Check className="w-3 h-3" aria-hidden="true" />}
-    </span>
+    </>
   );
+  if (onSettle) {
+    return (
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); onSettle(); }}
+        className={`${cls} cursor-pointer hover:brightness-95`}
+        title={t('expenses.settle')}
+      >
+        {content}
+      </button>
+    );
+  }
+  return <span className={cls}>{content}</span>;
 }
 
 /** Tarjeta desktop (completa): categoría, importe, badges de pago, contadores, avatar. */
 export function ExpenseCard({ expense, index, onOpen }: CardProps) {
   const { t, i18n } = useTranslation();
+  const data = useData();
+  const { user: me } = useSession();
   const done = expense.step === 'hecho';
   const delay = Math.min(index, 10) * 40;
+
+  const canSettle = expense.requested_user_id === me?.id && !expense.paid_by_requested;
+  const handleSettle = async () => {
+    try {
+      await data.updateExpense(expense.id, { paid_by_requested: true });
+      announce(t('expenses.settleDone', { count: 1 }));
+    } catch {
+      announce(t('common.error'));
+    }
+  };
   const label = expense.label_id
     ? {
         id: expense.label_id,
@@ -72,14 +99,16 @@ export function ExpenseCard({ expense, index, onOpen }: CardProps) {
       </p>
       {(expense.paid_by_creator || expense.requested_user_id || expense.payment_method) && (
         <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
-          {expense.paid_by_creator && (
-            <span
-              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium ${BADGE_OK}`}
-            >
+          {expense.paid_by_creator ? (
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium ${BADGE_OK}`}>
               {t('expenses.paid')}
             </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-surface2 text-muted border border-app">
+              {t('expenses.notPaid')}
+            </span>
           )}
-          <SplitBadge expense={expense} />
+          <SplitBadge expense={expense} onSettle={canSettle ? handleSettle : undefined} />
           {expense.payment_method && (
             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-surface2 text-muted">
               {t(`expenses.${expense.payment_method}`)}
@@ -114,9 +143,21 @@ export function ExpenseCard({ expense, index, onOpen }: CardProps) {
 
 /** Tarjeta MÓVIL simplificada: título (17px/600, 2 líneas), importe y estado del split. */
 export function ExpenseCardMobile({ expense, index, onOpen }: CardProps) {
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const data = useData();
+  const { user: me } = useSession();
   const done = expense.step === 'hecho';
   const delay = Math.min(index, 10) * 40;
+
+  const canSettle = expense.requested_user_id === me?.id && !expense.paid_by_requested;
+  const handleSettle = async () => {
+    try {
+      await data.updateExpense(expense.id, { paid_by_requested: true });
+      announce(t('expenses.settleDone', { count: 1 }));
+    } catch {
+      announce(t('common.error'));
+    }
+  };
   return (
     <button
       type="button"
@@ -133,7 +174,7 @@ export function ExpenseCardMobile({ expense, index, onOpen }: CardProps) {
         <span className="tnum text-[13px] font-semibold">
           {fmtMoney(expense.amount_cents, i18n.language)}
         </span>
-        <SplitBadge expense={expense} big />
+        <SplitBadge expense={expense} big onSettle={canSettle ? handleSettle : undefined} />
       </div>
     </button>
   );

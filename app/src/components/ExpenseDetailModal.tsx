@@ -471,25 +471,17 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
                     ))}
                   </div>
                 </div>
-                {expense.paid_by_creator ? (
-                  <button
+                <button
                     type="button"
-                    onClick={() => patch({ paid_by_creator: false })}
-                    className="shrink-0 px-3.5 py-2 rounded-xl text-[13px] font-medium bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300 hover:bg-emerald-100"
+                    onClick={() => patch({ paid_by_creator: !expense.paid_by_creator })}
+                    className={`shrink-0 px-3.5 py-2 rounded-xl text-[13px] font-medium transition-colors ${
+                      expense.paid_by_creator
+                        ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300 hover:bg-emerald-100'
+                        : 'bg-surface2 text-muted border border-app hover:bg-surface'
+                    }`}
                   >
-                    {t('expenses.paid')}
+                    {expense.paid_by_creator ? t('expenses.paid') : t('expenses.notPaid')}
                   </button>
-                ) : (
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={expense.paid_by_creator}
-                      onChange={(e) => patch({ paid_by_creator: e.target.checked })}
-                      className="w-4 h-4 rounded border-border-strong text-brand focus:ring-brand"
-                    />
-                    <span className="text-sm text-muted">{t('expenses.iPaid')}</span>
-                  </label>
-                )}
               </div>
 
               {/* Notas */}
