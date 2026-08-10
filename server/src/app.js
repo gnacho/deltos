@@ -93,6 +93,9 @@ export function createApp(ctx) {
     await next()
   })
 
+  // --- Invite routes (públicas: /api/invite/* NO necesita auth ni CSRF) ---
+  app.route('/', inviteRoutes(prod, demo))
+
   // --- Auth: todo /api/* requiere sesión salvo login/register/demo/logout ---
   app.use('/api/*', auth.requireAuth({ prod, demo, secret }))
 
@@ -288,7 +291,6 @@ export function createApp(ctx) {
   registerExpenseRoutes(app, { prod, hub, uploadsDir: ctx.uploadsDir })
   registerPushRoutes(app)
   registerHealth(app, { prod, demo })
-  app.route('/', inviteRoutes(prod, demo))
 
   // --- Estáticos + SPA fallback (excluyendo /api/* y /assets/*) ---
   // Caché (canon webapp-shell/actualizaciones): assets con hash = immutable;
