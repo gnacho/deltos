@@ -262,6 +262,15 @@ function UpdateBanner() {
             : t('update.banner')}
       </span>
       {applyAction}
+      {checkResult.available && checkResult.dismissVersion && (
+        <button
+          type="button"
+          onClick={checkResult.dismissVersion}
+          className="shrink-0 rounded-lg border border-sky-500/40 px-3 py-1 text-[12px] font-medium text-sky-500 hover:bg-sky-500/10"
+        >
+          {t('update.dismiss')}
+        </button>
+      )}
     </div>
   );
 }
