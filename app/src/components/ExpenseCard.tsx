@@ -1,12 +1,14 @@
+import { MessageCircle, Paperclip } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { Expense, ExpenseStep } from '@/data/types'
-import { colorOf } from '@/lib/colors'
 import { Avatar } from '@/components/Avatar'
+import { TagChip } from '@/components/badges'
 import { useData } from '@/data/data-context'
 
 interface Props {
   expense: Expense
-  onClick: () => void
+  index: number
+  onOpen: (id: string) => void
   onMove: (id: string, step: ExpenseStep) => void
 }
 
@@ -14,14 +16,18 @@ function fmtEur(cents: number): string {
   return (cents / 100).toFixed(2).replace('.', ',') + ' \u20AC'
 }
 
-export function ExpenseCard({ expense, onClick, onMove }: Props) {
+export function ExpenseCard({ expense, index, onOpen, onMove }: Props) {
   const { t } = useTranslation()
   const data = useData()
+  const done = expense.step === 'hecho'
+  const delay = Math.min(index, 10) * 40
 
   const creator = data.getUsers().find((u) => u.id === expense.created_by)
-  const requested = expense.requested_user_id
-    ? data.getUsers().find((u) => u.id === expense.requested_user_id)
-    : null
+  const label = expense.label_id ? { id: expense.label_id, name: expense.label_name ?? '', color: expense.label_color ?? 'slate' } : null
+
+  const detail = data.getExpenseDetail(expense.id)
+  const commentCount = detail?.comments?.length ?? 0
+  const attachCount = detail?.attachments?.length ?? 0
 
   const getSplitLabel = () => {
     if (!expense.split_type) return null
@@ -30,54 +36,70 @@ export function ExpenseCard({ expense, onClick, onMove }: Props) {
     return t('expenses.splitFull')
   }
 
-  const labelColor = expense.label_color ? colorOf(expense.label_color) : null
-
   return (
     <button
-      onClick={onClick}
-      className="w-full text-left p-3 rounded-xl bg-surface border border-border-app hover:border-border-strong transition-colors shadow-sm"
+      type="button"
+      onClick={() => onOpen(expense.id)}
+      style={{ animationDelay: `${delay}ms` }}
+      className={`card w-full text-left rounded-2xl bg-surface border border-app shadow-soft p-3.5 transition-transform duration-150 hover:-translate-y-0.5 hover:shadow-md ${done ? 'opacity-60' : ''}`}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-text-primary truncate">{expense.title}</p>
-          <p className="text-sm font-semibold text-text-primary mt-0.5">{fmtEur(expense.amount_cents)}</p>
+      {label && (
+        <div className="flex flex-wrap gap-1.5 mb-2">
+          <TagChip label={label} />
         </div>
-        {creator && (
-          <Avatar name={creator.username} color={creator.color} size="sm" />
-        )}
-      </div>
+      )}
 
-      <div className="flex flex-wrap gap-1.5 mt-2">
-        {expense.label_name && labelColor && (
-          <span
-            className="text-[10px] font-medium px-1.5 py-0.5 rounded"
-            style={{ backgroundColor: labelColor.chip + '20', color: labelColor.chip }}
-          >
-            {expense.label_name}
-          </span>
-        )}
+      <h3 className={`text-[15px] font-medium leading-snug ${done ? 'line-through decoration-1' : ''}`}>
+        {expense.title}
+      </h3>
+
+      <p className="text-[15px] font-semibold text-text-primary mt-0.5">
+        {fmtEur(expense.amount_cents)}
+      </p>
+
+      <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
         {expense.paid_by_creator && (
-          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
             {t('expenses.paid')}
           </span>
         )}
-        {requested && !expense.paid_by_requested && (
-          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
-            {getSplitLabel()} &rarr; {requested.username}
+        {expense.requested_user_id && (
+          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${expense.paid_by_requested ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'}`}>
+            {getSplitLabel()} &rarr; {expense.requested_username}
+            {expense.paid_by_requested && ' \u2713'}
           </span>
         )}
-        {requested && expense.paid_by_requested && (
-          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
-            {getSplitLabel()} &rarr; {requested.username} &#10003;
+        {expense.payment_method && (
+          <span className="text-[10px] text-text-muted">
+            {t(`expenses.${expense.payment_method}`)}
           </span>
         )}
-        {expense.notes && (
-          <span className="text-[10px] text-text-muted truncate w-full mt-0.5">{expense.notes}</span>
+      </div>
+
+      <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-app">
+        <span className="tnum flex items-center gap-3 text-xs text-faint">
+          {commentCount > 0 && (
+            <span className="inline-flex items-center gap-1">
+              <MessageCircle className="w-3.5 h-3.5" aria-hidden="true" />
+              {commentCount}
+            </span>
+          )}
+          {attachCount > 0 && (
+            <span className="inline-flex items-center gap-1">
+              <Paperclip className="w-3.5 h-3.5" aria-hidden="true" />
+              {attachCount}
+            </span>
+          )}
+        </span>
+        {creator ? (
+          <Avatar name={creator.username} color={creator.color} />
+        ) : (
+          <div className="w-6 h-6 rounded-full bg-surface2" />
         )}
       </div>
 
       {/* Step controls */}
-      <div className="flex gap-1 mt-2 pt-2 border-t border-border-app">
+      <div className="flex gap-1 mt-2 pt-2 border-t border-app">
         {(['nuevo', 'en-curso', 'hecho'] as const).map((s) => (
           <button
             key={s}
@@ -90,6 +112,7 @@ export function ExpenseCard({ expense, onClick, onMove }: Props) {
                 ? 'bg-brand/15 text-brand cursor-default'
                 : 'text-text-muted hover:bg-surface2 hover:text-text-secondary'
             }`}
+            aria-label={t(`expenseSteps.${s}`)}
           >
             {t(`expenseSteps.${s}`)}
           </button>

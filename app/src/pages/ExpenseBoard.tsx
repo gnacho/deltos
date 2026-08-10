@@ -132,11 +132,12 @@ export default function ExpenseBoard() {
                   {items.length === 0 ? (
                     <p className="text-xs text-text-muted py-4 text-center">{t('board.emptyColumn')}</p>
                   ) : (
-                    items.map((expense) => (
+                    items.map((expense, i) => (
                       <ExpenseCard
                         key={expense.id}
                         expense={expense}
-                        onClick={() => setDetailExpense(expense)}
+                        index={i}
+                        onOpen={(id) => setDetailExpense(items.find(e => e.id === id) || null)}
                         onMove={handleMove}
                       />
                     ))
