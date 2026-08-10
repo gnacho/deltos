@@ -233,6 +233,8 @@ CREATE TABLE IF NOT EXISTS expense_invites (
   invite_name TEXT NOT NULL,
   share_cents INTEGER NOT NULL,
   paid INTEGER NOT NULL DEFAULT 0,
+  payment_method TEXT CHECK (payment_method IN ('bizum','transfer','efectivo')),
+  notes TEXT DEFAULT '',
   created_at INTEGER NOT NULL
 );
 
@@ -388,6 +390,15 @@ export function migrateSchema(db) {
   if (!expenseCols.includes('payment_method')) {
     db.exec("ALTER TABLE expenses ADD COLUMN payment_method TEXT CHECK (payment_method IN ('bizum','transfer','efectivo'))")
     log.info('schema_migrated', { table: 'expenses', column: 'payment_method' })
+  }
+  const inviteCols = db.prepare('PRAGMA table_info(expense_invites)').all().map((c) => c.name)
+  if (!inviteCols.includes('payment_method')) {
+    db.exec("ALTER TABLE expense_invites ADD COLUMN payment_method TEXT CHECK (payment_method IN ('bizum','transfer','efectivo'))")
+    log.info('schema_migrated', { table: 'expense_invites', column: 'payment_method' })
+  }
+  if (!inviteCols.includes('notes')) {
+    db.exec("ALTER TABLE expense_invites ADD COLUMN notes TEXT DEFAULT ''")
+    log.info('schema_migrated', { table: 'expense_invites', column: 'notes' })
   }
 }
 

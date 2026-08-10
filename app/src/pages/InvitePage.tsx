@@ -18,8 +18,16 @@ interface InviteData {
     invite_name: string;
     share_cents: number;
     paid: boolean;
+    payment_method: string | null;
+    notes: string;
   };
 }
+
+const PAYMENT_METHODS = [
+  { value: 'bizum', key: 'expenses.bizum' },
+  { value: 'transfer', key: 'expenses.transfer' },
+  { value: 'efectivo', key: 'expenses.efectivo' },
+] as const;
 
 export default function InvitePage() {
   const { token } = useParams<{ token: string }>();
@@ -29,6 +37,7 @@ export default function InvitePage() {
   const [error, setError] = useState<string | null>(null);
   const [paying, setPaying] = useState(false);
   const [paid, setPaid] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<string>('bizum');
 
   useEffect(() => {
     if (!token) return;
@@ -48,7 +57,12 @@ export default function InvitePage() {
     if (!token) return;
     setPaying(true);
     try {
-      await fetch(`/api/invite/${encodeURIComponent(token)}/pay`, { method: 'PUT' });
+      const res = await fetch(`/api/invite/${encodeURIComponent(token)}/pay`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ payment_method: paymentMethod }),
+      });
+      if (!res.ok) throw res;
       setPaid(true);
     } catch {
       // ignore
@@ -93,21 +107,52 @@ export default function InvitePage() {
             <span className="tnum text-[17px] font-semibold">{shareLabel}</span>
           </div>
           {paid ? (
-            <div className="flex items-center gap-2 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 px-3 py-2.5">
-              <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
-              <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
-                {t('invite.alreadyPaid')}
-              </span>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 px-3 py-2.5">
+                <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+                <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
+                  {t('invite.alreadyPaid')}
+                </span>
+              </div>
+              {data?.invite.payment_method && (
+                <p className="text-[13px] text-muted">
+                  {t('expenses.paymentMethod')}: {t(`expenses.${data.invite.payment_method}`)}
+                </p>
+              )}
             </div>
           ) : (
-            <button
-              type="button"
-              onClick={handlePay}
-              disabled={paying}
-              className="w-full flex items-center justify-center gap-2 h-12 rounded-xl bg-brand text-brandfg text-[15px] font-semibold hover:brightness-110 disabled:opacity-60 shadow-soft"
-            >
-              {paying ? t('common.saving') : t('invite.markAsPaid')}
-            </button>
+            <div className="space-y-3">
+              {invite.notes && (
+                <p className="text-[13px] text-muted leading-relaxed bg-surface2 rounded-lg px-3 py-2">{invite.notes}</p>
+              )}
+              <div>
+                <p className="text-[12px] font-medium text-muted mb-1.5">{t('expenses.paymentMethod')}</p>
+                <div className="flex gap-1.5">
+                  {PAYMENT_METHODS.map(({ value, key: k }) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setPaymentMethod(value)}
+                      className={`flex-1 rounded-lg border px-2 py-1.5 text-[12px] font-medium transition-colors ${
+                        paymentMethod === value
+                          ? 'border-brand bg-brand/10 text-brand'
+                          : 'border-app text-muted hover:bg-surface2'
+                      }`}
+                    >
+                      {t(k)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handlePay}
+                disabled={paying}
+                className="w-full flex items-center justify-center gap-2 h-12 rounded-xl bg-brand text-brandfg text-[15px] font-semibold hover:brightness-110 disabled:opacity-60 shadow-soft"
+              >
+                {paying ? t('common.saving') : t('invite.markAsPaid')}
+              </button>
+            </div>
           )}
         </div>
         {expense.notes && (
