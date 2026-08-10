@@ -166,6 +166,8 @@ export function MobileMoveCard({ id, current, steps, onMove, children }: Props) 
       const c = card.cloneNode(true) as HTMLElement;
       c.classList.remove('card');
       c.classList.add('mm-clone');
+      c.style.transition = 'none'; /* mata transiciones heredadas por cloneNode */
+      c.style.animation = 'none';
       c.style.width = `${rect.width}px`;
       c.style.transform = `translate(${rect.left}px, ${rect.top}px) rotate(0deg) scale(1)`;
       document.body.appendChild(c);

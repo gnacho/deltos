@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronLeft, ChevronRight, ArrowRight } from 'lucide-react';
 import type { Expense } from '@/data/types';
 import { useSession } from '@/auth/session-context';
 import { colorOf } from '@/lib/colors';
+import { useData } from '@/data/data-context';
+import { announce } from '@/lib/announce';
 import { fmtMoney } from '@/lib/format';
 
 /** Deuda pendiente de un gasto: lo que el requerido aún debe al creador. */
@@ -57,12 +59,38 @@ export function useBalances(expenses: Expense[]) {
 export function BalanceStrip({ expenses }: { expenses: Expense[] }) {
   const { t, i18n } = useTranslation();
   const { user: me } = useSession();
+  const data = useData();
   const balances = useBalances(expenses);
+  const [armed, setArmed] = useState<string | null>(null);
+  const [settling, setSettling] = useState(false);
+
+  useEffect(() => {
+    if (!armed) return;
+    const timer = window.setTimeout(() => setArmed(null), 4000);
+    return () => window.clearTimeout(timer);
+  }, [armed]);
+
   if (balances.length === 0) return null;
+
+  const settle = async (otherId: string) => {
+    setSettling(true);
+    try {
+      const n = await data.settleExpenses(otherId);
+      announce(t('expenses.settleDone', { count: n }));
+    } catch {
+      announce(t('common.error'));
+    } finally {
+      setSettling(false);
+      setArmed(null);
+    }
+  };
+
   return (
     <div className="mb-5 flex flex-wrap gap-2" aria-label={t('expenses.balances')}>
       {balances.map((b) => {
         const mine = b.from === me.id || b.to === me.id;
+        const otherId = b.from === me.id ? b.to : b.from;
+        const key = `${b.from}|${b.to}`;
         const text =
           b.to === me.id
             ? t('expenses.balanceOwesYou', {
@@ -81,12 +109,28 @@ export function BalanceStrip({ expenses }: { expenses: Expense[] }) {
                 });
         return (
           <span
-            key={`${b.from}|${b.to}`}
-            className={`tnum inline-flex items-center gap-1.5 rounded-full border px-3 h-9 text-[13px] font-medium ${
-              mine ? 'border-brand/50 bg-brand/10 text-brand' : 'border-app bg-surface text-muted'
+            key={key}
+            className={`tnum inline-flex items-center gap-2 rounded-full border pl-3 h-9 text-[13px] font-medium ${
+              mine
+                ? 'border-brand/50 bg-brand/10 text-brand pr-1'
+                : 'border-app bg-surface text-muted pr-3'
             }`}
           >
             {text}
+            {mine && (
+              <button
+                type="button"
+                disabled={settling}
+                onClick={() => (armed === key ? void settle(otherId) : setArmed(key))}
+                className={`rounded-full px-2.5 h-7 text-[12px] font-semibold transition-colors disabled:opacity-60 ${
+                  armed === key
+                    ? 'bg-brand text-brandfg'
+                    : 'bg-surface text-muted hover:text-text border border-app'
+                }`}
+              >
+                {armed === key ? t('expenses.settleConfirm') : t('expenses.settle')}
+              </button>
+            )}
           </span>
         );
       })}

@@ -161,7 +161,7 @@ function MiPerfilCard() {
   };
 
   const actionBtnCls =
-    'inline-flex h-9 items-center gap-1.5 rounded-lg border border-app bg-surface2 px-2.5 sm:px-3 text-[13px] font-medium text-muted transition-colors hover:bg-surface hover:text-text';
+    'inline-flex h-9 items-center gap-1.5 rounded-lg border border-app bg-surface2 px-2.5 sm:px-3 text-[13px] font-medium text-muted transition-colors hover:bg-surface hover:text-text-primary';
   const actionTextCls = 'hidden sm:inline';
 
   return (
@@ -200,7 +200,7 @@ function MiPerfilCard() {
                 type="button"
                 onClick={cancelName}
                 disabled={nameBusy}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-app bg-surface2 text-muted transition-colors hover:bg-surface hover:text-text"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-app bg-surface2 text-muted transition-colors hover:bg-surface hover:text-text-primary"
                 aria-label={t('common.cancel')}
               >
                 <X className="w-4 h-4" />
@@ -251,7 +251,7 @@ function MiPerfilCard() {
                 type="button"
                 onClick={cancelEmail}
                 disabled={emailBusy}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-app bg-surface2 text-muted transition-colors hover:bg-surface hover:text-text"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-app bg-surface2 text-muted transition-colors hover:bg-surface hover:text-text-primary"
                 aria-label={t('common.cancel')}
               >
                 <X className="w-4 h-4" />
@@ -264,7 +264,7 @@ function MiPerfilCard() {
               className={`inline-flex h-9 w-9 items-center justify-center rounded-full transition-colors ${
                 user.email
                   ? 'bg-amber-500/10 text-amber-500 hover:bg-amber-500/20'
-                  : 'bg-surface2 text-faint border border-app hover:bg-surface hover:text-text'
+                  : 'bg-surface2 text-faint border border-app hover:bg-surface hover:text-text-primary'
               }`}
               title={user.email ? user.email : t('settings.addEmail')}
               aria-label={user.email ? t('settings.editEmail') : t('settings.addEmail')}
@@ -279,7 +279,7 @@ function MiPerfilCard() {
             id="mp-lang"
             value={user.language ?? 'auto'}
             onChange={(e) => void changeLanguage(e.target.value as Language)}
-            className="h-9 w-[120px] shrink-0 rounded-lg border border-app bg-elevated px-2 text-[13px] text-text outline-none focus:border-brand"
+            className="h-9 w-[120px] shrink-0 rounded-lg border border-app bg-elevated px-2 text-[13px] text-text-primary outline-none focus:border-brand"
           >
             <option value="auto">🌐 {t('settings.langAuto')}</option>
             <option value="es">🇪🇸 Español</option>
@@ -355,7 +355,7 @@ function MiPerfilCard() {
 function NotificationsInline() {
   const { t } = useTranslation();
   const { soporte, estado, activar, desactivar } = usePush();
-  const TIPOS = ['asignacion', 'comentario', 'tarea_movida', 'mencion', 'vencimiento', 'pago_requerido', 'pago_completado'] as const;
+  const TIPOS = ['asignacion', 'comentario', 'tarea_movida', 'mencion', 'vencimiento'] as const;
   const [prefs, setPrefs] = useState<Record<string, boolean> | null>(null);
 
   useEffect(() => {
@@ -418,7 +418,6 @@ function NotificationsInline() {
               <p className="text-[13px] font-medium text-faint">{t('settings.notifTipos')}</p>
               {TIPOS.map((tipo) => (
                 <div key={tipo} className="flex items-center justify-between gap-3">
-                  <span className="text-sm text-text">{t(`settings.notifTipo.${tipo}`)}</span>
                   <CheckToggle
                     checked={prefs[tipo] !== false}
                     onChange={(checked) => cambiarPref(tipo, checked)}
@@ -588,40 +587,6 @@ function AppearanceCard() {
           />
         </button>
       </div>
-    </Card>
-  );
-}
-
-/* ---------------- Instalar (solo si el navegador lo soporta) ---------------- */
-function InstallCard({
-  state,
-  install,
-}: {
-  state: ReturnType<typeof useInstallPrompt>['state'];
-  install: () => Promise<void>;
-}) {
-  const { t } = useTranslation();
-  return (
-    <Card>
-      <Heading icon={Download}>{t('settings.install')}</Heading>
-      {state === 'available' && (
-        <button
-          type="button"
-          onClick={() => void install()}
-          className="h-14 px-8 rounded-2xl bg-brand text-brandfg text-[16px] font-semibold inline-flex items-center gap-2.5 hover:brightness-110 shadow-soft"
-        >
-          <Download className="w-5 h-5" aria-hidden="true" />
-          {t('settings.installButton')}
-        </button>
-      )}
-      {state === 'installed' && (
-        <p className="inline-flex items-center gap-2 rounded-full border border-ok/30 bg-ok/10 px-4 py-2 text-[13px] font-medium text-ok">
-          <Check className="w-4 h-4" aria-hidden="true" />
-          {t('settings.installDone')}
-        </p>
-      )}
-      {state === 'ios' && <p className="text-[13px] text-faint">{t('settings.installIosHelp')}</p>}
-      {state === 'available' && <p className="text-[13px] text-faint mt-3">{t('settings.installHint')}</p>}
     </Card>
   );
 }
@@ -990,7 +955,7 @@ function formatUptime(totalSeconds: number) {
   return `${minutes}m`;
 }
 
-function AboutCard() {
+function AboutCard({ installState, install }: { installState?: string; install?: () => void }) {
   const { t } = useTranslation();
   const [serverInfo, setServerInfo] = useState<{ version: string; node: string; uptime: number } | null>(null);
 
@@ -1046,6 +1011,18 @@ function AboutCard() {
         {/* Fila 2: versión, licencia y runtime en una misma línea sin recuadros,
             alineada con la descripción (tras el logo) en escritorio */}
         <p className="md:pl-[54px] text-[11px] text-faint tnum">{releaseLine} · {runtimeLine}</p>
+        {install && installState !== 'hidden' && (
+          <div className="md:pl-[54px] mt-2">
+            <button
+              type="button"
+              onClick={install}
+              className="inline-flex items-center gap-2 rounded-lg border border-app bg-surface px-3 py-1.5 text-[12px] font-medium text-muted transition-colors hover:bg-surface2 hover:text-text"
+            >
+              <Download className="w-3.5 h-3.5" aria-hidden="true" />
+              {t('settings.install.title')}
+            </button>
+          </div>
+        )}
       </div>
     </Card>
   );
@@ -1056,7 +1033,6 @@ export default function SettingsPage() {
   const { t } = useTranslation();
   const { user, demo } = useSession();
   const { state: installState, install } = useInstallPrompt();
-  const installVisible = installState !== 'hidden';
   const isAdmin = user.role === 'admin' && !demo;
 
   return (
@@ -1088,13 +1064,8 @@ export default function SettingsPage() {
             <AdminBar />
           </div>
         )}
-        {installVisible && (
-          <div className="lg:col-span-12">
-            <InstallCard state={installState} install={install} />
-          </div>
-        )}
         <div className="lg:col-span-12">
-          <AboutCard />
+          <AboutCard installState={installState} install={install} />
         </div>
       </div>
     </div>
