@@ -138,7 +138,6 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
   }, [onClose]);
 
   const labels = data.getLabels();
-  const users = data.getUsers().filter((u) => u.id !== user?.id);
   const isCreator = expense.created_by === user?.id;
 
   const patch = async (p: Record<string, unknown>) => {
@@ -234,7 +233,7 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
     data.moveExpense(expense.id, step, 0);
   };
   const handlePayMyPart = () => {
-    data.updateExpense(expense.id, { paid_by_requested: true });
+    void data.setMyShare(expense.id, true).catch(() => announce(t('common.error')));
   };
 
   const attachments: Attachment[] = detail?.attachments ?? [];
@@ -447,51 +446,6 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
                 </div>
               </div>
 
-              {/* Método de pago + Pagado */}
-              <div className="flex items-center gap-4">
-                <div className="flex-1">
-                  <p className="text-[12px] font-semibold tracking-wide uppercase text-faint mb-1">
-                    {t('expenses.paymentMethod')}
-                  </p>
-                  <div className="flex gap-1.5">
-                    {(['bizum', 'transfer', 'efectivo'] as const).map((m) => (
-                      <button
-                        key={m}
-                        onClick={() =>
-                          patch({ payment_method: expense.payment_method === m ? null : m })
-                        }
-                        className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
-                          expense.payment_method === m
-                            ? 'bg-brand/15 text-brand'
-                            : 'text-muted hover:bg-surface2 border border-app'
-                        }`}
-                      >
-                        {t(`expenses.${m}`)}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                {expense.paid_by_creator ? (
-                  <button
-                    type="button"
-                    onClick={() => patch({ paid_by_creator: false })}
-                    className="shrink-0 px-3.5 py-2 rounded-xl text-[13px] font-medium bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300 hover:bg-emerald-100"
-                  >
-                    {t('expenses.paid')}
-                  </button>
-                ) : (
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={expense.paid_by_creator}
-                      onChange={(e) => patch({ paid_by_creator: e.target.checked })}
-                      className="w-4 h-4 rounded border-border-strong text-brand focus:ring-brand"
-                    />
-                    <span className="text-sm text-muted">{t('expenses.iPaid')}</span>
-                  </label>
-                )}
-              </div>
-
               {/* Notas */}
               <div>
                 <p className="text-[12px] font-semibold tracking-wide uppercase text-faint mb-1">
@@ -508,82 +462,59 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
                 />
               </div>
 
-              {/* Solicitar pago + División */}
-              <div className="flex items-start gap-4">
-                <div className="flex-1">
-                  <p className="text-[12px] font-semibold tracking-wide uppercase text-faint mb-1">
-                    {t('expenses.requestPayment')}
-                  </p>
-                  <select
-                    value={expense.requested_user_id ?? ''}
-                    onChange={(e) => {
-                      const val = e.target.value || null;
-                      if (!val) patch({ requested_user_id: null, split_type: null });
-                      else if (!expense.split_type) patch({ requested_user_id: val, split_type: 'full' });
-                      else patch({ requested_user_id: val });
-                    }}
-                    className="w-full px-3 py-2 rounded-lg bg-surface2 border border-app text-sm text-text focus:outline-none focus:border-brand"
-                  >
-                    <option value="">{t('expenses.noRequest')}</option>
-                    {users.map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {u.username}
-                      </option>
+              {/* Reparto: partes por participante */}
+              <div>
+                <p className="text-[12px] font-semibold tracking-wide uppercase text-faint mb-1">
+                  {t('expenses.form.participants')}
+                </p>
+                {!expense.shares?.length ? (
+                  <p className="text-sm text-muted">{t('expenses.noShares')}</p>
+                ) : (
+                  <ul className="rounded-xl border border-app divide-y divide-app overflow-hidden">
+                    {expense.shares.map((sh) => (
+                      <li
+                        key={sh.user_id}
+                        className="flex items-center gap-2.5 px-3 py-2 bg-surface2/50"
+                      >
+                        <Avatar name={sh.username} color={sh.user_color} />
+                        <span className="text-sm flex-1 min-w-0 truncate">
+                          {sh.username}
+                          {sh.user_id === expense.payer_id && (
+                            <span className="ml-1.5 text-[11px] text-faint">
+                              ({t('expenses.payerTag')})
+                            </span>
+                          )}
+                        </span>
+                        <span className="tnum text-[13px] font-semibold">
+                          {fmtMoney(sh.share_cents, i18n.language)}
+                        </span>
+                        {sh.paid ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
+                            {t('expenses.paid')}
+                          </span>
+                        ) : sh.user_id === user?.id ? (
+                          <button
+                            type="button"
+                            onClick={handlePayMyPart}
+                            className="px-2.5 py-1 rounded-lg text-[12px] font-medium bg-brand text-brandfg hover:brightness-110"
+                          >
+                            {t('expenses.payMyPart')}
+                          </button>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
+                            {t('expenses.pending')}
+                          </span>
+                        )}
+                      </li>
                     ))}
-                  </select>
-                </div>
-                {expense.requested_user_id && (
-                  <div className="flex-1">
-                    <p className="text-[12px] font-semibold tracking-wide uppercase text-faint mb-1">
-                      {t('expenses.split')}
-                    </p>
-                    <div className="flex gap-1.5">
-                      {(['half', 'custom', 'full'] as const).map((s) => (
-                        <button
-                          key={s}
-                          onClick={() => patch({ split_type: s })}
-                          className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
-                            expense.split_type === s
-                              ? 'bg-brand/15 text-brand'
-                              : 'text-muted hover:bg-surface2 border border-app'
-                          }`}
-                        >
-                          {t(`expenses.split${s.charAt(0).toUpperCase() + s.slice(1)}`)}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                  </ul>
                 )}
+                <p className="mt-1.5 text-[12px] text-faint">
+                  {t('expenses.paidBy', { name: expense.payer_username })} ·{' '}
+                  {new Date(expense.spent_at).toLocaleDateString(i18n.language)}
+                  {expense.project_name ? ` · ${expense.project_name}` : ''}
+                </p>
               </div>
-
-              {/* Sección del requerido */}
-              {expense.requested_user_id === user?.id && (
-                <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 dark:bg-amber-900/20 dark:border-amber-800">
-                  <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
-                    {expense.created_by_username} {t('expenses.requestPayment').toLowerCase()}:{' '}
-                    {fmtMoney(
-                      expense.split_type === 'half'
-                        ? Math.round(expense.amount_cents / 2)
-                        : expense.split_type === 'custom'
-                          ? (expense.split_amount_cents ?? expense.amount_cents)
-                          : expense.amount_cents,
-                      i18n.language,
-                    )}
-                  </p>
-                  {expense.paid_by_requested ? (
-                    <p className="text-sm text-emerald-700 dark:text-emerald-300 mt-1">
-                      {t('expenses.payMyPartDone')}
-                    </p>
-                  ) : (
-                    <button
-                      onClick={handlePayMyPart}
-                      className="mt-2 px-3 py-1.5 rounded-lg text-sm font-medium bg-emerald-500 text-white hover:bg-emerald-600"
-                    >
-                      {t('expenses.payMyPart')}
-                    </button>
-                  )}
-                </div>
-              )}
 
               {/* Delete */}
               {isCreator && (

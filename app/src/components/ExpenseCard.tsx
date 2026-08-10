@@ -15,23 +15,21 @@ interface CardProps {
 const BADGE_OK = 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300';
 const BADGE_PENDING = 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300';
 
-function SplitBadge({ expense, big }: { expense: Expense; big?: boolean }) {
-  const { t, i18n } = useTranslation();
-  if (!expense.requested_user_id) return null;
-  const label =
-    expense.split_type === 'half'
-      ? t('expenses.splitHalf')
-      : expense.split_type === 'custom'
-        ? fmtMoney(expense.split_amount_cents ?? 0, i18n.language)
-        : t('expenses.splitFull');
+function SharesBadge({ expense, big }: { expense: Expense; big?: boolean }) {
+  const { t } = useTranslation();
+  if (!expense.shares?.length) return null;
+  const pending = expense.shares.filter((sh) => !sh.paid).length;
+  const allPaid = pending === 0;
   return (
     <span
       className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-medium ${big ? 'text-[12px]' : 'text-[11px]'} ${
-        expense.paid_by_requested ? BADGE_OK : BADGE_PENDING
+        allPaid ? BADGE_OK : BADGE_PENDING
       }`}
     >
-      {label} → {expense.requested_username}
-      {expense.paid_by_requested && <Check className="w-3 h-3" aria-hidden="true" />}
+      {allPaid
+        ? t('expenses.sharesSettled', { count: expense.shares.length })
+        : t('expenses.sharesPending', { count: pending })}
+      {allPaid && <Check className="w-3 h-3" aria-hidden="true" />}
     </span>
   );
 }
@@ -70,16 +68,9 @@ export function ExpenseCard({ expense, index, onOpen }: CardProps) {
       <p className="tnum text-[17px] font-semibold mt-0.5">
         {fmtMoney(expense.amount_cents, i18n.language)}
       </p>
-      {(expense.paid_by_creator || expense.requested_user_id || expense.payment_method) && (
+      {(expense.shares?.length > 0 || expense.payment_method) && (
         <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
-          {expense.paid_by_creator && (
-            <span
-              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium ${BADGE_OK}`}
-            >
-              {t('expenses.paid')}
-            </span>
-          )}
-          <SplitBadge expense={expense} />
+          <SharesBadge expense={expense} />
           {expense.payment_method && (
             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-surface2 text-muted">
               {t(`expenses.${expense.payment_method}`)}
@@ -102,8 +93,8 @@ export function ExpenseCard({ expense, index, onOpen }: CardProps) {
             </span>
           )}
         </span>
-        {expense.created_by_username ? (
-          <Avatar name={expense.created_by_username} color={expense.created_by_color} />
+        {expense.payer_username ? (
+          <Avatar name={expense.payer_username} color={expense.payer_color} />
         ) : (
           <UnassignedAvatar />
         )}
@@ -133,7 +124,7 @@ export function ExpenseCardMobile({ expense, index, onOpen }: CardProps) {
         <span className="tnum text-[13px] font-semibold">
           {fmtMoney(expense.amount_cents, i18n.language)}
         </span>
-        <SplitBadge expense={expense} big />
+        <SharesBadge expense={expense} big />
       </div>
     </button>
   );

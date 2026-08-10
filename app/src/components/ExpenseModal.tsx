@@ -1,71 +1,94 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { X, Check } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { X } from 'lucide-react';
 import { useData } from '@/data/data-context';
 import { useSession } from '@/auth/session-context';
-import type { Expense, ExpenseSplitType, ExpenseStep, PaymentMethod } from '@/data/types';
+import type { Expense, ExpenseStep, PaymentMethod } from '@/data/types';
+import { Avatar } from '@/components/Avatar';
 import { colorOf } from '@/lib/colors';
 import { fmtMoney } from '@/lib/format';
+import { apiErrorText } from '@/lib/errors';
 
-interface CreateProps {
-  mode: 'create';
-  defaultStep?: ExpenseStep;
-  onClose: () => void;
-  onCreated: (expense: Expense) => void;
-}
-
-interface EditProps {
-  mode: 'edit';
-  expense: Expense;
-  onClose: () => void;
-  onUpdated: () => void;
-}
-
-type Props = CreateProps | EditProps;
-
+const METHODS: PaymentMethod[] = ['bizum', 'transfer', 'efectivo'];
 const STEPS: ExpenseStep[] = ['nuevo', 'en-curso', 'hecho'];
+
+type Props =
+  { mode: 'create'; onClose: () => void } | { mode: 'edit'; expense: Expense; onClose: () => void };
+
+function toCents(v: string): number | null {
+  const n = Number.parseFloat(v.replace(',', '.'));
+  if (!Number.isFinite(n) || n < 0) return null;
+  return Math.round(n * 100);
+}
+
+function fromCents(cents: number): string {
+  return (cents / 100).toFixed(2).replace('.', ',');
+}
+
+function dateInputValue(ts: number): string {
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** Reparto equitativo con céntimos sobrantes a los primeros. */
+function equalSplit(total: number, n: number): number[] {
+  const base = Math.floor(total / n);
+  const rest = total - base * n;
+  return Array.from({ length: n }, (_, i) => base + (i < rest ? 1 : 0));
+}
 
 export function ExpenseModal(props: Props) {
   const { t, i18n } = useTranslation();
   const data = useData();
-  const { user } = useSession();
-  const modalRef = useRef<HTMLDivElement>(null);
-
+  const { user: me } = useSession();
   const isEdit = props.mode === 'edit';
   const expense = isEdit ? props.expense : null;
+  const users = data.getUsers();
+  const projects = data.getProjects();
+  const labels = data.getLabels();
 
   const [title, setTitle] = useState(expense?.title ?? '');
-  const [amountText, setAmountText] = useState(
-    expense ? (expense.amount_cents / 100).toFixed(2).replace('.', ',') : '',
-  );
+  const [amountStr, setAmountStr] = useState(expense ? fromCents(expense.amount_cents) : '');
   const [labelId, setLabelId] = useState<string | null>(expense?.label_id ?? null);
+  const [projectId, setProjectId] = useState<string | null>(expense?.project_id ?? null);
   const [notes, setNotes] = useState(expense?.notes ?? '');
-  const [paidByCreator, setPaidByCreator] = useState(expense?.paid_by_creator ?? false);
-  const [requestedUserId, setRequestedUserId] = useState<string | null>(
-    expense?.requested_user_id ?? null,
+  const [payerId, setPayerId] = useState(expense?.payer_id ?? me.id);
+  const [spentAt, setSpentAt] = useState(dateInputValue(expense?.spent_at ?? Date.now()));
+  const [method, setMethod] = useState<PaymentMethod | null>(expense?.payment_method ?? null);
+  const [step, setStep] = useState<ExpenseStep>(expense?.step ?? 'nuevo');
+  /** Partes: userId → céntimos (texto editable por persona). */
+  const [shareStr, setShareStr] = useState<Map<string, string>>(
+    () => new Map((expense?.shares ?? []).map((sh) => [sh.user_id, fromCents(sh.share_cents)])),
   );
-  const [splitType, setSplitType] = useState<ExpenseSplitType | null>(expense?.split_type ?? null);
-  const [splitAmountText, setSplitAmountText] = useState(
-    expense?.split_amount_cents
-      ? (expense.split_amount_cents / 100).toFixed(2).replace('.', ',')
-      : '',
-  );
-  const [step, setStep] = useState<ExpenseStep>(
-    expense?.step ?? (props.mode === 'create' ? (props.defaultStep ?? 'nuevo') : 'nuevo'),
-  );
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(
-    expense?.payment_method ?? null,
-  );
+  const [customSplit, setCustomSplit] = useState(() => {
+    const shares = expense?.shares ?? [];
+    if (shares.length < 2) return false;
+    const eq = equalSplit(expense?.amount_cents ?? 0, shares.length);
+    return !shares.every(
+      (sh, i) =>
+        sh.share_cents === eq[i] ||
+        sh.share_cents === eq[0] ||
+        sh.share_cents === eq[eq.length - 1],
+    );
+  });
+  const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [deleteArmed, setDeleteArmed] = useState(false);
 
+  const amountCents = toCents(amountStr);
+  const participants = useMemo(() => [...shareStr.keys()], [shareStr]);
+
+  /* Reparto equitativo en vivo salvo modo importes por persona */
   useEffect(() => {
-    const timer = deleteArmed ? window.setTimeout(() => setDeleteArmed(false), 4000) : undefined;
-    return () => {
-      if (timer) clearTimeout(timer);
-    };
-  }, [deleteArmed]);
+    if (customSplit || amountCents === null || participants.length === 0) return;
+    const eq = equalSplit(amountCents, participants.length);
+    setShareStr((prev) => {
+      const next = new Map(prev);
+      participants.forEach((uid, i) => next.set(uid, fromCents(eq[i])));
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [amountCents, participants.length, customSplit]);
 
   const onClose = props.onClose;
   useEffect(() => {
@@ -85,83 +108,57 @@ export function ExpenseModal(props: Props) {
     };
   }, [onClose]);
 
-  const labels = data.getLabels();
-  const users = data.getUsers().filter((u) => u.id !== user?.id);
-
-  const isCreator = !isEdit || expense?.created_by === user?.id;
-
-  const parseAmount = (): number | null => {
-    const cleaned = amountText.replace(',', '.').replace(/[^0-9.]/g, '');
-    const num = parseFloat(cleaned);
-    if (isNaN(num) || num <= 0) return null;
-    return Math.round(num * 100);
+  const toggleParticipant = (uid: string) => {
+    setShareStr((prev) => {
+      const next = new Map(prev);
+      if (next.has(uid)) next.delete(uid);
+      else next.set(uid, '0,00');
+      return next;
+    });
   };
 
-  const parseSplitAmount = (): number | null => {
-    const cleaned = splitAmountText.replace(',', '.').replace(/[^0-9.]/g, '');
-    const num = parseFloat(cleaned);
-    if (isNaN(num) || num <= 0) return null;
-    return Math.round(num * 100);
-  };
+  const sharesSum = participants.reduce(
+    (sum, uid) => sum + (toCents(shareStr.get(uid) ?? '') ?? 0),
+    0,
+  );
+  const sumOk = participants.length === 0 || (amountCents !== null && sharesSum === amountCents);
 
   const handleSubmit = async () => {
-    setError(null);
-    const amountCents = parseAmount();
-    if (!amountCents) {
-      setError(t('expenses.form.amountRequired'));
-      return;
-    }
     if (!title.trim()) {
       setError(t('newTask.titleRequired'));
       return;
     }
-    if (requestedUserId && !splitType) {
-      setError(t('errors.VALIDATION_FAILED'));
+    if (amountCents === null || amountCents === 0) {
+      setError(t('expenses.form.amountRequired'));
       return;
     }
-    if (splitType === 'custom') {
-      const splitCents = parseSplitAmount();
-      if (!splitCents) {
-        setError(t('expenses.form.amountRequired'));
-        return;
-      }
+    if (!sumOk) {
+      setError(t('expenses.form.sharesSum'));
+      return;
     }
-
     setSaving(true);
+    setError('');
+    const payload = {
+      title: title.trim(),
+      amount_cents: amountCents,
+      label_id: labelId,
+      project_id: projectId,
+      notes,
+      payer_id: payerId,
+      spent_at: Date.parse(`${spentAt}T12:00:00`),
+      payment_method: method,
+      step,
+      shares: participants.map((uid) => ({
+        user_id: uid,
+        share_cents: toCents(shareStr.get(uid) ?? '') ?? 0,
+      })),
+    };
     try {
-      if (props.mode === 'edit' && expense) {
-        await data.updateExpense(expense.id, {
-          title: title.trim(),
-          amount_cents: amountCents,
-          label_id: labelId,
-          notes,
-          paid_by_creator: paidByCreator,
-          requested_user_id: requestedUserId,
-          split_type: splitType,
-          split_amount_cents: splitType === 'custom' ? parseSplitAmount() : null,
-          paid_by_requested: expense.paid_by_requested,
-          payment_method: paymentMethod,
-          step,
-        });
-        props.onUpdated();
-      } else if (props.mode === 'create') {
-        const exp = await data.createExpense({
-          title: title.trim(),
-          amount_cents: amountCents,
-          label_id: labelId,
-          notes,
-          paid_by_creator: paidByCreator,
-          requested_user_id: requestedUserId,
-          split_type: splitType,
-          split_amount_cents: splitType === 'custom' ? parseSplitAmount() : null,
-          payment_method: paymentMethod,
-          step,
-        });
-        props.onCreated(exp);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
+      if (isEdit && expense) await data.updateExpense(expense.id, payload);
+      else await data.createExpense(payload);
+      onClose();
+    } catch (e) {
+      setError(apiErrorText(e, t('common.error')));
       setSaving(false);
     }
   };
@@ -171,347 +168,279 @@ export function ExpenseModal(props: Props) {
       setDeleteArmed(true);
       return;
     }
-    if (props.mode !== 'edit' || !props.expense) return;
-    setSaving(true);
+    if (!expense) return;
     try {
-      await data.deleteExpense(props.expense.id);
-      props.onUpdated();
+      await data.deleteExpense(expense.id);
+      onClose();
     } catch {
-      setError(t('projects.deleteError'));
-    } finally {
-      setSaving(false);
+      setError(t('common.error'));
     }
   };
 
-  const handlePayMyPart = async () => {
-    if (props.mode !== 'edit' || !props.expense || props.expense.paid_by_requested) return;
-    try {
-      await data.updateExpense(props.expense.id, { paid_by_requested: true });
-      props.onUpdated();
-    } catch {
-      setError(t('projects.deleteError'));
-    }
-  };
-
-  const isRequested = expense?.requested_user_id === user?.id;
+  const isCreator = expense ? expense.created_by === me.id : true;
+  const pill = (active: boolean) =>
+    `px-3 h-9 rounded-full text-[13px] font-medium border transition-colors ${
+      active
+        ? 'bg-brand text-brandfg border-brand'
+        : 'bg-surface text-muted border-app hover:text-text'
+    }`;
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center pt-[10vh] px-4"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
       role="dialog"
       aria-modal="true"
       aria-labelledby="expense-form-title"
     >
       <div
         className="absolute inset-0 bg-black/45 backdrop-blur-[2px]"
-        onClick={props.onClose}
+        onClick={onClose}
         aria-hidden="true"
       />
-      <div
-        ref={modalRef}
-        className="relative w-full max-w-lg bg-surface rounded-2xl shadow-xl border border-app overflow-hidden"
-      >
+      <div className="relative w-full sm:max-w-lg bg-surface rounded-t-2xl sm:rounded-2xl border border-app shadow-2xl max-h-[92vh] overflow-y-auto nice-scroll">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3 border-b border-app">
-          <h2 id="expense-form-title" className="font-display font-bold text-base tracking-tight">
+        <div className="sticky top-0 z-10 bg-surface/95 backdrop-blur border-b border-app px-5 py-4 flex items-center gap-3">
+          <h2 id="expense-form-title" className="font-display font-bold text-[18px] tracking-tight flex-1">
             {isEdit ? t('expenses.form.editTitle') : t('expenses.form.createTitle')}
           </h2>
           <button
             type="button"
-            onClick={props.onClose}
-            className="p-1 rounded-lg text-muted hover:bg-surface2 hover:text-text transition-colors"
+            onClick={onClose}
+            className="w-10 h-10 rounded-lg text-muted hover:bg-surface2 flex items-center justify-center"
+            aria-label={t('common.close')}
           >
-            <X size={18} />
+            <X className="w-5 h-5" aria-hidden="true" />
           </button>
         </div>
 
-        <div className="px-5 py-3.5 space-y-3 max-h-[70vh] overflow-y-auto nice-scroll">
+        <div className="px-5 py-5 space-y-5">
           {/* Título */}
           <div>
-            <label className="block text-xs font-medium text-muted mb-1">
-              {t('expenses.form.titleLabel')}
+            <label className="block text-[12px] font-semibold tracking-wide uppercase text-faint mb-1.5" htmlFor="exp-title">
+              {t('expenses.form.title')}
             </label>
             <input
+              id="exp-title"
+              autoFocus
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
+              className="w-full bg-surface2 border border-app rounded-xl px-3.5 py-2.5 text-[15px] font-medium outline-none focus:border-brand"
               placeholder={t('expenses.form.titlePlaceholder')}
-              className="w-full px-3 py-2 rounded-lg bg-surface2 border border-app text-sm text-text placeholder:text-faint focus:outline-none focus:border-brand"
-              autoFocus
             />
           </div>
 
-          {/* Importe */}
-          <div>
-            <label className="block text-xs font-medium text-muted mb-1">
-              {t('expenses.amount')}
-            </label>
-            <input
-              type="text"
-              inputMode="decimal"
-              value={amountText}
-              onChange={(e) => setAmountText(e.target.value)}
-              placeholder={t('expenses.form.amountPlaceholder')}
-              className="w-full px-3 py-2 rounded-lg bg-surface2 border border-app text-sm text-text placeholder:text-faint focus:outline-none focus:border-brand"
-            />
+          {/* Importe + fecha */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-[12px] font-semibold tracking-wide uppercase text-faint mb-1.5" htmlFor="exp-amount">
+                {t('expenses.amount')}
+              </label>
+              <input
+                id="exp-amount"
+                type="text"
+                inputMode="decimal"
+                value={amountStr}
+                onChange={(e) => setAmountStr(e.target.value)}
+                className="w-full bg-surface2 border border-app rounded-xl px-3.5 py-2.5 text-[15px] font-medium outline-none focus:border-brand tnum"
+                placeholder="0,00"
+              />
+            </div>
+            <div>
+              <label className="block text-[12px] font-semibold tracking-wide uppercase text-faint mb-1.5" htmlFor="exp-date">
+                {t('expenses.form.date')}
+              </label>
+              <input
+                id="exp-date"
+                type="date"
+                value={spentAt}
+                onChange={(e) => setSpentAt(e.target.value)}
+                className="w-full bg-surface2 border border-app rounded-xl px-3.5 py-2.5 text-[15px] font-medium outline-none focus:border-brand tnum"
+              />
+            </div>
           </div>
 
-          {/* Categoría (label) */}
-          <div>
-            <label className="block text-xs font-medium text-muted mb-1">
-              {t('expenses.category')}
-            </label>
-            <div className="flex flex-wrap gap-1.5">
-              <button
-                type="button"
-                onClick={() => setLabelId(null)}
-                className={`px-2 py-0.5 rounded text-xs font-medium transition-colors ${
-                  !labelId ? 'bg-brand/15 text-brand' : 'text-muted hover:bg-surface2'
-                }`}
-              >
-                {t('common.none')}
-              </button>
-              {labels.map((l) => {
-                const c = colorOf(l.color);
-                return (
-                  <button
-                    key={l.id}
-                    type="button"
-                    onClick={() => setLabelId(l.id)}
-                    className="px-2 py-0.5 rounded text-xs font-medium transition-colors"
-                    style={
-                      labelId === l.id ? { backgroundColor: c.chip + '30', color: c.chip } : {}
-                    }
-                  >
+          {/* Proyecto (opcional) + categoría */}
+          <div className="grid grid-cols-2 gap-4">
+            {projects.length > 0 && (
+              <div>
+                <span className="block text-[12px] font-semibold tracking-wide uppercase text-faint mb-1.5">{t('expenses.form.project')}</span>
+                <div className="flex flex-wrap gap-1.5">
+                  <button type="button" onClick={() => setProjectId(null)} className={pill(projectId === null)}>
+                    {t('expenses.form.noProject')}
+                  </button>
+                  {projects.map((p) => (
+                    <button key={p.id} type="button" onClick={() => setProjectId(p.id)} className={pill(projectId === p.id)}>
+                      {p.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className={projects.length === 0 ? 'col-span-2' : ''}>
+              <span className="block text-[12px] font-semibold tracking-wide uppercase text-faint mb-1.5">{t('expenses.category')}</span>
+              <div className="flex flex-wrap gap-1.5">
+                <button type="button" onClick={() => setLabelId(null)} className={pill(labelId === null)}>
+                  {t('expenses.form.noCategory')}
+                </button>
+                {labels.map((l) => (
+                  <button key={l.id} type="button" onClick={() => setLabelId(l.id)} className={pill(labelId === l.id)}>
+                    <span className={`inline-block w-2 h-2 rounded-full mr-1.5 ${colorOf(l.color).dot}`} aria-hidden="true" />
                     {l.name}
                   </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Pagador */}
+          <div>
+            <span className="block text-[12px] font-semibold tracking-wide uppercase text-faint mb-1.5">{t('expenses.form.payer')}</span>
+            <div className="flex flex-wrap gap-1.5">
+              {users.map((u) => (
+                <button key={u.id} type="button" onClick={() => setPayerId(u.id)} className={pill(payerId === u.id)}>
+                  {u.username}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Participantes y reparto */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="block text-[12px] font-semibold tracking-wide uppercase text-faint">{t('expenses.form.participants')}</span>
+              {participants.length > 1 && (
+                <button type="button" onClick={() => setCustomSplit((v) => !v)} className="text-[12px] font-medium text-brand hover:underline">
+                  {customSplit ? t('expenses.form.splitEqual') : t('expenses.form.splitCustom')}
+                </button>
+              )}
+            </div>
+            <ul className="rounded-xl border border-app divide-y divide-app overflow-hidden">
+              {users.map((u) => {
+                const on = shareStr.has(u.id);
+                return (
+                  <li key={u.id} className="flex items-center gap-2.5 px-3 py-2 bg-surface2/50">
+                    <button
+                      type="button"
+                      onClick={() => toggleParticipant(u.id)}
+                      aria-pressed={on}
+                      className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 transition-colors ${
+                        on ? 'bg-brand border-brand text-brandfg' : 'border-strong bg-surface'
+                      }`}
+                    >
+                      {on && <Check className="w-3.5 h-3.5" aria-hidden="true" />}
+                    </button>
+                    <Avatar name={u.username} color={u.color} />
+                    <span className="text-sm flex-1 min-w-0 truncate">{u.username}</span>
+                    {on && (
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={shareStr.get(u.id) ?? ''}
+                        disabled={!customSplit}
+                        onChange={(e) => setShareStr((prev) => new Map(prev).set(u.id, e.target.value))}
+                        className="tnum w-20 rounded-lg bg-surface border border-app px-2 py-1 text-right text-[13px] outline-none focus:border-brand disabled:opacity-70"
+                        aria-label={t('expenses.form.shareOf', { name: u.username })}
+                      />
+                    )}
+                  </li>
                 );
               })}
+            </ul>
+            {participants.length > 0 && !sumOk && amountCents !== null && (
+              <p className="mt-1 text-[12px] text-rose-600 dark:text-rose-400">
+                {t('expenses.form.sharesSumHint', { sum: fmtMoney(sharesSum, i18n.language), total: fmtMoney(amountCents, i18n.language) })}
+              </p>
+            )}
+          </div>
+
+          {/* Método + etapa */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <span className="block text-[12px] font-semibold tracking-wide uppercase text-faint mb-1.5">{t('expenses.form.method')}</span>
+              <div className="flex flex-wrap gap-1.5">
+                {METHODS.map((m) => (
+                  <button key={m} type="button" onClick={() => setMethod(method === m ? null : m)} className={pill(method === m)}>
+                    {t(`expenses.${m}`)}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <span className="block text-[12px] font-semibold tracking-wide uppercase text-faint mb-1.5">{t('expenses.form.step')}</span>
+              <div className="flex flex-wrap gap-1.5">
+                {STEPS.map((st) => (
+                  <button key={st} type="button" onClick={() => setStep(st)} className={pill(step === st)}>
+                    {t(`expenseSteps.${st}`)}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
           {/* Notas */}
           <div>
-            <label className="block text-xs font-medium text-muted mb-1">
+            <label className="block text-[12px] font-semibold tracking-wide uppercase text-faint mb-1.5" htmlFor="exp-notes">
               {t('expenses.notes')}
             </label>
             <textarea
+              id="exp-notes"
+              rows={2}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder={t('expenses.form.notesPlaceholder')}
-              rows={2}
-              className="w-full px-3 py-2 rounded-lg bg-surface2 border border-app text-sm text-text placeholder:text-faint focus:outline-none focus:border-brand resize-none"
+              className="w-full bg-surface2 border border-app rounded-xl px-3.5 py-2.5 text-[15px] font-medium outline-none focus:border-brand resize-none"
             />
           </div>
 
-          {/* Yo ya he pagado */}
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={paidByCreator}
-              onChange={(e) => setPaidByCreator(e.target.checked)}
-              className="w-4 h-4 rounded border-border-strong text-brand focus:ring-brand"
-            />
-            <span className="text-sm text-muted">{t('expenses.iPaid')}</span>
-          </label>
-
-          {/* Método de pago */}
-          <div>
-            <label className="block text-xs font-medium text-muted mb-1">
-              {t('expenses.paymentMethod')}
-            </label>
-            <div className="flex gap-1.5">
-              {(['bizum', 'transfer', 'efectivo'] as const).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => setPaymentMethod(paymentMethod === m ? null : m)}
-                  className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
-                    paymentMethod === m
-                      ? 'bg-brand/15 text-brand'
-                      : 'text-muted hover:bg-surface2 hover:text-text border border-app'
-                  }`}
-                >
-                  {t(`expenses.${m}`)}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Requerir pago */}
-          <div>
-            <label className="block text-xs font-medium text-muted mb-1">
-              {t('expenses.requestPayment')}
-            </label>
-            <select
-              value={requestedUserId ?? ''}
-              onChange={(e) => {
-                const val = e.target.value || null;
-                setRequestedUserId(val);
-                if (!val) setSplitType(null);
-              }}
-              className="w-full px-3 py-2 rounded-lg bg-surface2 border border-app text-sm text-text focus:outline-none focus:border-brand"
-            >
-              <option value="">{t('expenses.noRequest')}</option>
-              {users.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.username}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Split */}
-          {requestedUserId && (
-            <div>
-              <label className="block text-xs font-medium text-muted mb-1">
-                {t('expenses.split')}
-              </label>
-              <div className="flex gap-1.5">
-                {(['half', 'custom', 'full'] as const).map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => setSplitType(s)}
-                    className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
-                      splitType === s
-                        ? 'bg-brand/15 text-brand'
-                        : 'text-muted hover:bg-surface2 hover:text-text border border-app'
-                    }`}
-                  >
-                    {t(`expenses.split${s.charAt(0).toUpperCase() + s.slice(1)}`)}
-                  </button>
-                ))}
-              </div>
-              {splitType === 'custom' && (
-                <div className="mt-2">
-                  <label className="block text-xs font-medium text-muted mb-1">
-                    {t('expenses.splitAmount')}
-                  </label>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={splitAmountText}
-                    onChange={(e) => setSplitAmountText(e.target.value)}
-                    placeholder={t('expenses.form.amountPlaceholder')}
-                    className="w-full px-3 py-2 rounded-lg bg-surface2 border border-app text-sm text-text placeholder:text-faint focus:outline-none focus:border-brand"
-                  />
-                </div>
-              )}
-            </div>
+          {error && (
+            <p role="alert" className="text-[13px] font-medium text-rose-600 dark:text-rose-400">
+              {error}
+            </p>
           )}
-
-          {/* Columna (step) */}
-          <div>
-            <label className="block text-xs font-medium text-muted mb-1">
-              {t('newTask.column')}
-            </label>
-            <div className="flex gap-1.5">
-              {STEPS.map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => setStep(s)}
-                  className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                    step === s
-                      ? 'bg-brand/15 text-brand'
-                      : 'text-muted hover:bg-surface2 hover:text-text border border-app'
-                  }`}
-                >
-                  {t(`expenseSteps.${s}`)}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Sección del usuario requerido */}
-          {isEdit && isRequested && expense && (
-            <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 dark:bg-amber-900/20 dark:border-amber-800">
-              <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
-                {expense.created_by_username} {t('expenses.requestPayment')}:{' '}
-                {fmtMoney(splitCents(expense), i18n.language)}
-              </p>
-              {expense.paid_by_requested ? (
-                <p className="text-sm text-emerald-700 dark:text-emerald-300 mt-1">
-                  {t('expenses.payMyPartDone')}
-                </p>
-              ) : (
-                <button
-                  type="button"
-                  onClick={handlePayMyPart}
-                  className="mt-2 px-3 py-1.5 rounded-lg text-sm font-medium bg-emerald-500 text-white hover:bg-emerald-600 transition-colors"
-                >
-                  {t('expenses.payMyPart')}
-                </button>
-              )}
-            </div>
-          )}
-
-          {/* They paid badge */}
-          {isEdit &&
-            expense &&
-            expense.requested_user_id &&
-            expense.paid_by_requested &&
-            !isRequested && (
-              <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-800">
-                <p className="text-sm text-emerald-700 dark:text-emerald-300">
-                  {t('expenses.theyPaid', { name: expense.requested_username })}
-                </p>
-              </div>
-            )}
-
-          {error && <p className="text-sm text-rose-600 dark:text-rose-400">{error}</p>}
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-5 py-3 border-t border-app">
-          <div>
-            {isEdit && isCreator && expense && (
-              <button
-                type="button"
-                onClick={handleDelete}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                  deleteArmed
-                    ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300'
-                    : 'text-muted hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-900/20'
-                }`}
-              >
-                {deleteArmed ? t('expenses.form.deleteConfirm') : t('expenses.form.delete')}
-              </button>
-            )}
-          </div>
-          <div className="flex gap-2">
+        <div className="px-5 py-4 border-t border-app space-y-2">
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={saving}
+            className="w-full h-12 rounded-xl bg-brand text-brandfg text-[15px] font-semibold hover:brightness-110 disabled:opacity-60 shadow-soft"
+          >
+            {saving
+              ? isEdit
+                ? t('expenses.form.saving')
+                : t('expenses.form.creating')
+              : isEdit
+                ? t('common.save')
+                : t('expenses.form.create')}
+          </button>
+          <div className="flex items-center justify-between">
+            <div>
+              {isEdit && isCreator && expense && (
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                    deleteArmed
+                      ? 'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300'
+                      : 'text-muted hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/10'
+                  }`}
+                >
+                  {deleteArmed ? t('expenses.form.deleteConfirm') : t('expenses.form.delete')}
+                </button>
+              )}
+            </div>
             <button
               type="button"
-              onClick={props.onClose}
-              className="px-4 py-1.5 rounded-lg text-sm text-muted hover:bg-surface2 hover:text-text transition-colors"
+              onClick={onClose}
+              className="px-4 py-2 rounded-lg text-sm text-muted hover:bg-surface2 hover:text-text transition-colors"
             >
               {t('common.cancel')}
-            </button>
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={saving}
-              className="px-4 py-1.5 rounded-lg text-sm font-medium bg-brand text-brandfg hover:opacity-90 transition-opacity disabled:opacity-50"
-            >
-              {saving
-                ? isEdit
-                  ? t('expenses.form.saving')
-                  : t('expenses.form.creating')
-                : isEdit
-                  ? t('common.save')
-                  : t('expenses.form.create')}
             </button>
           </div>
         </div>
       </div>
     </div>
   );
-}
-
-function splitCents(expense: Expense): number {
-  if (expense.split_type === 'half') return Math.round(expense.amount_cents / 2);
-  if (expense.split_type === 'custom' && expense.split_amount_cents)
-    return expense.split_amount_cents;
-  return expense.amount_cents;
 }

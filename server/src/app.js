@@ -14,6 +14,7 @@ import { z } from 'zod'
 import * as auth from './auth.js'
 import { kvGet } from './db.js'
 import { registerDomainRoutes } from './routes-domain.js'
+import { registerExpenseRoutes } from './routes-expenses.js'
 import { registerPushRoutes } from './routes-push.js'
 import { registerHealth } from './health.js'
 import { wideEvent } from './wide-event.js'
@@ -283,6 +284,7 @@ export function createApp(ctx) {
   })
 
   registerDomainRoutes(app, { hub, uploadsDir: ctx.uploadsDir, prod, config, dataDir: ctx.dataDir })
+  registerExpenseRoutes(app, { prod, hub, uploadsDir: ctx.uploadsDir })
   registerPushRoutes(app)
   registerHealth(app, { prod, demo })
 
@@ -297,7 +299,14 @@ export function createApp(ctx) {
     await next()
     if (c.res.ok) c.header('Cache-Control', 'no-cache')
   })
-  // Sin onNotFound (la firma no es la del contexto Hono → 500 en assets).
+  // El index.html debe servirse con no-cache para que los despliegues se
+  // vean sin que el navegador/NPM cacheen el HTML (que referencia los chunks
+  // con hash). serveStatic responde sin pasar por el fallback de abajo.
+  app.use('/*', async (c, next) => {
+    await next()
+    const ct = c.res.headers?.get?.('content-type') || ''
+    if (ct.includes('text/html')) c.header('Cache-Control', 'no-cache')
+  })
   app.use('/*', serveStatic({ root: config.staticDir }))
   app.get('*', (c) => {
     const p = c.req.path

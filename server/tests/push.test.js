@@ -203,7 +203,7 @@ describe('motor notifyUsers', () => {
     let prefs = (await res.json()).prefs
     expect(prefs.asignacion).toBe(true)
     expect(prefs.vencimiento).toBe(true)
-    expect(Object.keys(prefs).sort()).toEqual(['asignacion', 'comentario', 'mencion', 'tarea_movida', 'vencimiento'])
+    expect(Object.keys(prefs).sort()).toEqual(['asignacion', 'comentario', 'mencion', 'pago_completado', 'pago_requerido', 'tarea_movida', 'vencimiento'])
 
     // Desactiva 'comentario'
     res = await inst.app.request(

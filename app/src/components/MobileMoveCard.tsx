@@ -9,6 +9,30 @@ const CLEANUP_GUARD_MS = 500; /* red de seguridad: nada queda pegado */
 
 const reducedMotionMQ = window.matchMedia('(prefers-reduced-motion: reduce)');
 
+/* Diagnóstico en pantalla: localStorage.setItem('dnd_debug','1') y recargar.
+   Muestra cada paso del gesto para localizar dónde se rompe en dispositivo real. */
+const DBG = (() => {
+  try {
+    return localStorage.getItem('dnd_debug') === '1';
+  } catch {
+    return false;
+  }
+})();
+function dbg(msg: string) {
+  if (!DBG) return;
+  let el = document.getElementById('dnd-debug');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'dnd-debug';
+    el.style.cssText =
+      'position:fixed;bottom:96px;left:8px;right:8px;z-index:200;background:rgba(0,0,0,.82);' +
+      'color:#4ade80;font:11px/1.5 monospace;padding:8px;border-radius:10px;' +
+      'pointer-events:none;white-space:pre-wrap';
+    document.body.appendChild(el);
+  }
+  el.textContent = `${el.textContent}\n${msg}`.split('\n').slice(-9).join('\n');
+}
+
 interface Props {
   id: string;
   current: string;
@@ -157,6 +181,7 @@ export function MobileMoveCard({ id, current, steps, onMove, children }: Props) 
       if (!card) return;
       lifted.current = true;
       justDragged.current = true;
+      dbg('LIFT: clon creado, scroll bloqueado a partir de ahora');
       navigator.vibrate?.(12);
       const rect = card.getBoundingClientRect();
       origin.current = rect;
@@ -192,6 +217,7 @@ export function MobileMoveCard({ id, current, steps, onMove, children }: Props) 
       start.current = { x: t.clientX, y: t.clientY };
       last.current = { y: t.clientY, t: performance.now(), vy: 0 };
       justDragged.current = false;
+      dbg(`start (${Math.round(t.clientX)},${Math.round(t.clientY)}) scrollY=${window.scrollY}`);
       timer.current = window.setTimeout(() => {
         timer.current = null;
         lift();
@@ -205,12 +231,18 @@ export function MobileMoveCard({ id, current, steps, onMove, children }: Props) 
       const dy = t.clientY - start.current.y;
       if (!lifted.current) {
         if (Math.hypot(dx, dy) > SCROLL_SLOP) {
+          dbg(
+            `hold cancelado por movimiento (${Math.round(dx)},${Math.round(dy)}) → scroll normal`,
+          );
           cancelHold(); /* es un scroll normal */
           start.current = null;
         }
         return;
       }
       e.preventDefault(); /* levantada: la página no scrollea */
+      dbg(
+        `move (${Math.round(dx)},${Math.round(dy)}) cancelable=${e.cancelable} prevented=${e.defaultPrevented}`,
+      );
       const now = performance.now();
       const dt = now - last.current.t || 1;
       last.current = { y: t.clientY, t: now, vy: (t.clientY - last.current.y) / dt };
@@ -225,6 +257,7 @@ export function MobileMoveCard({ id, current, steps, onMove, children }: Props) 
     };
 
     const onTouchEnd = (e: TouchEvent) => {
+      dbg(`end type=${e.type} lifted=${lifted.current}`);
       cancelHold();
       if (!lifted.current || !start.current) {
         start.current = null;
@@ -234,6 +267,7 @@ export function MobileMoveCard({ id, current, steps, onMove, children }: Props) 
       const dy = t.clientY - start.current.y;
       const tab = tabUnder(t.clientX, t.clientY);
       if (tab && tab.dataset.seg && tab.dataset.seg !== current) {
+        dbg(`drop en etapa ${tab.dataset.seg} → vuelo`);
         flyTo(tab, tab.dataset.seg);
         return;
       }
