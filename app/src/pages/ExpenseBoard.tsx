@@ -499,7 +499,7 @@ export default function ExpenseBoard() {
               ))}
               {(byStep.get(seg) ?? []).length === 0 && (
                 <p className="rounded-2xl border border-dashed border-app px-4 py-8 text-center text-[15px] text-muted">
-                  {t('board.emptyState', { column: t(`expenseSteps.${seg}`) })}
+                  {t('expenses.emptyState', { column: t(`expenseSteps.${seg}`) })}
                 </p>
               )}
             </div>
@@ -565,7 +565,7 @@ export default function ExpenseBoard() {
                           data-empty
                           className="rounded-2xl border border-dashed border-app px-4 py-6 text-center text-sm text-muted"
                         >
-                          {t('board.emptyColumn')}
+                          {t('expenses.emptyColumn')}
                         </p>
                       )}
                     </div>

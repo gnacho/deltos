@@ -258,7 +258,14 @@
     "settledUp": "Todo en paz: nadie debe nada.",
     "balanceOwesYou": "{{name}} te debe {{amount}}",
     "balanceYouOwe": "Debes {{amount}} a {{name}}",
-    "balancePair": "{{from}} debe {{amount}} a {{to}}"
+    "balancePair": "{{from}} debe {{amount}} a {{to}}",
+    "settle": "Saldar",
+    "settleConfirm": "¿Confirmar? Marca todo como pagado",
+    "settleDone_one": "Saldado: {{count}} gasto",
+    "settleDone_other": "Saldado: {{count}} gastos",
+    "emptyColumn": "Sin gastos",
+    "emptyState": "Sin gastos en «{{column}}»",
+    "etapa": "Etapa"
   },
   "newTask": {
     "title": "Nueva tarea",

@@ -258,7 +258,14 @@
     "settledUp": "All settled: nobody owes anything.",
     "balanceOwesYou": "{{name}} owes you {{amount}}",
     "balanceYouOwe": "You owe {{amount}} to {{name}}",
-    "balancePair": "{{from}} owes {{amount}} to {{to}}"
+    "balancePair": "{{from}} owes {{amount}} to {{to}}",
+    "settle": "Settle up",
+    "settleConfirm": "Confirm? Marks everything as paid",
+    "settleDone_one": "Settled: {{count}} expense",
+    "settleDone_other": "Settled: {{count}} expenses",
+    "emptyColumn": "No expenses",
+    "emptyState": "No expenses in \"{{column}}\"",
+    "etapa": "Stage"
   },
   "newTask": {
     "title": "New task",

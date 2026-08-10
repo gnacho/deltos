@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Info, Paperclip, MessageCircle, Clock } from 'lucide-react';
+import { X, Info, Paperclip, MessageCircle, Clock, Trash2 } from 'lucide-react';
 import type { FormEvent } from 'react';
 import { useData } from '@/data/data-context';
 import { useSession } from '@/auth/session-context';
@@ -285,7 +285,7 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
       />
       <div
         ref={panelRef}
-        className="relative w-full h-full lg:h-auto lg:max-h-[88vh] lg:max-w-2xl bg-surface lg:rounded-2xl border border-app shadow-2xl overflow-y-auto nice-scroll"
+        className="relative w-full h-full lg:h-auto lg:max-h-[88vh] lg:max-w-2xl bg-surface lg:rounded-2xl border border-app shadow-2xl overflow-hidden flex flex-col"
       >
         {/* Cabecera fija: título + tab bar (mismo patrón que TaskModal) */}
         <div className="sticky top-0 z-10 bg-surface/95 backdrop-blur border-b border-app">
@@ -350,12 +350,13 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
         </div>
 
         {/* Contenido */}
+        <div className="flex-1 overflow-y-auto nice-scroll">
         <div className="px-5 lg:px-7 py-5 pb-8">
           {/* --- DETALLES --- */}
           {tab === 'detalles' && (
             <div className="space-y-3.5 max-w-2xl">
-              {/* Título editable */}
-              <div className="flex items-center gap-3">
+              {/* Título + Importe */}
+              <div className="flex items-start gap-4">
                 <div className="flex-1">
                   <p className="text-[12px] font-semibold tracking-wide uppercase text-faint mb-1">
                     {t('expenses.form.titleLabel')}
@@ -372,104 +373,123 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
                     className="w-full bg-transparent text-[16px] font-medium outline-none border-b border-transparent focus:border-brand pb-0.5"
                   />
                 </div>
-              </div>
-
-              {/* Columna */}
-              <div>
-                <p className="text-[12px] font-semibold tracking-wide uppercase text-faint mb-1">
-                  {t('newTask.column')}
-                </p>
-                <div className="flex gap-1.5">
-                  {STEPS.map((s) => (
-                    <button
-                      key={s}
-                      onClick={() => handleMove(s)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                        expense.step === s
-                          ? 'bg-brand/15 text-brand'
-                          : 'text-muted hover:bg-surface2 border border-app'
-                      }`}
-                    >
-                      {t(`expenseSteps.${s}`)}
-                    </button>
-                  ))}
+                <div className="shrink-0">
+                  <p className="text-[12px] font-semibold tracking-wide uppercase text-faint mb-1">
+                    {t('expenses.amount')}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      defaultValue={(expense.amount_cents / 100).toFixed(2).replace('.', ',')}
+                      onBlur={(e) => {
+                        const n = parseFloat(e.target.value.replace(',', '.'));
+                        if (!isNaN(n) && n > 0) patch({ amount_cents: Math.round(n * 100) });
+                      }}
+                      className="w-28 px-3 py-2 rounded-lg bg-surface2 border border-app text-sm text-text focus:outline-none focus:border-brand"
+                    />
+                    <span className="text-sm text-muted">EUR</span>
+                  </div>
                 </div>
               </div>
 
-              {/* Importe */}
-              <div>
-                <p className="text-[12px] font-semibold tracking-wide uppercase text-faint mb-1">
-                  {t('expenses.amount')}
-                </p>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    defaultValue={(expense.amount_cents / 100).toFixed(2).replace('.', ',')}
-                    onBlur={(e) => {
-                      const n = parseFloat(e.target.value.replace(',', '.'));
-                      if (!isNaN(n) && n > 0) patch({ amount_cents: Math.round(n * 100) });
-                    }}
-                    className="w-28 px-3 py-2 rounded-lg bg-surface2 border border-app text-sm text-text focus:outline-none focus:border-brand"
-                  />
-                  <span className="text-sm text-muted">EUR</span>
-                </div>
-              </div>
-
-              {/* Categoría */}
-              <div>
-                <p className="text-[12px] font-semibold tracking-wide uppercase text-faint mb-1">
-                  {t('expenses.category')}
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  <button
-                    onClick={() => patch({ label_id: null })}
-                    className={`px-2 py-0.5 rounded text-xs font-medium ${!expense.label_id ? 'bg-brand/15 text-brand' : 'text-muted hover:bg-surface2'}`}
-                  >
-                    {t('common.none')}
-                  </button>
-                  {labels.map((l) => {
-                    const c = colorOf(l.color);
-                    return (
+              {/* Etapa + Categoría */}
+              <div className="flex items-start gap-4">
+                <div className="flex-1">
+                  <p className="text-[12px] font-semibold tracking-wide uppercase text-faint mb-1">
+                    {t('expenses.etapa')}
+                  </p>
+                  <div className="flex gap-1.5">
+                    {STEPS.map((s) => (
                       <button
-                        key={l.id}
-                        onClick={() => patch({ label_id: l.id })}
-                        className="px-2 py-0.5 rounded text-xs font-medium"
-                        style={
-                          expense.label_id === l.id
-                            ? { backgroundColor: c.chip + '30', color: c.chip }
-                            : {}
-                        }
+                        key={s}
+                        onClick={() => handleMove(s)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                          expense.step === s
+                            ? 'bg-brand/15 text-brand'
+                            : 'text-muted hover:bg-surface2 border border-app'
+                        }`}
                       >
-                        {l.name}
+                        {t(`expenseSteps.${s}`)}
                       </button>
-                    );
-                  })}
+                    ))}
+                  </div>
+                </div>
+                <div className="flex-1">
+                  <p className="text-[12px] font-semibold tracking-wide uppercase text-faint mb-1">
+                    {t('expenses.category')}
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      onClick={() => patch({ label_id: null })}
+                      className={`px-2 py-0.5 rounded text-xs font-medium ${!expense.label_id ? 'bg-brand/15 text-brand' : 'text-muted hover:bg-surface2'}`}
+                    >
+                      {t('common.none')}
+                    </button>
+                    {labels.map((l) => {
+                      const c = colorOf(l.color);
+                      return (
+                        <button
+                          key={l.id}
+                          onClick={() => patch({ label_id: l.id })}
+                          className="px-2 py-0.5 rounded text-xs font-medium"
+                          style={
+                            expense.label_id === l.id
+                              ? { backgroundColor: c.chip + '30', color: c.chip }
+                              : {}
+                          }
+                        >
+                          {l.name}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 
-              {/* Método de pago */}
-              <div>
-                <p className="text-[12px] font-semibold tracking-wide uppercase text-faint mb-1">
-                  {t('expenses.paymentMethod')}
-                </p>
-                <div className="flex gap-1.5">
-                  {(['bizum', 'transfer', 'efectivo'] as const).map((m) => (
-                    <button
-                      key={m}
-                      onClick={() =>
-                        patch({ payment_method: expense.payment_method === m ? null : m })
-                      }
-                      className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
-                        expense.payment_method === m
-                          ? 'bg-brand/15 text-brand'
-                          : 'text-muted hover:bg-surface2 border border-app'
-                      }`}
-                    >
-                      {t(`expenses.${m}`)}
-                    </button>
-                  ))}
+              {/* Método de pago + Pagado */}
+              <div className="flex items-center gap-4">
+                <div className="flex-1">
+                  <p className="text-[12px] font-semibold tracking-wide uppercase text-faint mb-1">
+                    {t('expenses.paymentMethod')}
+                  </p>
+                  <div className="flex gap-1.5">
+                    {(['bizum', 'transfer', 'efectivo'] as const).map((m) => (
+                      <button
+                        key={m}
+                        onClick={() =>
+                          patch({ payment_method: expense.payment_method === m ? null : m })
+                        }
+                        className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
+                          expense.payment_method === m
+                            ? 'bg-brand/15 text-brand'
+                            : 'text-muted hover:bg-surface2 border border-app'
+                        }`}
+                      >
+                        {t(`expenses.${m}`)}
+                      </button>
+                    ))}
+                  </div>
                 </div>
+                {expense.paid_by_creator ? (
+                  <button
+                    type="button"
+                    onClick={() => patch({ paid_by_creator: false })}
+                    className="shrink-0 px-3.5 py-2 rounded-xl text-[13px] font-medium bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300 hover:bg-emerald-100"
+                  >
+                    {t('expenses.paid')}
+                  </button>
+                ) : (
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={expense.paid_by_creator}
+                      onChange={(e) => patch({ paid_by_creator: e.target.checked })}
+                      className="w-4 h-4 rounded border-border-strong text-brand focus:ring-brand"
+                    />
+                    <span className="text-sm text-muted">{t('expenses.iPaid')}</span>
+                  </label>
+                )}
               </div>
 
               {/* Notas */}
@@ -482,69 +502,59 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
                   onBlur={(e) => {
                     if (e.target.value !== expense.notes) patch({ notes: e.target.value });
                   }}
-                  rows={3}
+                  rows={2}
                   placeholder={t('expenses.form.notesPlaceholder')}
                   className="w-full px-3 py-2 rounded-lg bg-surface2 border border-app text-sm text-text focus:outline-none focus:border-brand resize-none"
                 />
               </div>
 
-              {/* Yo pagué */}
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={expense.paid_by_creator}
-                  onChange={(e) => patch({ paid_by_creator: e.target.checked })}
-                  className="w-4 h-4 rounded border-border-strong text-brand focus:ring-brand"
-                />
-                <span className="text-sm text-muted">{t('expenses.iPaid')}</span>
-              </label>
-
-              {/* Requerir pago */}
-              <div>
-                <p className="text-[12px] font-semibold tracking-wide uppercase text-faint mb-1">
-                  {t('expenses.requestPayment')}
-                </p>
-                <select
-                  value={expense.requested_user_id ?? ''}
-                  onChange={(e) => {
-                    const val = e.target.value || null;
-                    if (!val) patch({ requested_user_id: null, split_type: null });
-                    else if (!expense.split_type) patch({ requested_user_id: val, split_type: 'full' });
-                    else patch({ requested_user_id: val });
-                  }}
-                  className="w-full px-3 py-2 rounded-lg bg-surface2 border border-app text-sm text-text focus:outline-none focus:border-brand"
-                >
-                  <option value="">{t('expenses.noRequest')}</option>
-                  {users.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.username}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {expense.requested_user_id && (
-                <div>
+              {/* Solicitar pago + División */}
+              <div className="flex items-start gap-4">
+                <div className="flex-1">
                   <p className="text-[12px] font-semibold tracking-wide uppercase text-faint mb-1">
-                    {t('expenses.split')}
+                    {t('expenses.requestPayment')}
                   </p>
-                  <div className="flex gap-1.5">
-                    {(['half', 'custom', 'full'] as const).map((s) => (
-                      <button
-                        key={s}
-                        onClick={() => patch({ split_type: s })}
-                        className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
-                          expense.split_type === s
-                            ? 'bg-brand/15 text-brand'
-                            : 'text-muted hover:bg-surface2 border border-app'
-                        }`}
-                      >
-                        {t(`expenses.split${s.charAt(0).toUpperCase() + s.slice(1)}`)}
-                      </button>
+                  <select
+                    value={expense.requested_user_id ?? ''}
+                    onChange={(e) => {
+                      const val = e.target.value || null;
+                      if (!val) patch({ requested_user_id: null, split_type: null });
+                      else if (!expense.split_type) patch({ requested_user_id: val, split_type: 'full' });
+                      else patch({ requested_user_id: val });
+                    }}
+                    className="w-full px-3 py-2 rounded-lg bg-surface2 border border-app text-sm text-text focus:outline-none focus:border-brand"
+                  >
+                    <option value="">{t('expenses.noRequest')}</option>
+                    {users.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.username}
+                      </option>
                     ))}
-                  </div>
+                  </select>
                 </div>
-              )}
+                {expense.requested_user_id && (
+                  <div className="flex-1">
+                    <p className="text-[12px] font-semibold tracking-wide uppercase text-faint mb-1">
+                      {t('expenses.split')}
+                    </p>
+                    <div className="flex gap-1.5">
+                      {(['half', 'custom', 'full'] as const).map((s) => (
+                        <button
+                          key={s}
+                          onClick={() => patch({ split_type: s })}
+                          className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
+                            expense.split_type === s
+                              ? 'bg-brand/15 text-brand'
+                              : 'text-muted hover:bg-surface2 border border-app'
+                          }`}
+                        >
+                          {t(`expenses.split${s.charAt(0).toUpperCase() + s.slice(1)}`)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
 
               {/* Sección del requerido */}
               {expense.requested_user_id === user?.id && (
@@ -577,15 +587,17 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
 
               {/* Delete */}
               {isCreator && (
-                <div className="pt-4 border-t border-app">
+                <div className="pt-4 border-t border-app flex justify-end">
                   <button
+                    type="button"
                     onClick={handleDeleteExpense}
-                    className={`px-3 py-2 rounded-lg text-[13px] font-medium transition-colors ${
+                    className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[13px] font-medium ${
                       deleteArmed
-                        ? 'bg-rose-600 text-white'
-                        : 'text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20'
+                        ? 'bg-rose-600 text-white hover:bg-rose-700'
+                        : 'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300 hover:bg-rose-200/70 dark:hover:bg-rose-500/25'
                     }`}
                   >
+                    <Trash2 className="w-4 h-4" aria-hidden="true" />
                     {deleteArmed ? t('expenses.form.deleteConfirm') : t('expenses.form.delete')}
                   </button>
                 </div>
@@ -774,6 +786,7 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
               )}
             </div>
           )}
+        </div>
         </div>
       </div>
 
