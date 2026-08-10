@@ -226,16 +226,10 @@ export default function ExpenseBoard() {
             <h1 className="font-display font-bold text-2xl lg:text-[28px] tracking-tight">
               {t('expenses.title')}
             </h1>
-            <p className="text-sm text-muted mt-0.5">{t('expenses.subtitle')}</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <p className="tnum text-sm text-muted">
-              {t('expenses.openCount', { count: openCount })}
-            </p>
           </div>
         </div>
 
-        {/* Vista: Tablero | Resumen + Alcance */}
+        {/* Vista: Tablero | Resumen + Alcance + Nuevo gasto */}
         <div className="mb-5 flex flex-wrap items-center gap-2">
           <div
             role="tablist"
@@ -260,6 +254,42 @@ export default function ExpenseBoard() {
               );
             })}
           </div>
+
+          {view === 'tablero' && (
+            <div
+              role="tablist"
+              aria-label={t('board.scopeAria')}
+              className="inline-flex items-center gap-1 rounded-full bg-surface2 p-1"
+            >
+              {scopes.map((s) => {
+                const active = filter === s.id;
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    onClick={() => setFilter(s.id)}
+                    className={`rounded-full px-3.5 h-9 text-[13px] font-medium whitespace-nowrap transition-colors ${
+                      active ? 'bg-surface shadow-soft text-text' : 'text-muted hover:text-text'
+                    }`}
+                  >
+                    {s.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={() => handleOpenNew()}
+            className="inline-flex items-center gap-2 rounded-2xl bg-brand text-brandfg px-5 py-2.5 text-[14px] font-semibold hover:brightness-110 shadow-soft"
+            aria-label={t('expenses.new')}
+          >
+            <Plus className="w-5 h-5" aria-hidden="true" />
+            {t('expenses.new')}
+          </button>
         </div>
 
         {view === 'resumen' ? (
@@ -269,33 +299,6 @@ export default function ExpenseBoard() {
         ) : (
           <>
             <BalanceStrip expenses={expenses} />
-
-            {/* Alcance: Todas / Mías / De otras */}
-            <div className="mb-5">
-              <div
-                role="tablist"
-                aria-label={t('board.scopeAria')}
-                className="inline-flex items-center gap-1 rounded-full bg-surface2 p-1"
-              >
-                {scopes.map((s) => {
-                  const active = filter === s.id;
-                  return (
-                    <button
-                      key={s.id}
-                      type="button"
-                      role="tab"
-                      aria-selected={active}
-                      onClick={() => setFilter(s.id)}
-                      className={`rounded-full px-3.5 h-9 text-[13px] font-medium whitespace-nowrap transition-colors ${
-                        active ? 'bg-surface shadow-soft text-text' : 'text-muted hover:text-text'
-                      }`}
-                    >
-                      {s.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
 
             {/* Lista móvil (<lg): un solo estado */}
             <div
@@ -396,6 +399,10 @@ export default function ExpenseBoard() {
             </div>
           </>
         )}
+      </div>
+
+      <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 pb-4">
+        <p className="text-sm text-muted">{t('expenses.openCount', { count: openCount })}</p>
       </div>
 
       {/* FAB móvil: nuevo gasto */}

@@ -469,8 +469,6 @@ export default function Layout() {
             </IconNavLink>
           </nav>
           <div className="flex flex-col items-center gap-2">
-            <ConnectionDot withLabel={false} />
-            <ThemeToggleButton mobile />
             <button
               type="button"
               onClick={toggleCollapse}
@@ -556,15 +554,11 @@ export default function Layout() {
             </div>
           </nav>
 
-          <div className="border-t border-app p-3 space-y-1">
-            <div className="px-3 pb-1">
-              <ConnectionDot />
-            </div>
+          <div className="border-t border-app p-3 space-y-2">
             <div className="flex items-center gap-2">
-              <ThemeToggleButton mobile />
               <NavLink
                 to="/settings"
-                className={`flex h-9 flex-1 items-center gap-2 rounded-lg px-3 text-sm font-medium transition-colors ${
+                className={`flex h-9 flex-1 items-center justify-center gap-2 rounded-lg px-3 text-sm font-medium transition-colors ${
                   location.pathname.startsWith('/settings')
                     ? 'bg-surface2'
                     : 'text-muted hover:bg-surface2'
@@ -615,10 +609,6 @@ export default function Layout() {
             <Settings className="w-[18px] h-[18px]" aria-hidden="true" />
           </IconNavLink>
         </nav>
-        <div className="flex flex-col items-center gap-2">
-          <ConnectionDot withLabel={false} />
-          <ThemeToggleButton mobile />
-        </div>
       </aside>
 
       {/* ============ TOPBAR (md+) ============ */}
@@ -627,9 +617,12 @@ export default function Layout() {
         style={{ paddingTop: 'env(safe-area-inset-top)' }}
       >
         <h1 className="font-display font-bold text-lg tracking-tight truncate">{title}</h1>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           {boardSelect}
-          <ConnectionDot withLabel={false} />
+          <div className="flex items-center gap-2">
+            <Avatar name={user.username} color={user.color} size="sm" />
+            <span className="text-sm font-medium truncate max-w-[120px]">{user.username}</span>
+          </div>
           <ThemeToggleButton mobile />
         </div>
       </header>

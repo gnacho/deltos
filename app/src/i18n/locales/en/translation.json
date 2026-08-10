@@ -39,7 +39,7 @@
     "boardSelect": "Project",
     "collapse": "Collapse menu",
     "expand": "Expand menu",
-    "expenses": "Expenses"
+    "expenses": "Board-summary"
   },
   "columns": {
     "nuevo": "New",
@@ -65,7 +65,7 @@
     "none": "No date"
   },
   "board": {
-    "todoSubtitle": "Every project on a single board",
+    "todoSubtitle": "",
     "projectSubtitle": "Project board",
     "openTasks_one": "{{count}} open task",
     "openTasks_other": "{{count}} open tasks",
@@ -199,7 +199,7 @@
     "project": "<strong>{{user}}</strong> moved the card to project {{to}}"
   },
   "expenses": {
-    "title": "Expenses",
+    "title": "Board-summary",
     "subtitle": "Shared expense tracking with payment splits.",
     "empty": "No expenses yet. Create the first one with the button above.",
     "filterOwe": "I owe",
@@ -464,7 +464,7 @@
       "updateNow": "Update and reload",
       "stack": "Node 24 · Hono · SQLite · React 19",
       "code": "Source on GitHub",
-      "changelog": "Changelog",
+      "changelog": "Project website",
       "kofi": "Support the project on Ko-fi",
       "privacy": "100% private · 0% cloud"
     },

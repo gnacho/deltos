@@ -28,18 +28,18 @@
     "errorGeneric": "No se ha podido iniciar sesión"
   },
   "nav": {
-    "todo": "Todo",
+    "todo": "Por hacer",
     "projects": "Proyectos",
     "activity": "Actividad",
     "settings": "Ajustes",
     "main": "Navegación principal",
-    "goTodo": "Ir a la vista Todo",
+    "goTodo": "Ir a Por hacer",
     "currentAccount": "Cuenta actual",
     "projectsSection": "PROYECTOS",
     "boardSelect": "Proyecto",
     "collapse": "Plegar menú",
     "expand": "Desplegar menú",
-    "expenses": "Gastos"
+    "expenses": "Tablero-resumen"
   },
   "columns": {
     "nuevo": "Nuevo",
@@ -65,7 +65,7 @@
     "none": "Sin fecha"
   },
   "board": {
-    "todoSubtitle": "Todos los proyectos en un solo tablero",
+    "todoSubtitle": "",
     "projectSubtitle": "Tablero del proyecto",
     "openTasks_one": "{{count}} tarea abierta",
     "openTasks_other": "{{count}} tareas abiertas",
@@ -199,7 +199,7 @@
     "project": "<strong>{{user}}</strong> movió la tarjeta al proyecto {{to}}"
   },
   "expenses": {
-    "title": "Gastos",
+    "title": "Tablero-resumen",
     "subtitle": "Registro de gastos compartidos con división de pagos.",
     "empty": "Sin gastos todavía. Crea el primero con el botón de arriba.",
     "filterOwe": "Debo",
@@ -464,7 +464,7 @@
       "updateNow": "Actualizar y recargar",
       "stack": "Node 24 · Hono · SQLite · React 19",
       "code": "Código en GitHub",
-      "changelog": "Cambios",
+      "changelog": "Web del proyecto",
       "kofi": "Apoya el proyecto en Ko-fi",
       "privacy": "100% privado · 0% nube"
     },
