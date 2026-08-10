@@ -325,6 +325,7 @@
     "shareLink": "Invitar por enlace",
     "linkCopied": "Enlace copiado al portapapeles",
     "copyLink": "Crear enlace",
+    "nameRequired": "Escribe un nombre para la invitación",
     "revoke": "Revocar",
     "namePlaceholder": "Nombre de la persona",
     "notesPlaceholder": "Nota para la persona invitada"

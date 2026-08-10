@@ -325,6 +325,7 @@
     "shareLink": "Share invite link",
     "linkCopied": "Link copied to clipboard",
     "copyLink": "Create link",
+    "nameRequired": "Enter a name for the invitation",
     "revoke": "Revoke",
     "namePlaceholder": "Person's name",
     "notesPlaceholder": "Note for the invited person"
