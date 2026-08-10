@@ -240,8 +240,25 @@
       "creating": "Creating…",
       "delete": "Delete expense",
       "deleteConfirm": "Are you sure? Press to confirm",
-      "deleting": "Deleting…"
-    }
+      "deleting": "Deleting…",
+      "amountRequired": "Enter a valid amount",
+      "saving": "Saving…"
+    },
+    "openCount_one": "{{count}} open expense",
+    "openCount_other": "{{count}} open expenses",
+    "new": "New expense",
+    "board": "Board",
+    "summary": "Summary",
+    "viewAria": "Expenses view",
+    "monthTotal": "Month total",
+    "byCategory": "By category",
+    "last6Months": "Last 6 months",
+    "noCategory": "Uncategorized",
+    "balances": "Outstanding balances",
+    "settledUp": "All settled: nobody owes anything.",
+    "balanceOwesYou": "{{name}} owes you {{amount}}",
+    "balanceYouOwe": "You owe {{amount}} to {{name}}",
+    "balancePair": "{{from}} owes {{amount}} to {{to}}"
   },
   "newTask": {
     "title": "New task",

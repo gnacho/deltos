@@ -87,6 +87,8 @@ function hydrateExpense(db, id) {
   const row = db.prepare(
     `SELECT e.*, u.username AS created_by_username, u.color AS created_by_color,
             ru.username AS requested_username, ru.color AS requested_color,
+            (SELECT COUNT(*) FROM expense_comments c WHERE c.expense_id = e.id) AS comment_count,
+            (SELECT COUNT(*) FROM expense_attachments a WHERE a.expense_id = e.id) AS attachment_count,
             l.name AS label_name, l.color AS label_color
      FROM expenses e
      JOIN users u ON u.id = e.created_by
@@ -109,6 +111,7 @@ function hydrateExpense(db, id) {
     created_by: row.created_by, created_by_username: row.created_by_username,
     created_by_color: row.created_by_color,
     created_at: row.created_at, updated_at: row.updated_at, deleted_at: row.deleted_at,
+    counts: { comments: row.comment_count ?? 0, attachments: row.attachment_count ?? 0 },
   }
 }
 
@@ -116,6 +119,8 @@ function listExpenses(db) {
   return db.prepare(
     `SELECT e.*, u.username AS created_by_username, u.color AS created_by_color,
             ru.username AS requested_username, ru.color AS requested_color,
+            (SELECT COUNT(*) FROM expense_comments c WHERE c.expense_id = e.id) AS comment_count,
+            (SELECT COUNT(*) FROM expense_attachments a WHERE a.expense_id = e.id) AS attachment_count,
             l.name AS label_name, l.color AS label_color
      FROM expenses e
      JOIN users u ON u.id = e.created_by
@@ -137,6 +142,7 @@ function listExpenses(db) {
     created_by: row.created_by, created_by_username: row.created_by_username,
     created_by_color: row.created_by_color,
     created_at: row.created_at, updated_at: row.updated_at,
+    counts: { comments: row.comment_count ?? 0, attachments: row.attachment_count ?? 0 },
   }))
 }
 
@@ -240,7 +246,7 @@ export function registerExpenseRoutes(app, { prod, hub, uploadsDir }) {
   })
 
   // --- Actualizar gasto ---
-  app.put('/api/expenses/:id', zValidator('json', updateSchema, validationHook), async (c) => {
+  app.put('/api/expenses/:id', zValidator('param', idParamSchema, validationHook), zValidator('json', updateSchema, validationHook), async (c) => {
     const db = c.get('db')
     const user = c.get('user')
     const data = c.req.valid('json')
@@ -329,7 +335,7 @@ export function registerExpenseRoutes(app, { prod, hub, uploadsDir }) {
   })
 
   // --- Mover gasto ---
-  app.put('/api/expenses/:id/move', zValidator('json', moveSchema, validationHook), (c) => {
+  app.put('/api/expenses/:id/move', zValidator('param', idParamSchema, validationHook), zValidator('json', moveSchema, validationHook), (c) => {
     const db = c.get('db')
     const { step, position } = c.req.valid('json')
     const id = c.req.valid('param').id
@@ -381,7 +387,7 @@ export function registerExpenseRoutes(app, { prod, hub, uploadsDir }) {
     return c.json({ comments })
   })
 
-  app.post('/api/expenses/:id/comments', zValidator('json', commentSchema, validationHook), async (c) => {
+  app.post('/api/expenses/:id/comments', zValidator('param', idParamSchema, validationHook), zValidator('json', commentSchema, validationHook), async (c) => {
     const db = c.get('db')
     const user = c.get('user')
     const id = c.req.valid('param').id

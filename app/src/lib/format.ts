@@ -9,3 +9,8 @@ export function fmtSize(bytes: number, lang: string): string {
   const mb = bytes / (1024 * 1024);
   return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(mb)} MB`;
 }
+
+/** Importe en céntimos → moneda local (EUR). */
+export function fmtMoney(cents: number, locale = 'es'): string {
+  return new Intl.NumberFormat(locale, { style: 'currency', currency: 'EUR' }).format(cents / 100);
+}
