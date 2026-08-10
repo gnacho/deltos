@@ -9,7 +9,7 @@ import {
   type DataApi,
   type UpdateProjectInput,
 } from './data-context';
-import type { Bootstrap, Label, Project, ProjectMember, Task, TaskDetail, TaskPatch } from './types';
+import type { Bootstrap, Expense, ExpenseInput, ExpensePatch, Label, Project, ProjectMember, Task, TaskDetail, TaskPatch } from './types';
 
 /**
  * Capa de datos desacoplada (contrato síncrono):
@@ -35,6 +35,7 @@ const SSE_CHANGED_EVENTS = [
   'attachment.changed',
   'user.changed',
   'settings.changed',
+  'expenses.changed',
 ] as const;
 export function DataProvider({ children }: { children: ReactNode }) {
   const [version, setVersion] = useState(0);
@@ -46,6 +47,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const detailCache = useRef(new Map<string, TaskDetail>());
   const detailPending = useRef(new Set<string>());
   const bootstrapInFlight = useRef<Promise<void> | null>(null);
+  const expensesRef = useRef<Expense[]>([]);
+  const expensesInFlight = useRef<Promise<void> | null>(null);
   const mounted = useRef(true);
 
   const bump = useCallback(() => setVersion((v) => v + 1), []);
@@ -72,6 +75,27 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return p;
   }, [bump]);
 
+  const fetchExpenses = useCallback(async (): Promise<void> => {
+    if (expensesInFlight.current) return expensesInFlight.current;
+    const p = (async () => {
+      try {
+        const data = await apiFetch<{ expenses: Expense[] }>('/api/expenses');
+        if (!mounted.current) return;
+        expensesRef.current = data.expenses;
+        bump();
+      } catch {
+        /* plugin off → 404, expenses stay as [] */
+        if (!mounted.current) return;
+        expensesRef.current = [];
+        bump();
+      } finally {
+        expensesInFlight.current = null;
+      }
+    })();
+    expensesInFlight.current = p;
+    return p;
+  }, [bump]);
+
   const fetchDetail = useCallback(
     async (id: string): Promise<void> => {
       if (detailPending.current.has(id)) return;
@@ -94,8 +118,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const sseTimer = useRef<number | null>(null);
   const refreshAll = useCallback(() => {
     void fetchBootstrap();
+    void fetchExpenses();
     for (const id of detailCache.current.keys()) void fetchDetail(id);
-  }, [fetchBootstrap, fetchDetail]);
+  }, [fetchBootstrap, fetchExpenses, fetchDetail]);
 
   const scheduleRefresh = useCallback(() => {
     if (sseTimer.current !== null) window.clearTimeout(sseTimer.current);
@@ -109,6 +134,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     mounted.current = true;
     void fetchBootstrap();
+    void fetchExpenses();
 
     let es: EventSource | null = null;
     let failures = 0;
@@ -265,6 +291,41 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [fetchBootstrap],
   );
 
+  /* --- Mutaciones de gastos --- */
+
+  const createExpense = useCallback(
+    async (input: ExpenseInput): Promise<Expense> => {
+      const res = await apiPost<{ expense: Expense }>('/api/expenses', input);
+      await fetchExpenses();
+      return res.expense;
+    },
+    [fetchExpenses],
+  );
+
+  const updateExpense = useCallback(
+    async (id: string, patch: ExpensePatch): Promise<void> => {
+      await apiPut<{ expense: Expense }>(`/api/expenses/${encodeURIComponent(id)}`, patch);
+      await fetchExpenses();
+    },
+    [fetchExpenses],
+  );
+
+  const moveExpense = useCallback(
+    async (id: string, step: string, position: number): Promise<void> => {
+      await apiPut<{ expense: Expense }>(`/api/expenses/${encodeURIComponent(id)}/move`, { step, position });
+      await fetchExpenses();
+    },
+    [fetchExpenses],
+  );
+
+  const deleteExpense = useCallback(
+    async (id: string): Promise<void> => {
+      await apiDelete(`/api/expenses/${encodeURIComponent(id)}`);
+      await fetchExpenses();
+    },
+    [fetchExpenses],
+  );
+
   const refreshTaskDetail = useCallback(
     (id: string) => {
       detailCache.current.delete(id);
@@ -312,6 +373,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
       createLabel,
       updateLabel,
       deleteLabel,
+      getExpenses: () => expensesRef.current,
+      getExpense: (id) => expensesRef.current.find((e) => e.id === id),
+      createExpense,
+      updateExpense,
+      moveExpense,
+      deleteExpense,
     };
     // version es el disparador de recomputo (cachés en refs)
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -40,6 +40,7 @@ interface ServerSettings {
   backup_last_run: string | null;
   backup_path: string | null;
   backup_timer_active: boolean;
+  plugin_expenses_enabled: boolean;
 }
 
 function Card({ children, className }: { children: ReactNode; className?: string }) {
@@ -214,6 +215,7 @@ function BackupsPanel({ expanded }: { expanded: boolean }) {
         backup_enabled: patch.backup_enabled ?? settings.backup_enabled,
         backup_retention_days: patch.backup_retention_days ?? settings.backup_retention_days,
         max_attachments_per_task: patch.max_attachments_per_task ?? settings.max_attachments_per_task,
+        plugin_expenses_enabled: patch.plugin_expenses_enabled ?? settings.plugin_expenses_enabled,
       });
       setSettings(updated);
     } catch (err) {
@@ -256,6 +258,15 @@ function BackupsPanel({ expanded }: { expanded: boolean }) {
           onChange={() => void save({ backup_enabled: !settings.backup_enabled })}
           label={t('settings.admin.backup.title')}
           icon={Database}
+          disabled={busy}
+          size="sm"
+          variant="switch"
+        />
+
+        <CheckToggle
+          checked={settings.plugin_expenses_enabled}
+          onChange={() => void save({ plugin_expenses_enabled: !settings.plugin_expenses_enabled })}
+          label={t('settings.server.pluginExpenses')}
           disabled={busy}
           size="sm"
           variant="switch"
