@@ -38,12 +38,18 @@
     "projectsSection": "PROYECTOS",
     "boardSelect": "Proyecto",
     "collapse": "Plegar menú",
-    "expand": "Desplegar menú"
+    "expand": "Desplegar menú",
+    "expenses": "Gastos"
   },
   "columns": {
     "nuevo": "Nuevo",
     "encurso": "En curso",
     "hecho": "Hecho"
+  },
+  "expenseSteps": {
+    "nuevo": "Nuevo",
+    "en-curso": "En curso",
+    "hecho": "Finalizado"
   },
   "priority": {
     "alta": "Alta",
@@ -59,10 +65,10 @@
     "none": "Sin fecha"
   },
   "board": {
+    "todoSubtitle": "Todos los proyectos en un solo tablero",
+    "projectSubtitle": "Tablero del proyecto",
     "openTasks_one": "{{count}} tarea abierta",
     "openTasks_other": "{{count}} tareas abiertas",
-    "moveTo": "Mover a",
-    "current": "actual",
     "emptyColumn": "Sin tareas",
     "emptyState": "Sin tareas en «{{column}}»",
     "addToColumn": "Añadir tarjeta a {{column}}",
@@ -74,7 +80,10 @@
     "segAria_other": "{{column}}, {{count}} tareas",
     "movedTo": "Tarjeta «{{title}}» movida a {{column}}",
     "reordered": "Tarjeta «{{title}}» reordenada en {{column}}",
-    "mineOnly": "Mis tareas"
+    "scopeAria": "Alcance del tablero",
+    "scopeAll": "Todas",
+    "scopeMine": "Mías",
+    "scopeOthers": "De otras"
   },
   "filters": {
     "toggle": "Filtros",
@@ -188,6 +197,75 @@
       "project": "<strong>{{user}}</strong> movió «{{task}}» al proyecto {{to}}"
     },
     "project": "<strong>{{user}}</strong> movió la tarjeta al proyecto {{to}}"
+  },
+  "expenses": {
+    "title": "Gastos",
+    "subtitle": "Registro de gastos compartidos con división de pagos.",
+    "empty": "Sin gastos todavía. Crea el primero con el botón de arriba.",
+    "filterOwe": "Debo",
+    "filterOwed": "Me deben",
+    "filterUnpaid": "Sin pagar",
+    "filterPaid": "Pagado",
+    "amount": "Importe",
+    "category": "Categoría",
+    "notes": "Notas",
+    "paid": "Pagado",
+    "requested": "Requiere a",
+    "owes": "te debe",
+    "youOwe": "Debes",
+    "split": "División del pago",
+    "splitHalf": "Mitad",
+    "splitCustom": "Parte libre",
+    "splitFull": "Totalidad",
+    "splitAmount": "Cantidad",
+    "iPaid": "Yo ya he pagado",
+    "theyPaid": "{{name}} ya ha pagado su parte",
+    "payMyPart": "He pagado mi parte",
+    "payMyPartDone": "Tu parte está pagada",
+    "paymentMethod": "Método de pago",
+    "bizum": "Bizum",
+    "transfer": "Transferencia",
+    "efectivo": "Efectivo",
+    "requestPayment": "Requerir pago a",
+    "requestTo": "Usuario",
+    "noRequest": "Sin requerimiento",
+    "form": {
+      "createTitle": "Nuevo gasto",
+      "editTitle": "Editar gasto",
+      "titleLabel": "Título",
+      "titlePlaceholder": "¿Qué se ha pagado?",
+      "amountPlaceholder": "12,50",
+      "notesPlaceholder": "Detalles del gasto…",
+      "create": "Crear gasto",
+      "creating": "Creando…",
+      "delete": "Eliminar gasto",
+      "deleteConfirm": "¿Seguro? Pulsa para confirmar",
+      "deleting": "Eliminando…",
+      "amountRequired": "Indica un importe válido",
+      "saving": "Guardando…"
+    },
+    "openCount_one": "{{count}} gasto abierto",
+    "openCount_other": "{{count}} gastos abiertos",
+    "new": "Nuevo gasto",
+    "board": "Tablero",
+    "summary": "Resumen",
+    "viewAria": "Vista de gastos",
+    "monthTotal": "Total del mes",
+    "byCategory": "Por categoría",
+    "last6Months": "Últimos 6 meses",
+    "noCategory": "Sin categoría",
+    "balances": "Saldos pendientes",
+    "settledUp": "Todo en paz: nadie debe nada.",
+    "balanceOwesYou": "{{name}} te debe {{amount}}",
+    "balanceYouOwe": "Debes {{amount}} a {{name}}",
+    "balancePair": "{{from}} debe {{amount}} a {{to}}",
+    "settle": "Saldar",
+    "settleConfirm": "¿Confirmar? Marca todo como pagado",
+    "settleDone_one": "Saldado: {{count}} gasto",
+    "settleDone_other": "Saldado: {{count}} gastos",
+    "emptyColumn": "Sin gastos",
+    "emptyState": "Sin gastos en «{{column}}»",
+    "etapa": "Etapa"
   },
   "newTask": {
     "title": "Nueva tarea",
@@ -383,7 +461,9 @@
       "attachments": "Adjuntos",
       "attachmentsHint": "Número máximo de archivos por tarea.",
       "attachmentsLimit": "Máximo por tarea",
-      "saveError": "No se pudieron guardar los ajustes"
+      "saveError": "No se pudieron guardar los ajustes",
+      "pluginExpenses": "Plugin de gastos",
+      "pluginExpensesHint": "Activa el registro de gastos compartidos con división de pagos."
     },
     "notifications": "Notificaciones",
     "notifHint": "Avisos cuando la otra persona cree, mueva, comente o te asigne tarjetas, aunque tengas la app cerrada.",
@@ -403,7 +483,9 @@
       "comentario": "Comentario en tu tarjeta",
       "tarea_movida": "Tu tarjeta movida",
       "mencion": "Te mencionan",
-      "vencimiento": "Resumen de vencimiento"
+      "vencimiento": "Resumen de vencimiento",
+      "pago_requerido": "Te piden un pago",
+      "pago_completado": "Pago recibido"
     },
     "accent": {
       "title": "Color de acento",
@@ -488,7 +570,8 @@
     "SETTINGS_PROD_ONLY": "Este ajuste solo se puede cambiar desde la sesión de producción",
     "SSE_TOO_MANY_CLIENTS": "Demasiados clientes conectados",
     "PUSH_NOT_CONFIGURED": "El servidor no tiene claves push configuradas",
-    "PUSH_DEMO_UNAVAILABLE": "Las notificaciones push no están disponibles en modo demo"
+    "PUSH_DEMO_UNAVAILABLE": "Las notificaciones push no están disponibles en modo demo",
+    "EXPENSE_NOT_FOUND": "Gasto no encontrado"
   },
   "update": {
     "banner": "Hay una nueva versión de Deltos en el servidor.",
