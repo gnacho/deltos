@@ -289,7 +289,9 @@
     "payerTag": "paid",
     "pending": "Pending",
     "paidBy": "Paid by {{name}}",
-    "minTransfers": "Settlement with minimal transfers"
+    "minTransfers": "Settlement with minimal transfers",
+    "splitEqually": "Split equally",
+    "addParticipant": "Add person"
   },
   "expenseEvents": {
     "created": "created the expense",
