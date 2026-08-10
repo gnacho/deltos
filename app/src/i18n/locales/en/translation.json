@@ -252,6 +252,8 @@
       "shareOf": "{{name}}'s share",
       "sharesSum": "Shares must add up to the total amount",
       "sharesSumHint": "Shares add up to {{sum}} but the total is {{total}}",
+      "sharesSumOver": "Shares add up to {{sum}}, {{over}} over the total ({{total}})",
+      "sharesSumUnder": "Shares add up to {{sum}}, {{under}} under the total ({{total}})",
       "project": "Project",
       "noProject": "No project",
       "noCategory": "No category",

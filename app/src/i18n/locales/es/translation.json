@@ -252,6 +252,8 @@
       "shareOf": "Parte de {{name}}",
       "sharesSum": "Las partes deben sumar el importe total",
       "sharesSumHint": "Las partes suman {{sum}} y el total es {{total}}",
+      "sharesSumOver": "Las partes suman {{sum}}, {{over}} más que el total ({{total}})",
+      "sharesSumUnder": "Las partes suman {{sum}}, {{under}} menos que el total ({{total}})",
       "project": "Proyecto",
       "noProject": "Sin proyecto",
       "noCategory": "Sin categoría",
