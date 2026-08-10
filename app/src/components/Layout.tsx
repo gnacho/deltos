@@ -8,6 +8,7 @@ import {
   Settings,
   Sun,
   Moon,
+  Monitor,
   ChevronsLeft,
   ChevronsRight,
   Receipt,
@@ -16,6 +17,7 @@ import { useData } from '@/data/data-context';
 import PullToRefresh from '@/components/PullToRefresh';
 import { useSession } from '@/auth/session-context';
 import { useTheme } from '@/theme/theme-context';
+import type { ThemeMode } from '@/theme/theme-context';
 import { apiPost, dispatchUnauthorized } from '@/data/api-client';
 import { LogoMark } from '@/components/Logo';
 import { Avatar } from '@/components/Avatar';
@@ -39,6 +41,38 @@ import { NewTaskModal } from '@/components/NewTaskModal';
  */
 
 const COLLAPSED_KEY = 'deltos-sidebar-collapsed';
+
+function ThemeTogglePill() {
+  const { t } = useTranslation();
+  const { mode, setMode } = useTheme();
+  const opts: { m: ThemeMode; icon: typeof Sun; label: string }[] = [
+    { m: 'auto', icon: Monitor, label: t('settings.themeAuto') },
+    { m: 'light', icon: Sun, label: t('settings.themeLight') },
+    { m: 'dark', icon: Moon, label: t('settings.themeDark') },
+  ];
+  return (
+    <div role="radiogroup" aria-label={t('settings.appearance')} className="flex h-8 items-center rounded-full border border-app bg-surface2 p-0.5">
+      {opts.map(({ m, icon: Icon, label }) => {
+        const active = mode === m;
+        return (
+          <button
+            key={m}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            onClick={() => setMode(m)}
+            className={`relative flex h-7 items-center gap-1 rounded-full px-2.5 text-xs font-medium transition-colors${
+              active ? ' bg-surface shadow-soft text-text' : ' text-muted hover:text-text'
+            }`}
+          >
+            <Icon className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">{label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 function ThemeToggleButton({ mobile }: { mobile?: boolean }) {
   const { t } = useTranslation();
@@ -627,17 +661,14 @@ export default function Layout() {
         className={`hidden md:flex fixed top-0 inset-x-0 h-14 bg-surface/85 backdrop-blur-[16px] border-b border-app z-30 items-center justify-between gap-3 px-6 md:ml-16 ${lgMargin}`}
         style={{ paddingTop: 'env(safe-area-inset-top)' }}
       >
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="flex items-center gap-2 shrink-0">
-            <Avatar name={user.username} color={user.color} size="sm" />
-            <span className="text-sm font-medium truncate max-w-[120px]">{user.username}</span>
-          </div>
-          <span className="h-5 w-px bg-app shrink-0" />
-          <h1 className="font-display font-bold text-lg tracking-tight truncate">{title}</h1>
-        </div>
+        <h1 className="font-display font-bold text-lg tracking-tight truncate">{title}</h1>
         <div className="flex items-center gap-3">
           {boardSelect}
-          <ThemeToggleButton mobile />
+          <ThemeTogglePill />
+          <div className="flex items-center gap-2">
+            <Avatar name={user.username} color={user.color} size="sm" />
+            <span className="text-sm font-medium truncate max-w-[100px]">{user.username}</span>
+          </div>
         </div>
       </header>
 
