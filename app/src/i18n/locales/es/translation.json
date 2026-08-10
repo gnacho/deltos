@@ -291,6 +291,26 @@
     "paidBy": "Pagó {{name}}",
     "minTransfers": "Liquidación con transferencias mínimas"
   },
+  "expenseEvents": {
+    "created": "creó el gasto",
+    "titleChanged": "cambió el título de «{{from}}» a «{{to}}»",
+    "titleEdited": "editó el título",
+    "amountChanged": "cambió el importe de {{from}} a {{to}}",
+    "amountTo": "puso el importe en {{amount}}",
+    "amountEdited": "cambió el importe",
+    "notesEdited": "editó las notas",
+    "sharesUpdated": "cambió el reparto ({{count}} personas)",
+    "payerChanged": "cambió quién pagó",
+    "paymentMethodTo": "cambió el método de pago a {{method}}",
+    "paymentMethodEdited": "cambió el método de pago",
+    "moved": "movió de «{{from}}» a «{{to}}»",
+    "movedTo": "movió a «{{to}}»",
+    "stepChanged": "cambió la etapa",
+    "paidShare": "marcó su parte como pagada",
+    "settled": "saldó cuentas",
+    "attachmentAdded": "adjuntó {{filename}}",
+    "attachmentAddedGeneric": "adjuntó un archivo"
+  },
   "invite": {
     "hello": "¡Hola, {{name}}!",
     "yourPart": "Tu parte",

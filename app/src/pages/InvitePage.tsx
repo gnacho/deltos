@@ -5,6 +5,7 @@ import { Check, Paperclip, Clock, Download, FileText, FileSpreadsheet, FileImage
 import { fmtMoney } from '@/lib/format';
 import { LogoMark } from '@/components/Logo';
 import { relTime } from '@/i18n';
+import { formatExpenseEvent } from '@/lib/expense-events';
 
 interface Attachment {
   id: string;
@@ -385,12 +386,9 @@ export default function InvitePage() {
                     <li key={ev.id} className="flex gap-2.5 text-[13px]">
                       <span className="w-1.5 h-1.5 rounded-full bg-faint/50 mt-1.5 shrink-0" aria-hidden="true" />
                       <div className="flex-1 min-w-0">
-                        <p className="text-muted leading-relaxed">
+                        <p className="text-muted leading-relaxed text-[13px]">
                           <strong className="text-text">{ev.username}</strong>{' '}
-                          {ev.type}
-                          {ev.data && typeof ev.data === 'object' && Object.keys(ev.data).length > 0 && (
-                            <span className="text-faint"> {JSON.stringify(ev.data)}</span>
-                          )}
+                          {formatExpenseEvent(ev, t, i18n.language)}
                         </p>
                         <p className="text-[12px] text-faint mt-0.5">{relTime(ev.created_at, t)}</p>
                       </div>

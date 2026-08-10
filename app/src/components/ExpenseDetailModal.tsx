@@ -13,6 +13,7 @@ import { relTime } from '@/i18n';
 import { apiErrorText } from '@/lib/errors';
 import { announce } from '@/lib/announce';
 import { fmtSize, fmtMoney } from '@/lib/format';
+import { formatExpenseEvent } from '@/lib/expense-events';
 import { ImageLightbox } from '@/components/task/ImageLightbox';
 import { PhotoCropDialog } from '@/components/PhotoCropDialog';
 import {
@@ -913,12 +914,8 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
                           <Icon className="w-3.5 h-3.5" aria-hidden="true" />
                         </span>
                         <p className="text-[14px] text-muted leading-relaxed">
-                          <strong>{e.username ?? '?'}</strong> {e.type}
-                          {e.data &&
-                            typeof e.data === 'object' &&
-                            Object.keys(e.data).length > 0 && (
-                              <span className="text-faint"> {JSON.stringify(e.data)}</span>
-                            )}
+                          <strong>{e.username ?? '?'}</strong>{' '}
+                          {formatExpenseEvent(e, t, i18n.language)}
                           <span className="text-faint"> · {relTime(e.created_at, t)}</span>
                         </p>
                       </li>
