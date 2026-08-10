@@ -57,9 +57,12 @@ export function ExpenseModal(props: Props) {
   const [method, setMethod] = useState<PaymentMethod | null>(expense?.payment_method ?? null);
   const [step, setStep] = useState<ExpenseStep>(expense?.step ?? 'nuevo');
   /** Partes: userId → céntimos (texto editable por persona). */
-  const [shareStr, setShareStr] = useState<Map<string, string>>(
-    () => new Map((expense?.shares ?? []).map((sh) => [sh.user_id, fromCents(sh.share_cents)])),
-  );
+  const [shareStr, setShareStr] = useState<Map<string, string>>(() => {
+    if (expense) return new Map(expense.shares.map((sh) => [sh.user_id, fromCents(sh.share_cents)]));
+    const m = new Map<string, string>();
+    m.set(me.id, '');
+    return m;
+  });
   const [customSplit, setCustomSplit] = useState(() => {
     const shares = expense?.shares ?? [];
     if (shares.length < 2) return false;
@@ -112,8 +115,12 @@ export function ExpenseModal(props: Props) {
   const toggleParticipant = (uid: string) => {
     setShareStr((prev) => {
       const next = new Map(prev);
-      if (next.has(uid)) next.delete(uid);
-      else next.set(uid, '0,00');
+      if (next.has(uid)) {
+        if (next.size <= 1) return prev;
+        next.delete(uid);
+      } else {
+        next.set(uid, '0,00');
+      }
       return next;
     });
   };

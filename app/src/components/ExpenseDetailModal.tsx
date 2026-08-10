@@ -578,9 +578,27 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
                             </span>
                           )}
                         </span>
-                        <span className="tnum text-[13px] font-semibold">
-                          {fmtMoney(sh.share_cents, i18n.language)}
-                        </span>
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            defaultValue={(sh.share_cents / 100).toFixed(2).replace('.', ',')}
+                            onBlur={async (e) => {
+                              const n = parseFloat(e.target.value.replace(',', '.'));
+                              if (!isNaN(n) && n >= 0) {
+                                const newShares = expense.shares.map((s) => ({
+                                  user_id: s.user_id,
+                                  share_cents: s.user_id === sh.user_id ? Math.round(n * 100) : s.share_cents,
+                                }));
+                                await data.updateExpense(expense.id, { shares: newShares as any });
+                              } else {
+                                e.target.value = (sh.share_cents / 100).toFixed(2).replace('.', ',');
+                              }
+                            }}
+                            className="w-20 px-2 py-1 rounded-lg bg-surface border border-app text-[13px] font-semibold text-right outline-none focus:border-brand tnum"
+                          />
+                          <span className="text-[12px] text-faint">EUR</span>
+                        </div>
                         {sh.paid ? (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
                             {t('expenses.paid')}
@@ -622,6 +640,23 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
                       </li>
                     ))}
                   </ul>
+                )}
+                {expense.shares?.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const n = expense.shares.length;
+                      const eq = equalSplit(expense.amount_cents, n);
+                      const updated = expense.shares.map((s, i) => ({
+                        user_id: s.user_id,
+                        share_cents: eq[i],
+                      }));
+                      await data.updateExpense(expense.id, { shares: updated as any });
+                    }}
+                    className="mt-2 text-[12px] text-brand hover:underline"
+                  >
+                    {t('expenses.splitEqually')}
+                  </button>
                 )}
                 <p className="mt-1.5 text-[12px] text-faint">
                   {t('expenses.paidBy', { name: expense.payer_username })} ·{' '}

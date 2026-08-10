@@ -289,7 +289,9 @@
     "payerTag": "pagó",
     "pending": "Pendiente",
     "paidBy": "Pagó {{name}}",
-    "minTransfers": "Liquidación con transferencias mínimas"
+    "minTransfers": "Liquidación con transferencias mínimas",
+    "splitEqually": "Reparto equitativo",
+    "addParticipant": "Añadir persona"
   },
   "expenseEvents": {
     "created": "creó el gasto",
