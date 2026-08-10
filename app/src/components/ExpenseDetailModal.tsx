@@ -252,6 +252,12 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
   };
 
   const handleMove = (step: ExpenseStep) => {
+    if (expense.step === step) return;
+    if (expense.step === 'hecho') {
+      if (!window.confirm(t('expenses.moveConfirmReopen'))) return;
+    } else if (!(expense.step === 'en-curso' && step === 'hecho')) {
+      if (!window.confirm(t('expenses.moveConfirm', { from: t(`expenseSteps.${expense.step}`), to: t(`expenseSteps.${step}`) }))) return;
+    }
     data.moveExpense(expense.id, step, 0);
   };
   const handlePayMyPart = () => {

@@ -292,7 +292,9 @@
     "minTransfers": "Settlement with minimal transfers",
     "splitEqually": "Split equally",
     "addParticipant": "Add person",
-    "allUsersAdded": "Everyone added"
+    "allUsersAdded": "Everyone added",
+    "moveConfirm": "Move this expense from \"{{from}}\" to \"{{to}}\"?",
+    "moveConfirmReopen": "This will reopen the expense. Confirm?"
   },
   "expenseEvents": {
     "created": "created the expense",

@@ -91,6 +91,12 @@ export default function ExpenseBoard() {
       if (ri !== -1) position = ri;
     }
     const fromCol = expense.step;
+    if (fromCol === toCol) return;
+    if (fromCol === 'hecho') {
+      if (!window.confirm(t('expenses.moveConfirmReopen'))) return;
+    } else if (!(fromCol === 'en-curso' && toCol === 'hecho')) {
+      if (!window.confirm(t('expenses.moveConfirm', { from: t(`expenseSteps.${fromCol}`), to: t(`expenseSteps.${toCol}`) }))) return;
+    }
     try {
       await data.moveExpense(id, toCol, position);
       const colName = t(`expenseSteps.${toCol}`);
@@ -113,6 +119,12 @@ export default function ExpenseBoard() {
   const doMoveMobile = (id: string, toStep: string) => {
     const expense = data.getExpense(id);
     if (!expense || expense.step === toStep) return;
+    const fromCol = expense.step;
+    if (fromCol === 'hecho') {
+      if (!window.confirm(t('expenses.moveConfirmReopen'))) return;
+    } else if (!(fromCol === 'en-curso' && toStep === 'hecho')) {
+      if (!window.confirm(t('expenses.moveConfirm', { from: t(`expenseSteps.${fromCol}`), to: t(`expenseSteps.${toStep}`) }))) return;
+    }
     const position = expenses.filter((e) => e.step === toStep && e.id !== id).length;
     void (async () => {
       try {
