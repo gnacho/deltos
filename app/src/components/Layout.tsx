@@ -369,12 +369,14 @@ export default function Layout() {
       : t(titleKey ?? 'nav.todo');
 
   const sideItemCls = ({ isActive }: { isActive: boolean }) =>
-    `w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm ${
+    `w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition-colors ${
       isActive ? 'bg-surface2 font-medium' : 'text-muted hover:bg-surface2'
     }`;
 
   const bnCls = (active: boolean) =>
-    `flex flex-col items-center justify-center gap-1 ${active ? 'text-brand' : 'text-faint'}`;
+    `flex flex-col items-center justify-center gap-1 transition-colors ${
+      active ? 'text-brand' : 'text-faint hover:text-muted hover:bg-surface2 rounded-lg'
+    }`;
 
   const isProjectsSection = location.pathname.startsWith('/projects') || boardView === 'project';
   const lgMargin = collapsed ? 'lg:pl-16' : 'lg:pl-[232px]';
@@ -588,7 +590,7 @@ export default function Layout() {
                   <Link
                     key={p.id}
                     to={`/p/${p.id}`}
-                    className={`w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm ${
+                    className={`w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition-colors ${
                       active ? 'bg-surface2 font-medium' : 'text-muted hover:bg-surface2'
                     }`}
                     aria-current={active ? 'page' : undefined}
