@@ -67,7 +67,6 @@ export function inviteRoutes(db, demo) {
     if (!invite) httpError(404, ERROR_CODES.EXPENSE_NOT_FOUND);
 
     const expense = db.prepare('SELECT id, created_by FROM expenses WHERE id = ?').get(invite.expense_id);
-    const user = c.get('user');
     if (expense.created_by !== user.id && user.role !== 'admin') httpError(403, ERROR_CODES.PROJECT_NOT_OWNER);
 
     db.prepare('DELETE FROM expense_invites WHERE id = ?').run(inviteId);
