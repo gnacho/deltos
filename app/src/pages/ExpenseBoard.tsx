@@ -108,11 +108,7 @@ export default function ExpenseBoard() {
     boardRef.current
       ?.querySelectorAll('.col-target')
       .forEach((s) => s.classList.remove('col-target'));
-    boardRef.current?.querySelectorAll('.dragging').forEach((c) => {
-      c.classList.remove('dragging');
-      c.classList.add('card-dropped');
-      c.addEventListener('animationend', () => c.classList.remove('card-dropped'), { once: true });
-    });
+    boardRef.current?.querySelectorAll('.dragging').forEach((c) => c.classList.remove('dragging'));
     boardRef.current?.querySelectorAll<HTMLElement>('[data-empty]').forEach((p) => {
       p.style.display = '';
     });
@@ -130,17 +126,6 @@ export default function ExpenseBoard() {
     ph.setAttribute('aria-hidden', 'true');
     placeholder.current = ph;
     window.setTimeout(() => card.classList.add('dragging'), 0);
-
-    /* Ghost personalizado: clon opaco + sombra, no el semi-transparente del navegador */
-    const ghost = card.cloneNode(true) as HTMLElement;
-    ghost.classList.add('lift-ghost');
-    ghost.style.width = `${card.offsetWidth}px`;
-    ghost.style.position = 'fixed';
-    ghost.style.top = '-9999px';
-    ghost.style.left = '-9999px';
-    document.body.appendChild(ghost);
-    e.dataTransfer.setDragImage(ghost, card.offsetWidth / 2, 20);
-    window.setTimeout(() => ghost.remove(), 0);
   };
 
   const onDragOver = (e: DragEvent) => {
