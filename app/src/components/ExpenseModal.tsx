@@ -420,6 +420,34 @@ export function ExpenseModal(props: Props) {
                 ))}
               </ul>
             )}
+            {participants.length > 1 && (
+              <div className="mt-2 flex items-center gap-1 rounded-full bg-surface2 p-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCustomSplit(false);
+                    if (amountCents !== null) {
+                      const eq = equalSplit(amountCents, participants.length);
+                      setShareStr((prev) => {
+                        const next = new Map(prev);
+                        participants.forEach((uid, i) => next.set(uid, fromCents(eq[i])));
+                        return next;
+                      });
+                    }
+                  }}
+                  className={`rounded-full px-3 h-8 text-[12px] font-medium transition-colors ${!customSplit ? 'bg-surface shadow-soft text-text' : 'text-muted hover:text-text'}`}
+                >
+                  {t('expenses.form.splitEqual')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCustomSplit(true)}
+                  className={`rounded-full px-3 h-8 text-[12px] font-medium transition-colors ${customSplit ? 'bg-surface shadow-soft text-text' : 'text-muted hover:text-text'}`}
+                >
+                  {t('expenses.form.splitCustom')}
+                </button>
+              </div>
+            )}
             {participants.length > 0 && !sumOk && amountCents !== null && (
               <p className={`mt-2 rounded-lg px-3 py-2 text-[13px] font-medium ${
                 sharesSum > amountCents ? 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300' : 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300'
