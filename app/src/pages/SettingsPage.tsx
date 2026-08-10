@@ -52,9 +52,9 @@ function Card({ children, className }: { children: React.ReactNode; className?: 
   );
 }
 
-function Heading({ icon: Icon, children }: { icon: typeof User; children: React.ReactNode }) {
+function Heading({ icon: Icon, children, title }: { icon: typeof User; children: React.ReactNode; title?: string }) {
   return (
-    <h2 className="flex items-center gap-2 font-display font-semibold text-[15px] mb-4">
+    <h2 className="flex items-center gap-2 font-display font-semibold text-[15px] mb-4" title={title}>
       <span className="text-faint">
         <Icon className="w-4 h-4" aria-hidden="true" />
       </span>
@@ -754,6 +754,7 @@ function LabelsCard() {
   const [editing, setEditing] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [editColor, setEditColor] = useState('sky');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -782,6 +783,7 @@ function LabelsCard() {
   const startEdit = (l: Label) => {
     setEditing(l.id);
     setEditName(l.name);
+    setEditColor(l.color);
     setConfirmDelete(null);
     setError(null);
   };
@@ -792,21 +794,12 @@ function LabelsCard() {
     setBusy(true);
     setError(null);
     try {
-      await data.updateLabel(id, { name: trimmed });
+      await data.updateLabel(id, { name: trimmed, color: editColor });
       setEditing(null);
     } catch (err) {
       setError(labelError(err));
     } finally {
       setBusy(false);
-    }
-  };
-
-  const recolor = async (id: string, c: string) => {
-    setError(null);
-    try {
-      await data.updateLabel(id, { color: c });
-    } catch (err) {
-      setError(labelError(err));
     }
   };
 
@@ -824,32 +817,27 @@ function LabelsCard() {
 
   return (
     <Card>
-      <Heading icon={Tag}>{t('settings.labels.title')}</Heading>
-      <p className="text-[13px] text-faint mb-3">{t('settings.labels.subtitle')}</p>
-      {labels.length === 0 ? (
-        <p className="rounded-lg border border-dashed border-app px-3 py-4 text-center text-[13px] text-muted">
-          {t('settings.labels.empty')}
-        </p>
-      ) : (
+      <Heading icon={Tag} title={t('settings.labels.subtitle')}>{t('settings.labels.title')}</Heading>
+      {labels.length === 0 ? null : (
         <ul className="space-y-1.5 mb-4">
           {labels.map((l) => (
             <li key={l.id} className="rounded-lg border border-app bg-surface2 px-3 py-2">
               {editing === l.id ? (
-                <form
-                  className="flex flex-wrap items-center gap-2"
-                  onSubmit={(e) => { e.preventDefault(); void saveEdit(l.id); }}
-                >
-                  <input value={editName} maxLength={40} autoFocus onChange={(e) => setEditName(e.target.value)}
-                    aria-label={t('settings.labels.name')} className={`${inputCls} flex-1 min-w-32`} />
-                  <button type="submit" disabled={busy || !editName.trim()}
-                    className="h-8 rounded-lg bg-brand px-3 text-[12px] font-semibold text-brandfg hover:brightness-110 disabled:opacity-60">
-                    {t('common.save')}
-                  </button>
-                  <button type="button" onClick={() => setEditing(null)}
-                    className="h-8 rounded-lg border border-app px-3 text-[12px] text-muted">
-                    {t('common.cancel')}
-                  </button>
-                </form>
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input value={editName} maxLength={40} autoFocus onChange={(e) => setEditName(e.target.value)}
+                      aria-label={t('settings.labels.name')} className={`${inputCls} flex-1 min-w-32`} />
+                    <button type="submit" onClick={(e) => { e.preventDefault(); void saveEdit(l.id); }} disabled={busy || !editName.trim()}
+                      className="h-8 rounded-lg bg-brand px-3 text-[12px] font-semibold text-brandfg hover:brightness-110 disabled:opacity-60">
+                      {t('common.save')}
+                    </button>
+                    <button type="button" onClick={() => setEditing(null)}
+                      className="h-8 rounded-lg border border-app px-3 text-[12px] text-muted">
+                      {t('common.cancel')}
+                    </button>
+                  </div>
+                  <ColorSwatches value={editColor} onChange={setEditColor} ariaLabel={t('settings.labels.color')} />
+                </div>
               ) : (
                 <>
                   <div className="flex flex-wrap items-center gap-1.5">
@@ -881,9 +869,6 @@ function LabelsCard() {
                         <Trash2 className="w-3 h-3" aria-hidden="true" />
                       </button>
                     )}
-                  </div>
-                  <div className="mt-1.5">
-                    <ColorSwatches value={l.color} onChange={(c) => void recolor(l.id, c)} ariaLabel={t('settings.labels.color')} />
                   </div>
                 </>
               )}
