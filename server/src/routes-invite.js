@@ -11,6 +11,7 @@ const createSchema = z.object({
   invite_name: z.string().min(1).max(100),
   share_cents: z.number().int().min(0),
   expense_id: z.string().min(1).max(100),
+  notes: z.string().max(500).optional().default(''),
 });
 
 function generateToken() {
@@ -28,7 +29,7 @@ export function registerInviteRoutes(app, { prod }) {
     if (!user) httpError(401, ERROR_CODES.AUTH_REQUIRED);
     const expenseId = c.req.param('id');
     const invites = prod.prepare(
-      'SELECT id, invite_name, share_cents, paid, created_at FROM expense_invites WHERE expense_id = ? ORDER BY created_at'
+      'SELECT id, invite_name, share_cents, paid, payment_method, notes, created_at FROM expense_invites WHERE expense_id = ? ORDER BY created_at'
     ).all(expenseId);
     return c.json({ invites });
   });
@@ -37,7 +38,7 @@ export function registerInviteRoutes(app, { prod }) {
   app.post('/api/invite/create', zValidator('json', createSchema), (c) => {
     const user = c.get('user');
     if (!user) httpError(401, ERROR_CODES.AUTH_REQUIRED);
-    const { invite_name, share_cents, expense_id: expenseId } = c.req.valid('json');
+    const { invite_name, share_cents, expense_id: expenseId, notes } = c.req.valid('json');
 
     const expense = prod.prepare(
       'SELECT id, created_by, amount_cents FROM expenses WHERE id = ? AND deleted_at IS NULL'
@@ -50,8 +51,8 @@ export function registerInviteRoutes(app, { prod }) {
     const now = Date.now();
 
     prod.prepare(
-      'INSERT INTO expense_invites (id, expense_id, token_hash, invite_name, share_cents, paid, created_at) VALUES (?, ?, ?, ?, ?, 0, ?)'
-    ).run(id, expenseId, tokenHash, invite_name, share_cents, now);
+      'INSERT INTO expense_invites (id, expense_id, token_hash, invite_name, share_cents, paid, notes, created_at) VALUES (?, ?, ?, ?, ?, 0, ?, ?)'
+    ).run(id, expenseId, tokenHash, invite_name, share_cents, notes, now);
 
     log.info('invite_created', { expense_id: expenseId, invite_id: id, actor: user.id });
 
@@ -62,6 +63,7 @@ export function registerInviteRoutes(app, { prod }) {
         invite_name,
         share_cents,
         paid: false,
+        notes,
         token,
         url: `${c.req.header('origin') || ''}/invite/${token}`,
       },
@@ -92,26 +94,36 @@ export function registerInviteRoutes(app, { prod }) {
         invite_name: invite.invite_name,
         share_cents: invite.share_cents,
         paid: !!invite.paid,
+        payment_method: invite.payment_method || null,
+        notes: invite.notes || '',
       },
     });
   });
 
-  // PUT /api/invite/:token/pay — marcar como pagado (público, sin auth)
-  app.put('/api/invite/:token/pay', (c) => {
-    const rawToken = c.req.param('token');
-    if (!rawToken || rawToken.length > 200) httpError(404, ERROR_CODES.EXPENSE_NOT_FOUND);
+const paySchema = z.object({
+  payment_method: z.enum(['bizum', 'transfer', 'efectivo']).optional(),
+});
 
-    const tokenHash = hashToken(rawToken);
-    const invite = prod.prepare('SELECT * FROM expense_invites WHERE token_hash = ?').get(tokenHash);
-    if (!invite) httpError(404, ERROR_CODES.EXPENSE_NOT_FOUND);
+// PUT /api/invite/:token/pay — marcar como pagado (público, sin auth)
+app.put('/api/invite/:token/pay', zValidator('json', paySchema), (c) => {
+  const rawToken = c.req.param('token');
+  if (!rawToken || rawToken.length > 200) httpError(404, ERROR_CODES.EXPENSE_NOT_FOUND);
 
-    if (invite.paid) {
-      return c.json({ ok: true, already_paid: true });
-    }
+  const tokenHash = hashToken(rawToken);
+  const invite = prod.prepare('SELECT * FROM expense_invites WHERE token_hash = ?').get(tokenHash);
+  if (!invite) httpError(404, ERROR_CODES.EXPENSE_NOT_FOUND);
 
-    prod.prepare('UPDATE expense_invites SET paid = 1 WHERE id = ?').run(invite.id);
-    log.info('invite_paid', { invite_id: invite.id, expense_id: invite.expense_id });
+  if (invite.paid) {
+    return c.json({ ok: true, already_paid: true });
+  }
 
-    return c.json({ ok: true });
-  });
+  const { payment_method } = c.req.valid('json');
+
+  prod.prepare(
+    'UPDATE expense_invites SET paid = 1, payment_method = ? WHERE id = ?'
+  ).run(payment_method || null, invite.id);
+  log.info('invite_paid', { invite_id: invite.id, expense_id: invite.expense_id, payment_method });
+
+  return c.json({ ok: true });
+});
 }

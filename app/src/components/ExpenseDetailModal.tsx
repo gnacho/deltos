@@ -172,8 +172,9 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteName, setInviteName] = useState('');
   const [inviteCents, setInviteCents] = useState(Math.round(expense.amount_cents / 2));
+  const [inviteNotes, setInviteNotes] = useState('');
   const [inviteSending, setInviteSending] = useState(false);
-  const [invites, setInvites] = useState<Array<{ id: string; invite_name: string; share_cents: number; paid: boolean }>>([]);
+  const [invites, setInvites] = useState<Array<{ id: string; invite_name: string; share_cents: number; paid: boolean; notes?: string }>>([]);
 
   useEffect(() => {
     fetch(`/api/expenses/${expense.id}/invites`, { credentials: 'same-origin' })
@@ -256,13 +257,14 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
       const res = await fetch('/api/invite/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrf ?? '' },
-        body: JSON.stringify({ invite_name: inviteName.trim(), share_cents: inviteCents, expense_id: expense.id }),
+        body: JSON.stringify({ invite_name: inviteName.trim(), share_cents: inviteCents, expense_id: expense.id, notes: inviteNotes.trim() }),
         credentials: 'same-origin',
       });
       if (!res.ok) throw res;
       const data = await res.json();
       await navigator.clipboard.writeText(`${window.location.origin}/invite/${data.invite.token}`);
       setInviteName('');
+      setInviteNotes('');
       announce(t('invite.linkCopied'));
       fetch(`/api/expenses/${expense.id}/invites`, { credentials: 'same-origin' })
         .then((r) => r.json())
@@ -628,6 +630,14 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
                         className="w-24 rounded-lg bg-surface border border-app px-3 py-1.5 text-sm text-right outline-none focus:border-brand tnum"
                       />
                     </div>
+                    <input
+                      type="text"
+                      value={inviteNotes}
+                      onChange={(e) => setInviteNotes(e.target.value)}
+                      placeholder={t('invite.notesPlaceholder', { defaultValue: 'Nota (opcional)' })}
+                      maxLength={500}
+                      className="w-full rounded-lg bg-surface border border-app px-3 py-1.5 text-sm outline-none focus:border-brand"
+                    />
                     <button
                       type="button"
                       onClick={handleInvite}

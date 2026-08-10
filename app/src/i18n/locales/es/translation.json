@@ -301,7 +301,8 @@
     "linkCopied": "¡Enlace copiado!",
     "copyLink": "Copiar enlace",
     "revoke": "Revocar",
-    "namePlaceholder": "Nombre de la persona"
+    "namePlaceholder": "Nombre de la persona",
+    "notesPlaceholder": "Nota para la persona invitada"
   },
   "newTask": {
     "title": "Nueva tarea",
