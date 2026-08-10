@@ -173,7 +173,14 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
   const [inviteName, setInviteName] = useState('');
   const [inviteCents, setInviteCents] = useState(Math.round(expense.amount_cents / 2));
   const [inviteSending, setInviteSending] = useState(false);
-  const [inviteResult, setInviteResult] = useState<string | null>(null);
+  const [invites, setInvites] = useState<Array<{ id: string; invite_name: string; share_cents: number; paid: boolean }>>([]);
+
+  useEffect(() => {
+    fetch(`/api/expenses/${expense.id}/invites`, { credentials: 'same-origin' })
+      .then((r) => r.json())
+      .then((d) => setInvites(d.invites ?? []))
+      .catch(() => {});
+  }, [expense.id]);
 
   const handleFile = (file: File | undefined) => {
     if (!file) return;
@@ -255,13 +262,25 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
       if (!res.ok) throw res;
       const data = await res.json();
       await navigator.clipboard.writeText(`${window.location.origin}/invite/${data.invite.token}`);
-      setInviteResult(data.invite.token);
       setInviteName('');
       announce(t('invite.linkCopied'));
+      fetch(`/api/expenses/${expense.id}/invites`, { credentials: 'same-origin' })
+        .then((r) => r.json())
+        .then((d) => setInvites(d.invites ?? []))
+        .catch(() => {});
     } catch {
       announce(t('common.error'));
     } finally {
       setInviteSending(false);
+    }
+  };
+  const handleRevokeInvite = async (inviteId: string) => {
+    try {
+      const csrf = getCsrfToken();
+      await fetch(`/api/invite/${inviteId}`, { method: 'DELETE', headers: { 'x-csrf-token': csrf ?? '' }, credentials: 'same-origin' });
+      setInvites((prev) => prev.filter((i) => i.id !== inviteId));
+    } catch {
+      announce(t('common.error'));
     }
   };
 
@@ -497,13 +516,6 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
                   <p className="text-[12px] font-semibold tracking-wide uppercase text-faint">
                     {t('expenses.form.participants')}
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => setInviteOpen(true)}
-                    className="text-[12px] font-medium text-brand hover:underline"
-                  >
-                    {t('invite.shareLink')}
-                  </button>
                 </div>
                 {!expense.shares?.length ? (
                   <p className="text-sm text-muted">{t('expenses.noShares')}</p>
@@ -554,55 +566,79 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
                 </p>
               </div>
 
-              {/* Invitar por enlace */}
-              {inviteOpen && (
-                <div className="rounded-xl border border-app bg-surface2/50 p-3 space-y-2">
+              {/* Invitaciones */}
+              <div className="border-t border-app pt-4">
+                <div className="flex items-center justify-between mb-2">
                   <p className="text-[12px] font-semibold tracking-wide uppercase text-faint">
                     {t('invite.shareLink')}
                   </p>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={inviteName}
-                      onChange={(e) => setInviteName(e.target.value)}
-                      placeholder={t('expenses.form.titlePlaceholder')}
-                      className="flex-1 rounded-lg bg-surface border border-app px-3 py-1.5 text-sm outline-none focus:border-brand"
-                    />
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      value={(inviteCents / 100).toFixed(2).replace('.', ',')}
-                      onChange={(e) => {
-                        const n = parseFloat(e.target.value.replace(',', '.'));
-                        if (!isNaN(n) && n >= 0) setInviteCents(Math.round(n * 100));
-                      }}
-                      className="w-24 rounded-lg bg-surface border border-app px-3 py-1.5 text-sm text-right outline-none focus:border-brand tnum"
-                    />
-                  </div>
-                  <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setInviteOpen(!inviteOpen)}
+                    className="text-[12px] font-medium text-brand hover:underline"
+                  >
+                    + {t('invite.shareLink')}
+                  </button>
+                </div>
+                {invites.length > 0 && (
+                  <ul className="space-y-1.5 mb-2">
+                    {invites.map((inv) => (
+                      <li key={inv.id} className="flex items-center gap-2 text-sm">
+                        <span className="flex-1 truncate">{inv.invite_name}</span>
+                        <span className="tnum text-[13px]">{fmtMoney(inv.share_cents, i18n.language)}</span>
+                        {inv.paid ? (
+                          <span className="text-[12px] text-emerald-600 dark:text-emerald-400 font-medium">
+                            {t('expenses.paid')}
+                          </span>
+                        ) : (
+                          <span className="text-[12px] text-amber-600 dark:text-amber-400 font-medium">
+                            {t('expenses.pending')}
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleRevokeInvite(inv.id)}
+                          className="text-[12px] text-muted hover:text-rose-600 dark:hover:text-rose-400"
+                          title={t('invite.revoke')}
+                        >
+                          ✕
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {inviteOpen && (
+                  <div className="rounded-xl border border-app bg-surface2/50 p-3 space-y-2">
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={inviteName}
+                        onChange={(e) => setInviteName(e.target.value)}
+                        placeholder={t('expenses.form.titlePlaceholder')}
+                        className="flex-1 rounded-lg bg-surface border border-app px-3 py-1.5 text-sm outline-none focus:border-brand"
+                      />
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={(inviteCents / 100).toFixed(2).replace('.', ',')}
+                        onChange={(e) => {
+                          const n = parseFloat(e.target.value.replace(',', '.'));
+                          if (!isNaN(n) && n >= 0) setInviteCents(Math.round(n * 100));
+                        }}
+                        className="w-24 rounded-lg bg-surface border border-app px-3 py-1.5 text-sm text-right outline-none focus:border-brand tnum"
+                      />
+                    </div>
                     <button
                       type="button"
                       onClick={handleInvite}
                       disabled={inviteSending || !inviteName.trim() || inviteCents <= 0}
-                      className="flex-1 h-9 rounded-lg bg-brand text-brandfg text-[13px] font-semibold hover:brightness-110 disabled:opacity-60"
+                      className="w-full h-9 rounded-lg bg-brand text-brandfg text-[13px] font-semibold hover:brightness-110 disabled:opacity-60"
                     >
                       {inviteSending ? '...' : t('invite.copyLink')}
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => { setInviteOpen(false); setInviteResult(null); }}
-                      className="px-3 h-9 rounded-lg border border-app text-[13px] text-muted hover:bg-surface2"
-                    >
-                      {t('common.cancel')}
-                    </button>
                   </div>
-                  {inviteResult && (
-                    <p className="text-[12px] text-emerald-600 dark:text-emerald-400">
-                      {t('invite.linkCopied')}
-                    </p>
-                  )}
-                </div>
-              )}
+                )}
+              </div>
 
               {/* Delete */}
               {isCreator && (

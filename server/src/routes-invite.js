@@ -22,6 +22,17 @@ function hashToken(token) {
 }
 
 export function registerInviteRoutes(app, { prod }) {
+  // GET /api/expenses/:id/invites — listar invitaciones de un gasto
+  app.get('/api/expenses/:id/invites', (c) => {
+    const user = c.get('user');
+    if (!user) httpError(401, ERROR_CODES.AUTH_REQUIRED);
+    const expenseId = c.req.param('id');
+    const invites = prod.prepare(
+      'SELECT id, invite_name, share_cents, paid, created_at FROM expense_invites WHERE expense_id = ? ORDER BY created_at'
+    ).all(expenseId);
+    return c.json({ invites });
+  });
+
   // POST /api/invite/create — generar link de invitación (autenticado)
   app.post('/api/invite/create', zValidator('json', createSchema), (c) => {
     const user = c.get('user');
