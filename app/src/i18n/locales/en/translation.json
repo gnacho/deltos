@@ -291,6 +291,17 @@
     "paidBy": "Paid by {{name}}",
     "minTransfers": "Settlement with minimal transfers"
   },
+  "invite": {
+    "hello": "Hi {{name}}!",
+    "yourPart": "Your share",
+    "alreadyPaid": "Already paid",
+    "markAsPaid": "Mark as paid",
+    "noAccount": "No account needed",
+    "shareLink": "Share invite link",
+    "linkCopied": "Link copied!",
+    "copyLink": "Copy link",
+    "revoke": "Revoke"
+  },
   "newTask": {
     "title": "New task",
     "titleLabel": "Title",

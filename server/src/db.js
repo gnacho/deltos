@@ -226,6 +226,19 @@ CREATE TABLE IF NOT EXISTS expense_shares (
 
 CREATE INDEX IF NOT EXISTS idx_expense_shares_user ON expense_shares(user_id);
 
+CREATE TABLE IF NOT EXISTS expense_invites (
+  id TEXT PRIMARY KEY,
+  expense_id TEXT NOT NULL REFERENCES expenses(id) ON DELETE CASCADE,
+  token_hash TEXT UNIQUE NOT NULL,
+  invite_name TEXT NOT NULL,
+  share_cents INTEGER NOT NULL,
+  paid INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_expense_invites_token ON expense_invites(token_hash);
+CREATE INDEX IF NOT EXISTS idx_expense_invites_expense ON expense_invites(expense_id);
+
 CREATE TABLE IF NOT EXISTS expense_attachments (
   id TEXT PRIMARY KEY,
   expense_id TEXT NOT NULL REFERENCES expenses(id) ON DELETE CASCADE,

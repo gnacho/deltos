@@ -15,6 +15,7 @@ const ExpenseBoard = lazyRetry(() => import('@/pages/ExpenseBoard'));
 const ProjectsPage = lazyRetry(() => import('@/pages/ProjectsPage'));
 const ActivityPage = lazyRetry(() => import('@/pages/ActivityPage'));
 const SettingsPage = lazyRetry(() => import('@/pages/SettingsPage'));
+const InvitePage = lazyRetry(() => import('@/pages/InvitePage'));
 
 function RouteFallback() {
   const { t } = useTranslation();
@@ -32,6 +33,14 @@ export default function App() {
         <DataProvider>
           <BrowserRouter>
             <Routes>
+              <Route
+                path="invite/:token"
+                element={
+                  <Suspense fallback={<RouteFallback />}>
+                    <InvitePage />
+                  </Suspense>
+                }
+              />
               <Route element={<Layout />}>
                 <Route
                   index

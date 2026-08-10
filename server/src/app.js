@@ -16,6 +16,7 @@ import { kvGet } from './db.js'
 import { registerDomainRoutes } from './routes-domain.js'
 import { registerExpenseRoutes } from './routes-expenses.js'
 import { registerPushRoutes } from './routes-push.js'
+import { inviteRoutes } from './routes-invite.js'
 import { registerHealth } from './health.js'
 import { wideEvent } from './wide-event.js'
 import { httpError, onError, validationHook } from './errors.js'
@@ -287,6 +288,7 @@ export function createApp(ctx) {
   registerExpenseRoutes(app, { prod, hub, uploadsDir: ctx.uploadsDir })
   registerPushRoutes(app)
   registerHealth(app, { prod, demo })
+  app.route('/', inviteRoutes(ctx.db, demo))
 
   // --- Estáticos + SPA fallback (excluyendo /api/* y /assets/*) ---
   // Caché (canon webapp-shell/actualizaciones): assets con hash = immutable;

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { X, Info, Paperclip, MessageCircle, Clock, Trash2 } from 'lucide-react';
 import type { FormEvent } from 'react';
 import { useData } from '@/data/data-context';
+import { getCsrfToken } from '@/data/api-client';
 import { useSession } from '@/auth/session-context';
 import type { Expense, ExpenseStep } from '@/data/types';
 import type { Attachment, ActivityEvent, Comment } from '@/data/types';
@@ -168,6 +169,11 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
   // --- Attachments ---
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteName, setInviteName] = useState('');
+  const [inviteCents, setInviteCents] = useState(Math.round(expense.amount_cents / 2));
+  const [inviteSending, setInviteSending] = useState(false);
+  const [inviteResult, setInviteResult] = useState<string | null>(null);
 
   const handleFile = (file: File | undefined) => {
     if (!file) return;
@@ -234,6 +240,29 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
   };
   const handlePayMyPart = () => {
     void data.setMyShare(expense.id, true).catch(() => announce(t('common.error')));
+  };
+  const handleInvite = async () => {
+    if (!inviteName.trim() || inviteCents <= 0) return;
+    setInviteSending(true);
+    try {
+      const csrf = getCsrfToken();
+      const res = await fetch(`/api/expenses/${expense.id}/invite`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrf ?? '' },
+        body: JSON.stringify({ invite_name: inviteName.trim(), share_cents: inviteCents }),
+        credentials: 'same-origin',
+      });
+      if (!res.ok) throw res;
+      const data = await res.json();
+      await navigator.clipboard.writeText(`${window.location.origin}/invite/${data.invite.token}`);
+      setInviteResult(data.invite.token);
+      setInviteName('');
+      announce(t('invite.linkCopied'));
+    } catch {
+      announce(t('common.error'));
+    } finally {
+      setInviteSending(false);
+    }
   };
 
   const attachments: Attachment[] = detail?.attachments ?? [];
@@ -464,9 +493,18 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
 
               {/* Reparto: partes por participante */}
               <div>
-                <p className="text-[12px] font-semibold tracking-wide uppercase text-faint mb-1">
-                  {t('expenses.form.participants')}
-                </p>
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-[12px] font-semibold tracking-wide uppercase text-faint">
+                    {t('expenses.form.participants')}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setInviteOpen(true)}
+                    className="text-[12px] font-medium text-brand hover:underline"
+                  >
+                    {t('invite.shareLink')}
+                  </button>
+                </div>
                 {!expense.shares?.length ? (
                   <p className="text-sm text-muted">{t('expenses.noShares')}</p>
                 ) : (
@@ -515,6 +553,56 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
                   {expense.project_name ? ` · ${expense.project_name}` : ''}
                 </p>
               </div>
+
+              {/* Invitar por enlace */}
+              {inviteOpen && (
+                <div className="rounded-xl border border-app bg-surface2/50 p-3 space-y-2">
+                  <p className="text-[12px] font-semibold tracking-wide uppercase text-faint">
+                    {t('invite.shareLink')}
+                  </p>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={inviteName}
+                      onChange={(e) => setInviteName(e.target.value)}
+                      placeholder={t('expenses.form.titlePlaceholder')}
+                      className="flex-1 rounded-lg bg-surface border border-app px-3 py-1.5 text-sm outline-none focus:border-brand"
+                    />
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={(inviteCents / 100).toFixed(2).replace('.', ',')}
+                      onChange={(e) => {
+                        const n = parseFloat(e.target.value.replace(',', '.'));
+                        if (!isNaN(n) && n >= 0) setInviteCents(Math.round(n * 100));
+                      }}
+                      className="w-24 rounded-lg bg-surface border border-app px-3 py-1.5 text-sm text-right outline-none focus:border-brand tnum"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={handleInvite}
+                      disabled={inviteSending || !inviteName.trim() || inviteCents <= 0}
+                      className="flex-1 h-9 rounded-lg bg-brand text-brandfg text-[13px] font-semibold hover:brightness-110 disabled:opacity-60"
+                    >
+                      {inviteSending ? '...' : t('invite.copyLink')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setInviteOpen(false); setInviteResult(null); }}
+                      className="px-3 h-9 rounded-lg border border-app text-[13px] text-muted hover:bg-surface2"
+                    >
+                      {t('common.cancel')}
+                    </button>
+                  </div>
+                  {inviteResult && (
+                    <p className="text-[12px] text-emerald-600 dark:text-emerald-400">
+                      {t('invite.linkCopied')}
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* Delete */}
               {isCreator && (
