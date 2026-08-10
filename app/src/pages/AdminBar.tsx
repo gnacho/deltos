@@ -585,6 +585,7 @@ export default function AdminBar() {
         swWaiting: !!upd.swWaiting,
         applySw: upd.swWaiting ? upd.applySw : null,
         applyRelease: upd.applyRelease,
+        dismissVersion: upd.dismissVersion,
       });
     } else if (upd.state === 'idle' || upd.state === 'checking') {
       // el check sigue en curso: no tocar el ribbon hasta saber el resultado

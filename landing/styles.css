@@ -362,6 +362,7 @@ h3 { font-size: 1.1rem; font-weight: 700; line-height: 1.4; }
   border-radius: 999px;
   padding: 0.3rem 0.75rem;
 }
+.scene-plugin-tag { font-size: 0.78rem; margin-top: 0.5rem; font-style: italic; }
 .scene-shot { width: 100%; }
 .scene-shot img { border-radius: var(--radius); }
 
@@ -389,9 +390,12 @@ h3 { font-size: 1.1rem; font-weight: 700; line-height: 1.4; }
 .note.n6 { background: rgb(var(--sticky-3)); }
 .note.n7 { background: rgb(var(--sticky-2)); }
 .note.n8 { background: rgb(var(--sticky)); }
-.note.n1, .note.n4, .note.n7 { transform: rotate(-0.6deg); }
-.note.n2, .note.n5, .note.n8 { transform: rotate(0.5deg); }
-.note.n3, .note.n6 { transform: rotate(-0.3deg); }
+.note.n9 { background: rgb(var(--sticky-2)); }
+.note.n10 { background: rgb(var(--sticky)); }
+.note.n11 { background: rgb(var(--sticky-3)); }
+.note.n1, .note.n4, .note.n7, .note.n10 { transform: rotate(-0.6deg); }
+.note.n2, .note.n5, .note.n8, .note.n11 { transform: rotate(0.5deg); }
+.note.n3, .note.n6, .note.n9 { transform: rotate(-0.3deg); }
 .note:hover { transform: rotate(0deg) translateY(-3px); transition: transform 150ms var(--ease-out); }
 
 /* ============ 03 COMPARATIVA ============ */

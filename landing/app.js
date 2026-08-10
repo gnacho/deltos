@@ -14,7 +14,6 @@
     { id: 'viaje', el: document.getElementById('shotViaje') },
     { id: 'trabajo', el: document.getElementById('shotTrabajo') },
     { id: 'expenses', el: document.getElementById('shotExpenses') },
-    { id: 'invite', el: document.getElementById('shotInvite') },
   ];
 
   /* ---------- Idioma ---------- */
@@ -132,7 +131,7 @@
 
   /* ---------- Post-its del hero: se "pegan" con giro ---------- */
   const heroStickies = Array.prototype.slice.call(document.querySelectorAll('.hero-stickies .sticky, .hero-note'));
-  const tapeWiggle = [-2, 1.5, -1];
+  const tapeWiggle = [-2, 1.5, -1, 2];
   heroStickies.forEach(function (el, i) {
     el.style.setProperty('--tape', tapeWiggle[i % tapeWiggle.length] + 'deg');
     if (!reduceMotion) {
