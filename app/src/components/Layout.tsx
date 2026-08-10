@@ -18,7 +18,6 @@ import { useSession } from '@/auth/session-context';
 import { useTheme } from '@/theme/theme-context';
 import { apiPost, dispatchUnauthorized } from '@/data/api-client';
 import { LogoMark } from '@/components/Logo';
-import { Avatar } from '@/components/Avatar';
 import { ConnectionDot } from '@/components/ConnectionDot';
 import { colorOf } from '@/lib/colors';
 import { ProjectIcon } from '@/components/ProjectIcon';
@@ -582,13 +581,6 @@ export default function Layout() {
                 <ChevronsLeft className="w-4 h-4" aria-hidden="true" />
               </button>
             </div>
-            <div className="flex items-center gap-2.5 rounded-xl px-3 py-2">
-              <Avatar name={user.username} color={user.color} size="lg" />
-              <div className="min-w-0">
-                <p className="text-sm font-medium leading-tight truncate">{user.username}</p>
-                <p className="text-xs text-faint leading-tight">{t('nav.currentAccount')}</p>
-              </div>
-            </div>
           </div>
         </aside>
       )}
@@ -627,10 +619,6 @@ export default function Layout() {
         <h1 className="font-display font-bold text-lg tracking-tight truncate">{title}</h1>
         <div className="flex items-center gap-3">
           {boardSelect}
-          <div className="flex items-center gap-2">
-            <Avatar name={user.username} color={user.color} size="sm" />
-            <span className="text-sm font-medium truncate max-w-[120px]">{user.username}</span>
-          </div>
           <ThemeToggleButton mobile />
         </div>
       </header>
