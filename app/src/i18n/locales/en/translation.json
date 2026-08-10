@@ -291,7 +291,8 @@
     "paidBy": "Paid by {{name}}",
     "minTransfers": "Settlement with minimal transfers",
     "splitEqually": "Split equally",
-    "addParticipant": "Add person"
+    "addParticipant": "Add person",
+    "allUsersAdded": "Everyone added"
   },
   "expenseEvents": {
     "created": "created the expense",
