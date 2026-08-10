@@ -263,15 +263,6 @@ function BackupsPanel({ expanded }: { expanded: boolean }) {
           variant="switch"
         />
 
-        <CheckToggle
-          checked={settings.plugin_expenses_enabled}
-          onChange={() => void save({ plugin_expenses_enabled: !settings.plugin_expenses_enabled })}
-          label={t('settings.server.pluginExpenses')}
-          disabled={busy}
-          size="sm"
-          variant="switch"
-        />
-
         <button
           type="button"
           onClick={() => void runBackup()}

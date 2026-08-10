@@ -317,6 +317,10 @@ export function migrateSchema(db) {
     db.exec('ALTER TABLE users ADD COLUMN display_name TEXT')
     log.info('schema_migrated', { table: 'users', column: 'display_name' })
   }
+  if (!userCols.includes('expenses_enabled')) {
+    db.exec('ALTER TABLE users ADD COLUMN expenses_enabled INTEGER NOT NULL DEFAULT 0')
+    log.info('schema_migrated', { table: 'users', column: 'expenses_enabled' })
+  }
   if (!userCols.includes('color')) {
     db.exec("ALTER TABLE users ADD COLUMN color TEXT DEFAULT 'slate'")
     log.info('schema_migrated', { table: 'users', column: 'color' })
