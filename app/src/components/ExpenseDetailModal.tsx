@@ -60,6 +60,12 @@ function isImageAttachment(a: Attachment) {
   return a.mime.startsWith('image/') || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext);
 }
 
+function equalSplit(total: number, n: number): number[] {
+  const base = Math.floor(total / n);
+  const rest = total - base * n;
+  return Array.from({ length: n }, (_, i) => base + (i < rest ? 1 : 0));
+}
+
 function iconFor(mime: string, filename: string) {
   const ext = filename.split('.').pop()?.toLowerCase() ?? '';
   if (mime.startsWith('image/') || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext)) {
@@ -518,6 +524,40 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
                   <p className="text-[12px] font-semibold tracking-wide uppercase text-faint">
                     {t('expenses.form.participants')}
                   </p>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => { const el = document.getElementById('add-participant-dropdown'); if (el) el.classList.toggle('hidden'); }}
+                      className="w-6 h-6 rounded-lg text-faint hover:bg-surface2 hover:text-brand flex items-center justify-center"
+                      aria-label={t('expenses.addParticipant')}
+                    >
+                      <Plus className="w-3.5 h-3.5" aria-hidden="true" />
+                    </button>
+                    <div id="add-participant-dropdown" className="hidden absolute right-0 top-full mt-1 z-30 rounded-xl bg-surface border border-app shadow-2xl py-1 min-w-[160px]">
+                      {data.getUsers().filter((u) => !expense.shares?.some((sh) => sh.user_id === u.id)).length === 0 ? (
+                        <p className="px-3 py-2 text-[13px] text-muted">{t('expenses.allUsersAdded')}</p>
+                      ) : (
+                        data.getUsers().filter((u) => !expense.shares?.some((sh) => sh.user_id === u.id)).map((u) => (
+                          <button
+                            key={u.id}
+                            type="button"
+                            onClick={async () => {
+                              const el = document.getElementById('add-participant-dropdown');
+                              if (el) el.classList.add('hidden');
+                              const newShares = [...(expense.shares || []).map((s) => ({ user_id: s.user_id, share_cents: s.share_cents })), { user_id: u.id, share_cents: 0 }];
+                              const eq = equalSplit(expense.amount_cents, newShares.length);
+                              const updated = newShares.map((s, i) => ({ ...s, share_cents: eq[i] }));
+                              await data.updateExpense(expense.id, { shares: updated as any });
+                            }}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-[13px] text-left hover:bg-surface2"
+                          >
+                            <Avatar name={u.username} color={u.color} size="sm" />
+                            <span>{u.username}</span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
                 </div>
                 {!expense.shares?.length ? (
                   <p className="text-sm text-muted">{t('expenses.noShares')}</p>
@@ -556,6 +596,27 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
                           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
                             {t('expenses.pending')}
                           </span>
+                        )}
+                        {!sh.paid && (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const newShares = expense.shares
+                                .filter((s) => s.user_id !== sh.user_id)
+                                .map((s) => ({ user_id: s.user_id, share_cents: s.share_cents }));
+                              if (newShares.length > 0) {
+                                const eq = equalSplit(expense.amount_cents, newShares.length);
+                                const updated = newShares.map((s, i) => ({ ...s, share_cents: eq[i] }));
+                                await data.updateExpense(expense.id, { shares: updated as any });
+                              } else {
+                                await data.updateExpense(expense.id, { shares: [] as any });
+                              }
+                            }}
+                            className="w-5 h-5 rounded text-faint hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 flex items-center justify-center shrink-0"
+                            aria-label={t('common.remove')}
+                          >
+                            <X className="w-3 h-3" aria-hidden="true" />
+                          </button>
                         )}
                       </li>
                     ))}

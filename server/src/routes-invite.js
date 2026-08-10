@@ -122,6 +122,12 @@ export function registerInviteRoutes(app, { prod }) {
          ORDER BY ae.created_at DESC
          LIMIT 50`
       ).all(invite.expense_id),
+      comments: prod.prepare(
+        `SELECT c.id, c.body, c.created_at, u.username, u.color AS user_color, c.author_name
+         FROM expense_comments c LEFT JOIN users u ON u.id = c.user_id
+         WHERE c.expense_id = ?
+         ORDER BY c.created_at`
+      ).all(invite.expense_id).map((c) => ({ ...c, username: c.username || c.author_name || '?' })),
     });
   });
 
@@ -166,5 +172,28 @@ app.put('/api/invite/:token/pay', zValidator('json', paySchema), (c) => {
   log.info('invite_paid', { invite_id: invite.id, expense_id: invite.expense_id, payment_method });
 
   return c.json({ ok: true });
+});
+
+// POST /api/invite/:token/comments — añadir comentario como invitado (público)
+const inviteCommentSchema = z.object({ body: z.string().min(1).max(5000) });
+app.post('/api/invite/:token/comments', zValidator('json', inviteCommentSchema), (c) => {
+  const rawToken = c.req.param('token');
+  if (!rawToken || rawToken.length > 200) httpError(404, ERROR_CODES.EXPENSE_NOT_FOUND);
+
+  const tokenHash = hashToken(rawToken);
+  const invite = prod.prepare('SELECT * FROM expense_invites WHERE token_hash = ?').get(tokenHash);
+  if (!invite) httpError(404, ERROR_CODES.EXPENSE_NOT_FOUND);
+
+  const { body } = c.req.valid('json');
+  const id = crypto.randomUUID();
+  const now = Date.now();
+
+  prod.prepare(
+    'INSERT INTO expense_comments (id, expense_id, user_id, author_name, body, created_at) VALUES (?, ?, NULL, ?, ?, ?)'
+  ).run(id, invite.expense_id, invite.invite_name, body, now);
+
+  log.info('invite_comment', { invite_id: invite.id, expense_id: invite.expense_id });
+
+  return c.json({ ok: true }, 201);
 });
 }

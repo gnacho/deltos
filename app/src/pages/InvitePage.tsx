@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
-import { Check, Paperclip, Clock, Download, ChevronDown, FileText, FileSpreadsheet, FileImage, File as FileIcon } from 'lucide-react';
+import { Check, Paperclip, Clock, Download, ChevronDown, FileText, FileSpreadsheet, FileImage, File as FileIcon, MessageCircle, Send } from 'lucide-react';
 import { fmtMoney } from '@/lib/format';
 import { LogoMark } from '@/components/Logo';
 import { relTime } from '@/i18n';
@@ -19,6 +19,14 @@ interface ActivityEvent {
   data: string;
   created_at: number;
   username: string;
+}
+
+interface Comment {
+  id: string;
+  body: string;
+  created_at: number;
+  username: string;
+  user_color?: string;
 }
 
 interface InviteData {
@@ -39,6 +47,7 @@ interface InviteData {
   };
   attachments: Attachment[];
   activity: ActivityEvent[];
+  comments: Comment[];
 }
 
 const PAYMENT_METHODS = [
@@ -78,6 +87,10 @@ export default function InvitePage() {
   const [paymentMethod, setPaymentMethod] = useState<string>('bizum');
   const [showAttachments, setShowAttachments] = useState(false);
   const [showActivity, setShowActivity] = useState(false);
+  const [showComments, setShowComments] = useState(false);
+  const [commentBody, setCommentBody] = useState('');
+  const [commentSending, setCommentSending] = useState(false);
+  const [comments, setComments] = useState<Comment[]>([]);
 
   useEffect(() => {
     if (!token) return;
@@ -86,6 +99,7 @@ export default function InvitePage() {
       .then((res) => {
         setData(res);
         setPaid(res.invite.paid);
+        setComments(res.comments || []);
       })
       .catch(() => {
         setError(t('common.error'));
@@ -108,6 +122,31 @@ export default function InvitePage() {
       // ignore
     } finally {
       setPaying(false);
+    }
+  };
+
+  const handleAddComment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!token || !commentBody.trim() || commentSending) return;
+    setCommentSending(true);
+    try {
+      const res = await fetch(`/api/invite/${encodeURIComponent(token)}/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body: commentBody.trim() }),
+      });
+      if (!res.ok) throw res;
+      setComments((prev) => [...prev, {
+        id: crypto.randomUUID(),
+        body: commentBody.trim(),
+        created_at: Date.now(),
+        username: data?.invite.invite_name || '?',
+      }]);
+      setCommentBody('');
+    } catch {
+      // ignore
+    } finally {
+      setCommentSending(false);
     }
   };
 
@@ -279,6 +318,58 @@ export default function InvitePage() {
             )}
           </div>
         )}
+
+        {/* Comentarios */}
+        <div className="rounded-2xl border border-app bg-surface p-5 shadow-soft">
+          <button
+            type="button"
+            onClick={() => setShowComments(!showComments)}
+            className="w-full flex items-center gap-2 text-left"
+          >
+            <MessageCircle className="w-4 h-4 text-faint" aria-hidden="true" />
+            <span className="text-sm font-semibold flex-1">{t('task.tabs.comentarios')} ({comments.length})</span>
+            <ChevronDown className={`w-4 h-4 text-faint transition-transform ${showComments ? 'rotate-180' : ''}`} aria-hidden="true" />
+          </button>
+          {showComments && (
+            <div className="mt-3 space-y-4">
+              {comments.length > 0 && (
+                <ul className="space-y-3">
+                  {comments.map((c) => (
+                    <li key={c.id} className="flex gap-3">
+                      <div className="w-7 h-7 rounded-full bg-surface2 border border-app flex items-center justify-center text-[11px] font-semibold text-muted shrink-0">
+                        {c.username?.charAt(0).toUpperCase() || '?'}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[13px]">
+                          <span className="font-semibold">{c.username || '?'}</span>{' '}
+                          <span className="text-[12px] text-faint">{relTime(c.created_at, t)}</span>
+                        </p>
+                        <p className="mt-0.5 text-[14px] leading-relaxed whitespace-pre-wrap break-words">{c.body}</p>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <form onSubmit={handleAddComment} className="flex gap-2 items-end">
+                <input
+                  type="text"
+                  value={commentBody}
+                  maxLength={2000}
+                  onChange={(e) => setCommentBody(e.target.value)}
+                  placeholder={t('comments.placeholder')}
+                  className="flex-1 bg-surface2 border border-app rounded-xl px-3 py-2 text-[14px] outline-none focus:border-brand placeholder:text-faint"
+                />
+                <button
+                  type="submit"
+                  disabled={commentSending || !commentBody.trim()}
+                  className="w-10 h-10 rounded-xl bg-brand text-brandfg flex items-center justify-center hover:brightness-110 disabled:opacity-60 shrink-0"
+                >
+                  <Send className="w-4 h-4" aria-hidden="true" />
+                </button>
+              </form>
+            </div>
+          )}
+        </div>
 
         <p className="text-[12px] text-faint text-center pt-2">
           Deltos · {t('invite.noAccount')}
