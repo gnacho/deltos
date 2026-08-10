@@ -132,7 +132,7 @@
 
   /* ---------- Post-its del hero: se "pegan" con giro ---------- */
   const heroStickies = Array.prototype.slice.call(document.querySelectorAll('.hero-stickies .sticky, .hero-note'));
-  const tapeWiggle = [-2, 1.5, -1];
+  const tapeWiggle = [-2, 1.5, -1, 2];
   heroStickies.forEach(function (el, i) {
     el.style.setProperty('--tape', tapeWiggle[i % tapeWiggle.length] + 'deg');
     if (!reduceMotion) {
