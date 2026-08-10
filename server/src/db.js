@@ -218,6 +218,38 @@ CREATE INDEX IF NOT EXISTS idx_expenses_step ON expenses(step, position);
 CREATE INDEX IF NOT EXISTS idx_expenses_created_by ON expenses(created_by);
 CREATE INDEX IF NOT EXISTS idx_expenses_requested ON expenses(requested_user_id);
 
+CREATE TABLE IF NOT EXISTS expense_attachments (
+  id TEXT PRIMARY KEY,
+  expense_id TEXT NOT NULL REFERENCES expenses(id) ON DELETE CASCADE,
+  filename TEXT NOT NULL,
+  stored_name TEXT NOT NULL,
+  size INTEGER NOT NULL,
+  mime TEXT DEFAULT 'application/octet-stream',
+  uploaded_by TEXT REFERENCES users(id),
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_expense_attachments_expense ON expense_attachments(expense_id);
+
+CREATE TABLE IF NOT EXISTS expense_comments (
+  id TEXT PRIMARY KEY,
+  expense_id TEXT NOT NULL REFERENCES expenses(id) ON DELETE CASCADE,
+  user_id TEXT REFERENCES users(id),
+  body TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_expense_comments_expense ON expense_comments(expense_id);
+
+CREATE TABLE IF NOT EXISTS expense_activity_events (
+  id TEXT PRIMARY KEY,
+  expense_id TEXT REFERENCES expenses(id) ON DELETE CASCADE,
+  user_id TEXT REFERENCES users(id),
+  type TEXT NOT NULL CHECK (type IN
+    ('created','title','amount','category','notes','paid','requested','split','payment_method','moved','attachment')),
+  data TEXT DEFAULT '{}',
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_expense_activity_expense ON expense_activity_events(expense_id, created_at);
+
 -- Idempotency: cache de respuestas POST para reintentos seguros (TTL 24h).
 CREATE TABLE IF NOT EXISTS idempotency_keys (
   key TEXT PRIMARY KEY,
