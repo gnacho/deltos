@@ -116,6 +116,12 @@ body {
 .text-faint {
   color: var(--text-faint);
 }
+.text-text {
+  color: var(--text);
+}
+.text-brandfg {
+  color: rgb(var(--accent-fg-rgb));
+}
 .divide-app > :not([hidden]) ~ :not([hidden]) {
   border-color: var(--border);
 }
