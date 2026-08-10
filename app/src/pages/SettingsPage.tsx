@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { FormEvent } from 'react';
 import * as React from 'react';
+import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import {
   User,
@@ -9,6 +10,7 @@ import {
   Monitor,
   Download,
   KeyRound,
+  Languages,
   LogOut,
   Check,
   X,
@@ -165,7 +167,11 @@ function MiPerfilCard() {
   const actionTextCls = 'hidden sm:inline';
 
   return (
-    <Card>
+    <motion.section
+      initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
+      transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+      className="w-full rounded-2xl border border-app bg-surface p-5"
+    >
       <div className="flex flex-wrap items-center gap-3 sm:gap-4 min-w-0">
         {/* Avatar */}
         <Avatar name={user.username} color={user.color} size="xl" />
@@ -273,13 +279,15 @@ function MiPerfilCard() {
             </button>
           )}
 
-          {/* Idioma */}
-          <label htmlFor="mp-lang" className="sr-only">{t('settings.language')}</label>
+          {/* Idioma — icono en móvil, select completo en desktop */}
+          <label htmlFor="mp-lang" className="sm:hidden inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-app text-faint cursor-pointer hover:bg-surface hover:text-text-primary" title={t('settings.language')}>
+            <Languages className="h-4 w-4" />
+          </label>
           <select
             id="mp-lang"
             value={user.language ?? 'auto'}
             onChange={(e) => void changeLanguage(e.target.value as Language)}
-            className="h-9 w-[120px] shrink-0 rounded-lg border border-app bg-elevated px-2 text-[13px] text-text-primary outline-none focus:border-brand"
+            className="hidden sm:inline h-9 w-[120px] shrink-0 rounded-lg border border-app bg-elevated px-2 text-[13px] text-text-primary outline-none focus:border-brand"
           >
             <option value="auto">🌐 {t('settings.langAuto')}</option>
             <option value="es">🇪🇸 Español</option>
@@ -342,27 +350,12 @@ function MiPerfilCard() {
         </div>
       )}
 
-      <div className="mt-4 border-t border-app pt-4">
-        <CheckToggle
-          checked={user.expenses_enabled !== false}
-          onChange={async (checked) => {
-            try {
-              await apiPut('/api/auth/profile', { expenses_enabled: checked });
-              setUser({ ...user, expenses_enabled: checked });
-            } catch {}
-          }}
-          label={t('settings.server.pluginExpenses')}
-          size="sm"
-          variant="switch"
-        />
-      </div>
-
       {showNotif && (
         <div className="mt-4 border-t border-app pt-4">
           <NotificationsInline />
         </div>
       )}
-    </Card>
+    </motion.section>
   );
 }
 
@@ -450,69 +443,85 @@ function NotificationsInline() {
   );
 }
 
-/* ---------------- Apariencia ---------------- */
-/**
- * Mini-preview de tema con los tokens reales (scope .light/.dark). El acento
- * se pinta desde la tabla ACCENTS para el tema del preview (el scope de clase
- * no puede heredar el acento vigente: redefine las variables por tema).
- */
-function ThemePreview({ variant }: { variant: 'light' | 'dark' }) {
-  const { t } = useTranslation();
-  const { accent } = useTheme();
-  const [accentColor] = variant === 'dark' ? ACCENTS[accent].dark : ACCENTS[accent].light;
+/* ---------------- Apariencia (canónica 10-Ago-2026) ---------------- */
+
+/** Colores fijos de los temas para los previews (fuente única: index.css). */
+const THEME_BG = { light: '#F4F6FA', dark: '#080D1A' } as const;
+const THEME_SURFACE = { light: '#FFFFFF', dark: '#101828' } as const;
+const THEME_BAR = { light: '#EEF1F6', dark: '#182338' } as const;
+
+/** Mitad del preview 'split': un lado del tema con sus tokens reales. */
+function PreviewBlock({ useLight }: { useLight: boolean }) {
+  const bgC = useLight ? THEME_BG.light : THEME_BG.dark;
+  const surfaceC = useLight ? THEME_SURFACE.light : THEME_SURFACE.dark;
+  const barC = useLight ? THEME_BAR.light : THEME_BAR.dark;
   return (
-    <div className={`rounded-xl border border-app p-1.5 ${variant}`} style={{ backgroundColor: 'var(--bg)' }}>
-      <div className="flex h-14 flex-col justify-between rounded-lg border border-app p-2" style={{ backgroundColor: 'var(--surface)' }}>
-        <div className="flex items-center justify-between">
-          <span
-            className="flex h-4 w-4 items-center justify-center rounded"
-            style={{ backgroundColor: `${accentColor}26`, color: accentColor }}
-          >
-            <Check className="w-2.5 h-2.5" aria-hidden="true" />
-          </span>
-          <span className="text-[8px] font-medium uppercase tracking-wider" style={{ color: 'var(--text-faint)' }}>
-            {t(variant === 'light' ? 'settings.themeLight' : 'settings.themeDark')}
-          </span>
-        </div>
-        <div className="space-y-1">
-          <div className="h-1.5 w-3/4 rounded-full" style={{ backgroundColor: 'var(--surface-2)' }} />
-          <div className="h-1.5 w-1/2 rounded-full" style={{ backgroundColor: `${accentColor}99` }} />
+    <div className="flex w-1/2 flex-col p-1.5" style={{ backgroundColor: bgC }}>
+      <div className="mb-1 h-1.5 w-full rounded" style={{ backgroundColor: barC }} />
+      <div className="flex flex-1 gap-1">
+        <div className="w-1/4 rounded" style={{ backgroundColor: barC }} />
+        <div className="flex flex-1 flex-col gap-1">
+          <div className="h-2 w-3/4 rounded bg-brand/60" />
+          <div className="h-4 flex-1 rounded" style={{ backgroundColor: surfaceC }} />
         </div>
       </div>
     </div>
   );
 }
 
-/** Selector de acento: swatches con el color real del tema efectivo (fuente única: ACCENTS). */
+function ThemePreview({ variant }: { variant: 'light' | 'dark' | 'auto' }) {
+  if (variant === 'auto') {
+    return (
+      <div className="flex h-[80px] w-full overflow-hidden rounded-lg border border-app">
+        <PreviewBlock useLight={false} />
+        <PreviewBlock useLight />
+      </div>
+    );
+  }
+  const { bg, surface, bar } = variant === 'dark'
+    ? { bg: THEME_BG.dark, surface: THEME_SURFACE.dark, bar: THEME_BAR.dark }
+    : { bg: THEME_BG.light, surface: THEME_SURFACE.light, bar: THEME_BAR.light };
+  return (
+    <div className="flex h-[80px] w-full flex-col rounded-lg border border-app p-1.5" style={{ backgroundColor: bg }}>
+      <div className="mb-1 h-1.5 w-full rounded" style={{ backgroundColor: bar }} />
+      <div className="flex flex-1 gap-1">
+        <div className="w-1/4 rounded" style={{ backgroundColor: bar }} />
+        <div className="flex flex-1 flex-col gap-1">
+          <div className="h-2 w-3/4 rounded bg-brand/60" />
+          <div className="h-4 flex-1 rounded" style={{ backgroundColor: surface }} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Swatches de acento con colores del tema actual (fuente única: ACCENTS). */
 function AccentSwatches() {
   const { t } = useTranslation();
   const { accent, setAccent, dark } = useTheme();
   return (
-    <div className="mt-4">
-      <p className="text-[13px] font-medium mb-1.5">{t('settings.accent.title')}</p>
-      <div className="flex items-center gap-3" role="radiogroup" aria-label={t('settings.accent.title')}>
-        {ACCENT_IDS.map((id) => {
-          const on = accent === id;
-          const [color] = dark ? ACCENTS[id].dark : ACCENTS[id].light;
-          return (
-            <button
-              key={id}
-              type="button"
-              role="radio"
-              aria-checked={on}
-              aria-label={t(`settings.accent.${id}`)}
-              title={t(`settings.accent.${id}`)}
-              onClick={() => setAccent(id)}
-              className="w-7 h-7 rounded-full transition-shadow"
-              style={{
-                backgroundColor: color,
-                boxShadow: on ? `0 0 0 2px var(--surface), 0 0 0 4px rgb(var(--accent-rgb))` : undefined,
-              }}
-            />
-          );
-        })}
-      </div>
-      <p className="text-[13px] text-faint mt-2">{t('settings.accent.hint')}</p>
+    <div role="radiogroup" aria-label={t('settings.accent.title')} className="flex items-center gap-2">
+      {ACCENT_IDS.map((id) => {
+        const on = accent === id;
+        const [color] = dark ? ACCENTS[id].dark : ACCENTS[id].light;
+        return (
+          <button
+            key={id}
+            type="button"
+            role="radio"
+            aria-checked={on}
+            aria-label={t(`settings.accent.${id}`)}
+            title={t(`settings.accent.${id}`)}
+            onClick={() => setAccent(id)}
+            className={`relative flex h-7 w-7 items-center justify-center rounded-full transition-transform hover:scale-110${
+              on ? ' ring-2 ring-brand ring-offset-2' : ''
+            }`}
+            style={{ backgroundColor: color, ...(on ? { '--tw-ring-offset-color': 'var(--surface)' } as React.CSSProperties : {}) }}
+          >
+            {on && <Check size={12} strokeWidth={3} className="text-white" />}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -526,47 +535,60 @@ function AppearanceCard() {
     { m: 'dark', icon: Moon, label: t('settings.themeDark') },
   ];
   return (
-    <Card className="h-full">
+    <Card>
       <Heading icon={Sun}>{t('settings.appearance')}</Heading>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        {/* Izquierda: tema + previews */}
-        <div className="space-y-4">
-          <div
-            className="grid grid-cols-3 gap-1 rounded-xl bg-surface2 p-1"
-            role="radiogroup"
-            aria-label={t('settings.appearance')}
-          >
-            {opts.map(({ m, icon: Icon, label }) => {
-              const on = mode === m;
-              return (
-                <button
-                  key={m}
-                  type="button"
-                  role="radio"
-                  aria-checked={on}
-                  onClick={() => setMode(m)}
-                  className={`flex flex-col items-center gap-1.5 rounded-xl py-3 text-[13px] ${
-                    on ? 'bg-surface shadow-soft font-medium' : 'text-muted'
-                  }`}
-                >
-                  <Icon className="w-[18px] h-[18px]" aria-hidden="true" />
-                  {label}
-                </button>
-              );
-            })}
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <ThemePreview variant="light" />
-            <ThemePreview variant="dark" />
-          </div>
+      <div className="flex flex-col gap-4 md:flex-row md:gap-6">
+        {/* Tiles de tema (máx 50% ancho) */}
+        <div role="radiogroup" aria-label={t('settings.appearance')} className="grid grid-cols-3 gap-2 md:w-1/2 md:flex-shrink-0">
+          {opts.map(({ m, icon: Icon, label }) => {
+            const active = mode === m;
+            return (
+              <button
+                key={m}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                onClick={() => setMode(m)}
+                className={`group relative flex flex-col gap-2 rounded-xl border-2 p-2 transition-all${
+                  active ? ' border-brand bg-brand/5' : ' border-app hover:border-brand/30'
+                }`}
+              >
+                <ThemePreview variant={m === 'auto' ? 'auto' : m} />
+                <div className="flex items-center justify-center gap-1.5">
+                  <Icon size={14} className={active ? 'text-brand' : 'text-faint'} />
+                  <span className={`text-xs font-medium${active ? ' text-brand' : ' text-faint'}`}>{label}</span>
+                </div>
+                {active && (
+                  <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-brand text-white">
+                    <Check size={12} strokeWidth={3} />
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
 
-        {/* Derecha: acento, densidad, animaciones */}
-        <div className="space-y-4">
-          <AccentSwatches />
+        {/* Controles: acento + animaciones en línea, densidad debajo */}
+        <div className="flex flex-col gap-3 md:flex-1">
+          {/* Acento y Animaciones en línea */}
           <div>
-            <p className="text-[13px] font-medium mb-1.5">{t('settings.density.title')}</p>
-            <div className="grid grid-cols-2 gap-1 rounded-xl bg-surface2 p-1" role="radiogroup" aria-label={t('settings.density.title')}>
+            <p className="mb-1.5 text-[11px] font-medium uppercase tracking-[0.08em] text-faint">{t('settings.accent.title')}</p>
+            <div className="flex items-center gap-3">
+              <AccentSwatches />
+              <CheckToggle
+                checked={!reduceMotion}
+                onChange={(v) => setReduceMotion(!v)}
+                label={t('settings.reduceMotion')}
+                variant="switch"
+                className="ml-auto"
+              />
+            </div>
+          </div>
+
+          {/* Densidad */}
+          <div>
+            <p className="mb-1.5 text-[11px] font-medium uppercase tracking-[0.08em] text-faint">{t('settings.density.title')}</p>
+            <div role="radiogroup" aria-label={t('settings.density.title')} className="flex rounded-xl border border-app p-0.5">
               {(['comfortable', 'compact'] as const).map((d) => (
                 <button
                   key={d}
@@ -574,31 +596,14 @@ function AppearanceCard() {
                   role="radio"
                   aria-checked={density === d}
                   onClick={() => setDensity(d)}
-                  className={`rounded-xl py-2 text-[13px] ${density === d ? 'bg-surface shadow-soft font-medium' : 'text-muted'}`}
+                  className={`h-8 flex-1 rounded-lg text-[13px] transition-colors${
+                    density === d ? ' bg-surface font-semibold text-text' : ' text-faint hover:text-muted'
+                  }`}
                 >
                   {t(`settings.density.${d}`)}
                 </button>
               ))}
             </div>
-          </div>
-          <div className="flex items-center justify-between gap-4">
-            <p className="text-[13px]">{t('settings.reduceMotion')}</p>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={reduceMotion}
-              aria-label={t('settings.reduceMotion')}
-              onClick={() => setReduceMotion(!reduceMotion)}
-              className={`relative w-12 h-7 rounded-full shrink-0 transition-colors ${
-                reduceMotion ? 'bg-brand' : 'bg-surface2 border border-app'
-              }`}
-            >
-              <span
-                className={`absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-white shadow transition-transform ${
-                  reduceMotion ? 'translate-x-5' : ''
-                }`}
-              />
-            </button>
           </div>
         </div>
       </div>
@@ -1064,27 +1069,13 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* Layout canónico (patrón NetPulse): grid 12 col, spans 7/5/12 */}
-      <div className="grid grid-cols-1 gap-4 md:gap-5 lg:grid-cols-12 lg:items-start">
-        <div className="lg:col-span-12 grid grid-cols-1 gap-4 md:gap-5 lg:grid-cols-2 lg:items-stretch">
-          <div className="h-full">
-            <AppearanceCard />
-          </div>
-          <div className="h-full">
-            <LabelsCard />
-          </div>
-        </div>
-        <div className="lg:col-span-12">
-          <MiPerfilCard />
-        </div>
-        {isAdmin && (
-          <div className="lg:col-span-12">
-            <AdminBar />
-          </div>
-        )}
-        <div className="lg:col-span-12">
-          <AboutCard installState={installState} install={install} />
-        </div>
+      {/* Layout: cada tarjeta en su propia fila al 100% */}
+      <div className="flex flex-col gap-4 md:gap-5">
+        <AppearanceCard />
+        <MiPerfilCard />
+        <LabelsCard />
+        {isAdmin && <AdminBar />}
+        <AboutCard installState={installState} install={install} />
       </div>
     </div>
   );
