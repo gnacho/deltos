@@ -24,12 +24,13 @@ function hashToken(token) {
 export function inviteRoutes(db, demo) {
   const router = new Hono();
 
-  // POST /api/expenses/:id/invite — generar link de invitación (autenticado)
-  router.post('/api/expenses/:id/invite', zValidator('json', createSchema), (c) => {
-    const expenseId = c.req.param('id');
+  // POST /api/invite/create — generar link de invitación (autenticado)
+  router.post('/api/invite/create', zValidator('json', createSchema.extend({
+    expense_id: z.string().min(1).max(100),
+  })), (c) => {
     const user = c.get('user');
     if (!user) httpError(401, ERROR_CODES.AUTH_REQUIRED);
-    const { invite_name, share_cents } = c.req.valid('json');
+    const { invite_name, share_cents, expense_id: expenseId } = c.req.valid('json');
 
     const expense = db.prepare('SELECT id, created_by, amount_cents FROM expenses WHERE id = ? AND deleted_at IS NULL').get(expenseId);
     if (!expense) httpError(404, ERROR_CODES.EXPENSE_NOT_FOUND);

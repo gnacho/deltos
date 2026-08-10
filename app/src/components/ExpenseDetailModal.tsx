@@ -246,10 +246,10 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
     setInviteSending(true);
     try {
       const csrf = getCsrfToken();
-      const res = await fetch(`/api/expenses/${expense.id}/invite`, {
+      const res = await fetch('/api/invite/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrf ?? '' },
-        body: JSON.stringify({ invite_name: inviteName.trim(), share_cents: inviteCents }),
+        body: JSON.stringify({ invite_name: inviteName.trim(), share_cents: inviteCents, expense_id: expense.id }),
         credentials: 'same-origin',
       });
       if (!res.ok) throw res;
