@@ -6,10 +6,10 @@ import type { ExpenseStep } from '@/data/types';
 import { useData } from '@/data/data-context';
 import { useSession } from '@/auth/session-context';
 import { ExpenseCard, ExpenseCardMobile } from '@/components/ExpenseCard';
-import { MobileMoveCard } from '@/components/MobileMoveCard';
 import { ExpenseDetailModal } from '@/components/ExpenseDetailModal';
 import { ExpenseModal } from '@/components/ExpenseModal';
 import { BalanceStrip, ExpenseSummary } from '@/components/ExpenseSummary';
+import { MobileMoveCard } from '@/components/MobileMoveCard';
 import { colorOf } from '@/lib/colors';
 import { announce } from '@/lib/announce';
 
@@ -44,6 +44,11 @@ export default function ExpenseBoard() {
   const dragId = useRef<string | null>(null);
   const placeholder = useRef<HTMLDivElement | null>(null);
   const flipRects = useRef<Map<string, DOMRect> | null>(null);
+  const dragClone = useRef<HTMLElement | null>(null);
+  const dragOrigin = useRef<DOMRect | null>(null);
+  const dropped = useRef(false);
+  const movedId = useRef<string | null>(null);
+  const docMove = useRef<((ev: globalThis.DragEvent) => void) | null>(null);
 
   const expenses = data.getExpenses();
 
@@ -90,6 +95,17 @@ export default function ExpenseBoard() {
         el.addEventListener('transitionend', () => (el.style.transition = ''), { once: true });
       });
     });
+    const landedId = movedId.current;
+    if (landedId) {
+      movedId.current = null;
+      const el = boardRef.current?.querySelector<HTMLElement>(`[data-task="${landedId}"]`);
+      if (el) {
+        el.classList.add('card-landed');
+        el.addEventListener('animationend', () => el.classList.remove('card-landed'), {
+          once: true,
+        });
+      }
+    }
   }, [expenses]);
 
   const handleOpenNew = (step: ExpenseStep) => {
@@ -105,6 +121,10 @@ export default function ExpenseBoard() {
       placeholder.current.remove();
       placeholder.current = null;
     }
+    if (docMove.current) {
+      document.removeEventListener('dragover', docMove.current);
+      docMove.current = null;
+    }
     boardRef.current
       ?.querySelectorAll('.col-target')
       .forEach((s) => s.classList.remove('col-target'));
@@ -112,6 +132,25 @@ export default function ExpenseBoard() {
     boardRef.current?.querySelectorAll<HTMLElement>('[data-empty]').forEach((p) => {
       p.style.display = '';
     });
+    /* El clon: si hubo drop se desvanece en el sitio; si no, vuelve elástico al origen */
+    const clone = dragClone.current;
+    if (clone) {
+      dragClone.current = null;
+      if (dropped.current || reducedMotionMQ.matches || !dragOrigin.current) {
+        clone.style.transition = 'opacity 0.15s ease, transform 0.15s ease';
+        clone.style.opacity = '0';
+        clone.style.transform += ' scale(0.9)';
+      } else {
+        const o = dragOrigin.current;
+        clone.style.transition =
+          'transform 0.32s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.32s ease';
+        clone.style.transform = `translate(${o.left}px, ${o.top}px) rotate(0deg) scale(1)`;
+        clone.style.opacity = '0.4';
+      }
+      window.setTimeout(() => clone.remove(), 360);
+    }
+    dragOrigin.current = null;
+    dropped.current = false;
   };
 
   const onDragStart = (e: DragEvent) => {
@@ -125,7 +164,39 @@ export default function ExpenseBoard() {
     ph.style.height = `${card.offsetHeight}px`;
     ph.setAttribute('aria-hidden', 'true');
     placeholder.current = ph;
-    window.setTimeout(() => card.classList.add('dragging'), 0);
+
+    /* Imagen de arrastre nativa invisible: el navegador SIEMPRE la pinta
+       semitransparente, así que la anulamos y movemos un clon propio. */
+    const blank = document.createElement('div');
+    blank.style.cssText = 'position:fixed;top:-10px;left:-10px;width:1px;height:1px;opacity:0';
+    document.body.appendChild(blank);
+    e.dataTransfer.setDragImage(blank, 0, 0);
+    window.setTimeout(() => blank.remove(), 0);
+
+    /* Clon opaco e inclinado (estilo Odoo) pegado al cursor */
+    const rect = card.getBoundingClientRect();
+    dragOrigin.current = rect;
+    const clone = card.cloneNode(true) as HTMLElement;
+    clone.classList.remove('card');
+    clone.classList.add('drag-clone');
+    clone.style.width = `${rect.width}px`;
+    clone.style.transform = `translate(${rect.left}px, ${rect.top}px) rotate(2.5deg) scale(1.03)`;
+    document.body.appendChild(clone);
+    dragClone.current = clone;
+    const grabX = e.clientX - rect.left;
+    const grabY = e.clientY - rect.top;
+    const mover = (ev: globalThis.DragEvent) => {
+      if (!dragClone.current || ev.clientX === 0) return; /* FF emite (0,0) al final */
+      dragClone.current.style.transform = `translate(${ev.clientX - grabX}px, ${ev.clientY - grabY}px) rotate(2.5deg) scale(1.03)`;
+    };
+    docMove.current = mover;
+    document.addEventListener('dragover', mover);
+
+    /* La original desaparece dejando el hueco punteado en su sitio */
+    window.setTimeout(() => {
+      card.parentElement?.insertBefore(ph, card);
+      card.classList.add('dragging');
+    }, 0);
   };
 
   const onDragOver = (e: DragEvent) => {
@@ -178,6 +249,8 @@ export default function ExpenseBoard() {
     }
     const id = dragId.current;
     const toCol = section.dataset.col as ExpenseStep;
+    dropped.current = true;
+    movedId.current = id;
     cleanupDrag();
     void doMove(id, toCol, refId);
   };
@@ -272,12 +345,12 @@ export default function ExpenseBoard() {
     <div className="pt-[52px] lg:pt-0">
       {/* ============ SEGMENTED CONTROL MÓVIL ============ */}
       <div
+        data-segbar
         className="lg:hidden fixed top-14 inset-x-0 z-30 border-b border-app px-4 py-2.5"
         style={{ backgroundColor: 'var(--bg)' }}
       >
         <div
           role="tablist"
-          data-segbar
           aria-label={t('board.statesAria')}
           className="flex items-center gap-1 rounded-full bg-surface2 p-1"
           onKeyDown={(e) => {
