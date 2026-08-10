@@ -614,7 +614,7 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
                         type="text"
                         value={inviteName}
                         onChange={(e) => setInviteName(e.target.value)}
-                        placeholder={t('expenses.form.titlePlaceholder')}
+                        placeholder={t('invite.namePlaceholder')}
                         className="flex-1 rounded-lg bg-surface border border-app px-3 py-1.5 text-sm outline-none focus:border-brand"
                       />
                       <input

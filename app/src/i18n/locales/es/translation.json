@@ -300,7 +300,8 @@
     "shareLink": "Invitar por enlace",
     "linkCopied": "¡Enlace copiado!",
     "copyLink": "Copiar enlace",
-    "revoke": "Revocar"
+    "revoke": "Revocar",
+    "namePlaceholder": "Nombre de la persona"
   },
   "newTask": {
     "title": "Nueva tarea",

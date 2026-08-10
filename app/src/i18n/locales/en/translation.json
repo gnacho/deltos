@@ -300,7 +300,8 @@
     "shareLink": "Share invite link",
     "linkCopied": "Link copied!",
     "copyLink": "Copy link",
-    "revoke": "Revoke"
+    "revoke": "Revoke",
+    "namePlaceholder": "Person's name"
   },
   "newTask": {
     "title": "New task",
