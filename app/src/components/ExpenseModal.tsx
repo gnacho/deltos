@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { X, Check, ChevronDown, Plus } from 'lucide-react';
+import { X, ChevronDown, Plus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useData } from '@/data/data-context';
 import { useSession } from '@/auth/session-context';
