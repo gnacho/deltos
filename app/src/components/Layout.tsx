@@ -143,8 +143,10 @@ function IconNavLink({
       end={end}
       aria-label={label}
       className={({ isActive }) =>
-        `group relative flex h-10 w-10 items-center justify-center rounded-lg transition-colors ${
-          (active ?? isActive) ? 'bg-surface2 font-medium' : 'text-muted hover:bg-surface2'
+        `group relative flex h-10 w-10 items-center justify-center rounded-lg transition-colors duration-150 ${
+          (active ?? isActive)
+            ? 'bg-brand-soft text-brand font-medium'
+            : 'text-muted hover:bg-hover hover:text-text-primary'
         }`
       }
     >
@@ -369,13 +371,15 @@ export default function Layout() {
       : t(titleKey ?? 'nav.todo');
 
   const sideItemCls = ({ isActive }: { isActive: boolean }) =>
-    `w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition-colors ${
-      isActive ? 'bg-surface2 font-medium' : 'text-muted hover:bg-surface2'
+    `w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition-colors duration-150 ${
+      isActive
+        ? 'bg-brand-soft text-brand font-medium'
+        : 'text-muted hover:bg-hover hover:text-text-primary'
     }`;
 
   const bnCls = (active: boolean) =>
-    `flex flex-col items-center justify-center gap-1 transition-colors ${
-      active ? 'text-brand' : 'text-faint hover:text-muted hover:bg-surface2 rounded-lg'
+    `flex flex-col items-center justify-center gap-1 transition-colors duration-150 rounded-lg ${
+      active ? 'text-brand' : 'text-faint hover:bg-hover hover:text-text-primary'
     }`;
 
   const isProjectsSection = location.pathname.startsWith('/projects') || boardView === 'project';
@@ -590,8 +594,10 @@ export default function Layout() {
                   <Link
                     key={p.id}
                     to={`/p/${p.id}`}
-                    className={`w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition-colors ${
-                      active ? 'bg-surface2 font-medium' : 'text-muted hover:bg-surface2'
+                    className={`w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition-colors duration-150 ${
+                      active
+                        ? 'bg-brand-soft text-brand font-medium'
+                        : 'text-muted hover:bg-hover hover:text-text-primary'
                     }`}
                     aria-current={active ? 'page' : undefined}
                   >
