@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
-import { Check, Paperclip, Clock, Download, ChevronDown, FileText, FileSpreadsheet, FileImage, File as FileIcon, MessageCircle, Send } from 'lucide-react';
+import { Check, Paperclip, Clock, Download, FileText, FileSpreadsheet, FileImage, File as FileIcon, MessageCircle, Send, Info } from 'lucide-react';
 import { fmtMoney } from '@/lib/format';
 import { LogoMark } from '@/components/Logo';
 import { relTime } from '@/i18n';
@@ -76,6 +76,8 @@ function fmtSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+type Tab = 'adjuntos' | 'comentarios' | 'actividad';
+
 export default function InvitePage() {
   const { token } = useParams<{ token: string }>();
   const { t, i18n } = useTranslation();
@@ -85,9 +87,7 @@ export default function InvitePage() {
   const [paying, setPaying] = useState(false);
   const [paid, setPaid] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<string>('bizum');
-  const [showAttachments, setShowAttachments] = useState(false);
-  const [showActivity, setShowActivity] = useState(false);
-  const [showComments, setShowComments] = useState(false);
+  const [tab, setTab] = useState<Tab>('comentarios');
   const [commentBody, setCommentBody] = useState('');
   const [commentSending, setCommentSending] = useState(false);
   const [comments, setComments] = useState<Comment[]>([]);
@@ -170,12 +170,32 @@ export default function InvitePage() {
   const { expense, invite, attachments, activity } = data;
   const shareLabel = `${fmtMoney(invite.share_cents, i18n.language)} de ${fmtMoney(expense.amount_cents, i18n.language)}`;
 
+  const TABS: { id: Tab; icon: typeof Info; count: number }[] = [
+    { id: 'adjuntos', icon: Paperclip, count: attachments.length },
+    { id: 'comentarios', icon: MessageCircle, count: comments.length },
+    { id: 'actividad', icon: Clock, count: activity.length },
+  ];
+
+  const onTabKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+    const el = (e.target as HTMLElement).closest<HTMLElement>('[role="tab"][data-tab]');
+    if (!el) return;
+    e.preventDefault();
+    const tabs = Array.from(
+      (e.currentTarget as HTMLElement).querySelectorAll<HTMLElement>('[role="tab"][data-tab]'),
+    );
+    const i = tabs.indexOf(el);
+    const next = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
+    setTab(next.dataset.tab as Tab);
+    next.focus();
+  };
+
   return (
     <div className="min-h-screen flex flex-col items-center py-8 px-4 bg-surface">
       <LogoMark size={48} />
-      <div className="w-full max-w-sm mt-4 space-y-4">
-        {/* Tarjeta principal */}
-        <div className="rounded-2xl border border-app bg-surface2 p-6 shadow-soft">
+      <div className="w-full max-w-sm mt-4 rounded-2xl border border-app bg-surface2 shadow-soft overflow-hidden">
+        {/* Cabecera: título + importe + pagar */}
+        <div className="p-6">
           <p className="text-sm text-muted mb-1">
             {t('invite.hello', { name: invite.invite_name })}
           </p>
@@ -239,100 +259,85 @@ export default function InvitePage() {
           {expense.notes && (
             <p className="text-[13px] text-muted mt-3 leading-relaxed bg-surface2 rounded-lg px-3 py-2">{expense.notes}</p>
           )}
-          {/* Nota del invitador */}
-          {invite.notes && paid && (
-            <p className="text-[13px] text-muted mt-3 leading-relaxed">{invite.notes}</p>
-          )}
         </div>
 
-        {/* Adjuntos */}
-        {attachments && attachments.length > 0 && (
-          <div className="rounded-2xl border border-app bg-surface p-5 shadow-soft">
-            <button
-              type="button"
-              onClick={() => setShowAttachments(!showAttachments)}
-              className="w-full flex items-center gap-2 text-left"
-            >
-              <Paperclip className="w-4 h-4 text-faint" aria-hidden="true" />
-              <span className="text-sm font-semibold flex-1">{t('task.tabs.adjuntos')} ({attachments.length})</span>
-              <ChevronDown className={`w-4 h-4 text-faint transition-transform ${showAttachments ? 'rotate-180' : ''}`} aria-hidden="true" />
-            </button>
-            {showAttachments && (
-              <ul className="mt-3 space-y-2">
-                {attachments.map((a) => {
-                  const { Icon, cls } = iconFor(a.mime, a.filename);
-                  return (
-                    <li key={a.id} className="flex items-center gap-3 rounded-xl border border-app px-3 py-2.5 bg-surface2/50">
-                      <span className={`w-9 h-9 rounded-lg ${cls} flex items-center justify-center shrink-0`}>
-                        <Icon className="w-4 h-4" aria-hidden="true" />
-                      </span>
-                      <span className="flex-1 min-w-0">
-                        <span className="block text-[13px] font-medium truncate">{a.filename}</span>
-                        <span className="block text-[12px] text-faint">{fmtSize(a.size)}</span>
-                      </span>
-                      <a
-                        href={`/api/expenses/${expense.id}/attachments/${encodeURIComponent(a.id)}`}
-                        download={a.filename}
-                        className="w-8 h-8 rounded-lg text-muted hover:bg-surface2 flex items-center justify-center shrink-0"
-                      >
-                        <Download className="w-4 h-4" aria-hidden="true" />
-                      </a>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </div>
-        )}
-
-        {/* Actividad */}
-        {activity && activity.length > 0 && (
-          <div className="rounded-2xl border border-app bg-surface p-5 shadow-soft">
-            <button
-              type="button"
-              onClick={() => setShowActivity(!showActivity)}
-              className="w-full flex items-center gap-2 text-left"
-            >
-              <Clock className="w-4 h-4 text-faint" aria-hidden="true" />
-              <span className="text-sm font-semibold flex-1">{t('task.tabs.actividad')}</span>
-              <ChevronDown className={`w-4 h-4 text-faint transition-transform ${showActivity ? 'rotate-180' : ''}`} aria-hidden="true" />
-            </button>
-            {showActivity && (
-              <ul className="mt-3 space-y-3">
-                {activity.map((ev) => (
-                  <li key={ev.id} className="flex gap-2.5 text-[13px]">
-                    <span className="w-1.5 h-1.5 rounded-full bg-faint/50 mt-1.5 shrink-0" aria-hidden="true" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-muted leading-relaxed">
-                        <strong className="text-text">{ev.username}</strong>{' '}
-                        {ev.type}
-                        {ev.data && typeof ev.data === 'object' && Object.keys(ev.data).length > 0 && (
-                          <span className="text-faint"> {JSON.stringify(ev.data)}</span>
-                        )}
-                      </p>
-                      <p className="text-[12px] text-faint mt-0.5">{relTime(ev.created_at, t)}</p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
-
-        {/* Comentarios */}
-        <div className="rounded-2xl border border-app bg-surface p-5 shadow-soft">
-          <button
-            type="button"
-            onClick={() => setShowComments(!showComments)}
-            className="w-full flex items-center gap-2 text-left"
+        {/* Pestañas */}
+        <div className="border-t border-app bg-surface/95">
+          <div
+            role="tablist"
+            aria-label={t('task.tabs.label')}
+            className="flex px-4 overflow-x-auto no-scrollbar"
+            onKeyDown={onTabKeyDown}
           >
-            <MessageCircle className="w-4 h-4 text-faint" aria-hidden="true" />
-            <span className="text-sm font-semibold flex-1">{t('task.tabs.comentarios')} ({comments.length})</span>
-            <ChevronDown className={`w-4 h-4 text-faint transition-transform ${showComments ? 'rotate-180' : ''}`} aria-hidden="true" />
-          </button>
-          {showComments && (
-            <div className="mt-3 space-y-4">
-              {comments.length > 0 && (
+            {TABS.map(({ id, icon: Icon, count }) => {
+              const active = tab === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  id={`tab-${id}`}
+                  data-tab={id}
+                  aria-selected={active}
+                  aria-controls={`panel-${id}`}
+                  tabIndex={active ? 0 : -1}
+                  onClick={() => setTab(id)}
+                  className={`relative flex items-center gap-1.5 px-3 py-2.5 -mb-px border-b-2 text-[12px] font-medium whitespace-nowrap shrink-0 ${
+                    active
+                      ? 'border-brand text-brand'
+                      : 'border-transparent text-muted hover:text-[var(--text)]'
+                  }`}
+                >
+                  <Icon className="w-3.5 h-3.5" aria-hidden="true" />
+                  <span>{t(`task.tabs.${id}`)}</span>
+                  {count > 0 && (
+                    <span className="tnum px-1 py-px rounded-full text-[12px] bg-surface2 text-muted">
+                      {count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Contenido de pestañas */}
+        <div className="p-5 bg-surface">
+          {tab === 'adjuntos' && (
+            <>
+              {attachments.length > 0 ? (
+                <ul className="space-y-2">
+                  {attachments.map((a) => {
+                    const { Icon, cls } = iconFor(a.mime, a.filename);
+                    return (
+                      <li key={a.id} className="flex items-center gap-3 rounded-xl border border-app px-3 py-2.5 bg-surface2/50">
+                        <span className={`w-9 h-9 rounded-lg ${cls} flex items-center justify-center shrink-0`}>
+                          <Icon className="w-4 h-4" aria-hidden="true" />
+                        </span>
+                        <span className="flex-1 min-w-0">
+                          <span className="block text-[13px] font-medium truncate">{a.filename}</span>
+                          <span className="block text-[12px] text-faint">{fmtSize(a.size)}</span>
+                        </span>
+                        <a
+                          href={`/api/expenses/${expense.id}/attachments/${encodeURIComponent(a.id)}`}
+                          download={a.filename}
+                          className="w-8 h-8 rounded-lg text-muted hover:bg-surface2 flex items-center justify-center shrink-0"
+                        >
+                          <Download className="w-4 h-4" aria-hidden="true" />
+                        </a>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <p className="text-[14px] text-faint text-center py-8">{t('attachments.empty')}</p>
+              )}
+            </>
+          )}
+
+          {tab === 'comentarios' && (
+            <div className="space-y-4">
+              {comments.length > 0 ? (
                 <ul className="space-y-3">
                   {comments.map((c) => (
                     <li key={c.id} className="flex gap-3">
@@ -349,6 +354,8 @@ export default function InvitePage() {
                     </li>
                   ))}
                 </ul>
+              ) : (
+                <p className="text-[14px] text-faint py-4 text-center">{t('comments.empty')}</p>
               )}
               <form onSubmit={handleAddComment} className="flex gap-2 items-end">
                 <input
@@ -369,12 +376,38 @@ export default function InvitePage() {
               </form>
             </div>
           )}
-        </div>
 
-        <p className="text-[12px] text-faint text-center pt-2">
-          Deltos · {t('invite.noAccount')}
-        </p>
+          {tab === 'actividad' && (
+            <>
+              {activity.length > 0 ? (
+                <ul className="space-y-3">
+                  {activity.map((ev) => (
+                    <li key={ev.id} className="flex gap-2.5 text-[13px]">
+                      <span className="w-1.5 h-1.5 rounded-full bg-faint/50 mt-1.5 shrink-0" aria-hidden="true" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-muted leading-relaxed">
+                          <strong className="text-text">{ev.username}</strong>{' '}
+                          {ev.type}
+                          {ev.data && typeof ev.data === 'object' && Object.keys(ev.data).length > 0 && (
+                            <span className="text-faint"> {JSON.stringify(ev.data)}</span>
+                          )}
+                        </p>
+                        <p className="text-[12px] text-faint mt-0.5">{relTime(ev.created_at, t)}</p>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-[14px] text-faint text-center py-8">{t('activity.empty')}</p>
+              )}
+            </>
+          )}
+        </div>
       </div>
+
+      <p className="text-[12px] text-faint pt-4">
+        Deltos · {t('invite.noAccount')}
+      </p>
     </div>
   );
 }
