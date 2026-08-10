@@ -404,8 +404,7 @@ export function ExpenseModal(props: Props) {
                       type="text"
                       inputMode="decimal"
                       value={shareStr.get(u.id) ?? ''}
-                      disabled={!customSplit}
-                      onChange={(e) => setShareStr((prev) => new Map(prev).set(u.id, e.target.value))}
+                      onChange={(e) => { setCustomSplit(true); setShareStr((prev) => new Map(prev).set(u.id, e.target.value)); }}
                       className="tnum w-20 rounded-lg bg-surface border border-app px-2 py-1 text-right text-[13px] outline-none focus:border-brand disabled:opacity-70"
                       aria-label={t('expenses.form.shareOf', { name: u.username })}
                     />
