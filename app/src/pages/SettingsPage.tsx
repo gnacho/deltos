@@ -1004,8 +1004,8 @@ export default function SettingsPage() {
 
       {/* Layout canónico: app → perfil → admin → acerca de */}
       <div className="flex flex-col gap-4 md:gap-5">
-        <AppearanceCard />
         <LabelsCard />
+        <AppearanceCard />
         <MiPerfilCard />
         {isAdmin && <AdminBar />}
         <AboutCard installState={installState} install={install} />
