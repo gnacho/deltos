@@ -345,6 +345,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [bump],
   );
 
+  const settleExpenses = useCallback(
+    async (otherUserId: string): Promise<number> => {
+      const res = await apiPost<{ settled: number }>('/api/expenses/settle', {
+        other_user_id: otherUserId,
+      });
+      await fetchExpenses();
+      return res.settled;
+    },
+    [fetchExpenses],
+  );
+
   const addExpenseComment = useCallback(
     async (id: string, body: string): Promise<void> => {
       await apiPost(`/api/expenses/${encodeURIComponent(id)}/comments`, { body });
@@ -441,6 +452,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       refreshExpenseDetail,
       releaseExpenseDetail,
       addExpenseComment,
+      settleExpenses,
       uploadExpenseAttachment,
       deleteExpenseAttachment,
     };

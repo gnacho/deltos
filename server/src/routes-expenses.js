@@ -87,6 +87,8 @@ function hydrateExpense(db, id) {
   const row = db.prepare(
     `SELECT e.*, u.username AS created_by_username, u.color AS created_by_color,
             ru.username AS requested_username, ru.color AS requested_color,
+            (SELECT COUNT(*) FROM expense_comments c WHERE c.expense_id = e.id) AS comment_count,
+            (SELECT COUNT(*) FROM expense_attachments a WHERE a.expense_id = e.id) AS attachment_count,
             l.name AS label_name, l.color AS label_color
      FROM expenses e
      JOIN users u ON u.id = e.created_by
@@ -109,6 +111,7 @@ function hydrateExpense(db, id) {
     created_by: row.created_by, created_by_username: row.created_by_username,
     created_by_color: row.created_by_color,
     created_at: row.created_at, updated_at: row.updated_at, deleted_at: row.deleted_at,
+    counts: { comments: row.comment_count ?? 0, attachments: row.attachment_count ?? 0 },
   }
 }
 
@@ -116,6 +119,8 @@ function listExpenses(db) {
   return db.prepare(
     `SELECT e.*, u.username AS created_by_username, u.color AS created_by_color,
             ru.username AS requested_username, ru.color AS requested_color,
+            (SELECT COUNT(*) FROM expense_comments c WHERE c.expense_id = e.id) AS comment_count,
+            (SELECT COUNT(*) FROM expense_attachments a WHERE a.expense_id = e.id) AS attachment_count,
             l.name AS label_name, l.color AS label_color
      FROM expenses e
      JOIN users u ON u.id = e.created_by
@@ -137,6 +142,7 @@ function listExpenses(db) {
     created_by: row.created_by, created_by_username: row.created_by_username,
     created_by_color: row.created_by_color,
     created_at: row.created_at, updated_at: row.updated_at,
+    counts: { comments: row.comment_count ?? 0, attachments: row.attachment_count ?? 0 },
   }))
 }
 
@@ -169,6 +175,49 @@ export function registerExpenseRoutes(app, { prod, hub, uploadsDir }) {
   app.use('/api/expenses/*', async (c, next) => {
     if (!pluginEnabled(prod)) httpError(404, ERROR_CODES.NOT_FOUND)
     await next()
+  })
+
+  // --- Saldar cuentas entre dos usuarios ---
+  // Marca como pagados todos los requerimientos pendientes entre el usuario de
+  // la sesión y other_user_id (en ambos sentidos): la liquidación real ocurre
+  // fuera de la app por el neto; aquí se cierran las deudas subyacentes.
+  app.post('/api/expenses/settle', zValidator('json', z.object({ other_user_id: z.string().min(1).max(100) }), validationHook), (c) => {
+    const db = c.get('db')
+    const user = c.get('user')
+    const { other_user_id: otherId } = c.req.valid('json')
+    if (otherId === user.id) httpError(422, ERROR_CODES.VALIDATION_FAILED)
+    const target = db.prepare('SELECT id, username FROM users WHERE id = ?').get(otherId)
+    if (!target) httpError(422, ERROR_CODES.ASSIGNEE_NOT_MEMBER)
+
+    const pending = db.prepare(
+      `SELECT * FROM expenses
+       WHERE deleted_at IS NULL AND paid_by_requested = 0 AND requested_user_id IS NOT NULL
+         AND ((created_by = ? AND requested_user_id = ?) OR (created_by = ? AND requested_user_id = ?))`
+    ).all(user.id, otherId, otherId, user.id)
+    if (pending.length === 0) return c.json({ settled: 0 })
+
+    const now = Date.now()
+    db.transaction(() => {
+      for (const e of pending) {
+        const newStep = e.paid_by_creator ? 'hecho' : e.step
+        db.prepare('UPDATE expenses SET paid_by_requested = 1, step = ?, updated_at = ? WHERE id = ?')
+          .run(newStep, now, e.id)
+        addExpenseEvent(db, e.id, user.id, 'paid', { paid_by_requested: true, settle: true })
+        if (newStep !== e.step) addExpenseEvent(db, e.id, user.id, 'moved', { from: e.step, to: newStep })
+      }
+    })()
+
+    hub.broadcast('expenses')
+
+    // Avisar al otro implicado de que las cuentas quedaron saldadas
+    const actor = db.prepare('SELECT username FROM users WHERE id = ?').get(user.id)
+    const titulo = pending.length === 1 ? pending[0].title : `${pending.length}\u00d7`
+    notifyUsers(db, [otherId], 'pago_completado', {
+      usuario: actor.username, titulo,
+    }, { demo: c.get('demo'), url: '/expenses' }).catch((err) =>
+      log.error('push_notify_failed', { tipo: 'pago_completado', error: err }))
+
+    return c.json({ settled: pending.length })
   })
 
   // --- Listar gastos ---
@@ -240,7 +289,7 @@ export function registerExpenseRoutes(app, { prod, hub, uploadsDir }) {
   })
 
   // --- Actualizar gasto ---
-  app.put('/api/expenses/:id', zValidator('json', updateSchema, validationHook), async (c) => {
+  app.put('/api/expenses/:id', zValidator('param', idParamSchema, validationHook), zValidator('json', updateSchema, validationHook), async (c) => {
     const db = c.get('db')
     const user = c.get('user')
     const data = c.req.valid('json')
@@ -329,7 +378,7 @@ export function registerExpenseRoutes(app, { prod, hub, uploadsDir }) {
   })
 
   // --- Mover gasto ---
-  app.put('/api/expenses/:id/move', zValidator('json', moveSchema, validationHook), (c) => {
+  app.put('/api/expenses/:id/move', zValidator('param', idParamSchema, validationHook), zValidator('json', moveSchema, validationHook), (c) => {
     const db = c.get('db')
     const { step, position } = c.req.valid('json')
     const id = c.req.valid('param').id
@@ -381,7 +430,7 @@ export function registerExpenseRoutes(app, { prod, hub, uploadsDir }) {
     return c.json({ comments })
   })
 
-  app.post('/api/expenses/:id/comments', zValidator('json', commentSchema, validationHook), async (c) => {
+  app.post('/api/expenses/:id/comments', zValidator('param', idParamSchema, validationHook), zValidator('json', commentSchema, validationHook), async (c) => {
     const db = c.get('db')
     const user = c.get('user')
     const id = c.req.valid('param').id

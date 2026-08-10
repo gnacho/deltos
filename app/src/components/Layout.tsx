@@ -13,6 +13,7 @@ import {
   Receipt,
 } from 'lucide-react';
 import { useData } from '@/data/data-context';
+import PullToRefresh from '@/components/PullToRefresh';
 import { useSession } from '@/auth/session-context';
 import { useTheme } from '@/theme/theme-context';
 import { apiPost, dispatchUnauthorized } from '@/data/api-client';
@@ -316,7 +317,10 @@ export default function Layout() {
   const currentProject = currentProjectId ? projects.find((p) => p.id === currentProjectId) : null;
 
   const titleKey = TITLE_KEYS.find(([re]) => re.test(location.pathname))?.[1];
-  const title = boardView === 'project' ? (currentProject?.name ?? t('nav.projects')) : t(titleKey ?? 'nav.todo');
+  const title =
+    boardView === 'project'
+      ? (currentProject?.name ?? t('nav.projects'))
+      : t(titleKey ?? 'nav.todo');
 
   const sideItemCls = ({ isActive }: { isActive: boolean }) =>
     `w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm ${
@@ -324,9 +328,7 @@ export default function Layout() {
     }`;
 
   const bnCls = (active: boolean) =>
-    `flex flex-col items-center justify-center gap-1 ${
-      active ? 'text-brand' : 'text-faint'
-    }`;
+    `flex flex-col items-center justify-center gap-1 ${active ? 'text-brand' : 'text-faint'}`;
 
   const isProjectsSection = location.pathname.startsWith('/projects') || boardView === 'project';
   const lgMargin = collapsed ? 'lg:pl-16' : 'lg:pl-[232px]';
@@ -363,7 +365,11 @@ export default function Layout() {
         </button>
         {boardOpen && (
           <>
-            <div className="fixed inset-0 z-20" onClick={() => setBoardOpen(false)} aria-hidden="true" />
+            <div
+              className="fixed inset-0 z-20"
+              onClick={() => setBoardOpen(false)}
+              aria-hidden="true"
+            />
             <ul
               role="listbox"
               aria-label={t('nav.boardSelect')}
@@ -417,10 +423,17 @@ export default function Layout() {
       {/* ============ SIDEBAR (lg+, colapsable) ============ */}
       {collapsed ? (
         <aside className="hidden lg:flex fixed inset-y-0 left-0 w-16 flex-col items-center bg-surface border-r border-app z-40 py-3">
-          <Link to="/" aria-label={t('nav.goTodo')} className="flex h-16 items-center justify-center">
+          <Link
+            to="/"
+            aria-label={t('nav.goTodo')}
+            className="flex h-16 items-center justify-center"
+          >
             <LogoMark size={30} />
           </Link>
-          <nav className="mt-2 flex flex-1 flex-col items-center gap-1 overflow-y-auto nice-scroll" aria-label={t('nav.main')}>
+          <nav
+            className="mt-2 flex flex-1 flex-col items-center gap-1 overflow-y-auto nice-scroll"
+            aria-label={t('nav.main')}
+          >
             <IconNavLink to="/" end label={t('nav.todo')}>
               <LayoutGrid className="w-[18px] h-[18px]" aria-hidden="true" />
             </IconNavLink>
@@ -435,11 +448,23 @@ export default function Layout() {
             </IconNavLink>
             <span className="my-2 h-px w-8 bg-[var(--border)]" aria-hidden="true" />
             {projects.map((p) => (
-              <IconNavLink key={p.id} to={`/p/${p.id}`} label={p.name} active={currentProjectId === p.id}>
-                <span className={`w-2.5 h-2.5 rounded-full ${colorOf(p.color).dot}`} aria-hidden="true" />
+              <IconNavLink
+                key={p.id}
+                to={`/p/${p.id}`}
+                label={p.name}
+                active={currentProjectId === p.id}
+              >
+                <span
+                  className={`w-2.5 h-2.5 rounded-full ${colorOf(p.color).dot}`}
+                  aria-hidden="true"
+                />
               </IconNavLink>
             ))}
-            <IconNavLink to="/projects" label={t('nav.projects')} active={location.pathname.startsWith('/projects')}>
+            <IconNavLink
+              to="/projects"
+              label={t('nav.projects')}
+              active={location.pathname.startsWith('/projects')}
+            >
               <Folder className="w-[18px] h-[18px]" aria-hidden="true" />
             </IconNavLink>
           </nav>
@@ -461,7 +486,9 @@ export default function Layout() {
           <div className="px-4 pt-5 pb-4">
             <Link to="/" className="flex items-center gap-2.5 group" aria-label={t('nav.goTodo')}>
               <LogoMark size={32} />
-              <span className="font-display font-bold text-lg tracking-tight">{t('common.appName')}</span>
+              <span className="font-display font-bold text-lg tracking-tight">
+                {t('common.appName')}
+              </span>
             </Link>
           </div>
 
@@ -517,7 +544,10 @@ export default function Layout() {
                     }`}
                     aria-current={active ? 'page' : undefined}
                   >
-                    <span className={`w-2 h-2 rounded-full shrink-0 ${colorOf(p.color).dot}`} aria-hidden="true" />
+                    <span
+                      className={`w-2 h-2 rounded-full shrink-0 ${colorOf(p.color).dot}`}
+                      aria-hidden="true"
+                    />
                     <span className="flex-1 text-left truncate">{p.name}</span>
                     <span className="tnum text-xs text-faint">{open}</span>
                   </Link>
@@ -535,7 +565,9 @@ export default function Layout() {
               <NavLink
                 to="/settings"
                 className={`flex h-9 flex-1 items-center gap-2 rounded-lg px-3 text-sm font-medium transition-colors ${
-                  location.pathname.startsWith('/settings') ? 'bg-surface2' : 'text-muted hover:bg-surface2'
+                  location.pathname.startsWith('/settings')
+                    ? 'bg-surface2'
+                    : 'text-muted hover:bg-surface2'
                 }`}
               >
                 <Settings className="w-[18px] h-[18px]" aria-hidden="true" />
@@ -609,7 +641,9 @@ export default function Layout() {
       >
         <Link to="/" className="flex items-center gap-2 shrink-0" aria-label={t('nav.goTodo')}>
           <LogoMark size={28} />
-          <span className="font-display font-bold text-base tracking-tight">{t('common.appName')}</span>
+          <span className="font-display font-bold text-base tracking-tight">
+            {t('common.appName')}
+          </span>
         </Link>
         <div className="flex-1 min-w-0 flex items-center justify-center gap-2">
           {boardView !== null ? boardSelect : <ConnectionDot />}
@@ -621,33 +655,59 @@ export default function Layout() {
       <main
         className={`${lgMargin} md:pl-16 pt-[68px] md:pt-[calc(56px+16px)] pb-[calc(84px+env(safe-area-inset-bottom))] md:pb-8`}
       >
-        <div className="mx-auto max-w-[1440px] px-4 sm:px-6 lg:px-8">
-          <UpdateBanner />
-          {demo && <DemoBanner />}
-        </div>
-        <Outlet />
+        <PullToRefresh>
+          <div className="mx-auto max-w-[1440px] px-4 sm:px-6 lg:px-8">
+            <UpdateBanner />
+            {demo && <DemoBanner />}
+          </div>
+          <Outlet />
+        </PullToRefresh>
       </main>
 
       {/* ============ BOTTOM NAV MÓVIL (<md) ============ */}
-      <nav className="bottom-nav md:hidden fixed bottom-0 inset-x-0 z-40 bg-surface border-t border-app" aria-label={t('nav.main')}>
+      <nav
+        className="bottom-nav md:hidden fixed bottom-0 inset-x-0 z-40 bg-surface border-t border-app"
+        aria-label={t('nav.main')}
+      >
         <div className="h-16 grid grid-cols-5">
-          <NavLink to="/" end className={({ isActive }) => bnCls(isActive)} aria-label={t('nav.todo')}>
+          <NavLink
+            to="/"
+            end
+            className={({ isActive }) => bnCls(isActive)}
+            aria-label={t('nav.todo')}
+          >
             <LayoutGrid className="w-5 h-5" aria-hidden="true" />
             <span className="text-[11px] font-medium">{t('nav.todo')}</span>
           </NavLink>
-          <NavLink to="/projects" className={() => bnCls(isProjectsSection)} aria-label={t('nav.projects')}>
+          <NavLink
+            to="/projects"
+            className={() => bnCls(isProjectsSection)}
+            aria-label={t('nav.projects')}
+          >
             <Folder className="w-5 h-5" aria-hidden="true" />
             <span className="text-[11px] font-medium">{t('nav.projects')}</span>
           </NavLink>
-          <NavLink to="/expenses" className={({ isActive }) => bnCls(isActive)} aria-label={t('nav.expenses')}>
+          <NavLink
+            to="/expenses"
+            className={({ isActive }) => bnCls(isActive)}
+            aria-label={t('nav.expenses')}
+          >
             <Receipt className="w-5 h-5" aria-hidden="true" />
             <span className="text-[11px] font-medium">{t('nav.expenses')}</span>
           </NavLink>
-          <NavLink to="/activity" className={({ isActive }) => bnCls(isActive)} aria-label={t('nav.activity')}>
+          <NavLink
+            to="/activity"
+            className={({ isActive }) => bnCls(isActive)}
+            aria-label={t('nav.activity')}
+          >
             <Clock className="w-5 h-5" aria-hidden="true" />
             <span className="text-[11px] font-medium">{t('nav.activity')}</span>
           </NavLink>
-          <NavLink to="/settings" className={({ isActive }) => bnCls(isActive)} aria-label={t('nav.settings')}>
+          <NavLink
+            to="/settings"
+            className={({ isActive }) => bnCls(isActive)}
+            aria-label={t('nav.settings')}
+          >
             <Settings className="w-5 h-5" aria-hidden="true" />
             <span className="text-[11px] font-medium">{t('nav.settings')}</span>
           </NavLink>
@@ -655,11 +715,23 @@ export default function Layout() {
       </nav>
 
       {/* Modales globales */}
-      {openTask && <TaskModal taskId={openTask.id} initialTab={openTask.tab} onClose={() => setOpenTask(null)} />}
+      {openTask && (
+        <TaskModal
+          taskId={openTask.id}
+          initialTab={openTask.tab}
+          onClose={() => setOpenTask(null)}
+        />
+      )}
       {newTask && <NewTaskModal defaults={newTask} onClose={() => setNewTask(null)} />}
 
       {/* Avisador discreto para lector de pantalla (movimientos de tarjetas) */}
-      <div id="a11y-announce" className="sr-only" role="status" aria-live="polite" aria-label={t('a11y.announce')} />
+      <div
+        id="a11y-announce"
+        className="sr-only"
+        role="status"
+        aria-live="polite"
+        aria-label={t('a11y.announce')}
+      />
     </ModalContext.Provider>
   );
 }
