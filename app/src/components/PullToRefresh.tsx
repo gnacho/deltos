@@ -49,6 +49,10 @@ export default function PullToRefresh({ children }: { children: ReactNode }) {
     };
 
     const onTouchStart = (e: TouchEvent) => {
+      if (document.body.classList.contains('mm-dragging')) {
+        reset();
+        return;
+      }
       if (window.scrollY <= 0 && e.touches.length === 1 && !shouldIgnore(e.target)) {
         startX.current = e.touches[0].clientX;
         startY.current = e.touches[0].clientY;
@@ -59,6 +63,10 @@ export default function PullToRefresh({ children }: { children: ReactNode }) {
     };
 
     const onTouchMove = (e: TouchEvent) => {
+      if (document.body.classList.contains('mm-dragging')) {
+        reset();
+        return;
+      }
       if (startY.current === null || startX.current === null) return;
       const dx = e.touches[0].clientX - startX.current;
       const dy = e.touches[0].clientY - startY.current;
