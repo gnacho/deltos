@@ -71,6 +71,11 @@ export function setCsrfToken(token: string | null): void {
   csrfToken = token;
 }
 
+/** Obtiene el token CSRF actual. */
+export function getCsrfToken(): string | null {
+  return csrfToken;
+}
+
 /** Evita cascadas cuando N peticiones reciben 401 a la vez. */
 let handling401 = false;
 

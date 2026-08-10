@@ -291,6 +291,18 @@
     "paidBy": "Pagó {{name}}",
     "minTransfers": "Liquidación con transferencias mínimas"
   },
+  "invite": {
+    "hello": "¡Hola, {{name}}!",
+    "yourPart": "Tu parte",
+    "alreadyPaid": "Ya lo has pagado",
+    "markAsPaid": "Marcar como pagado",
+    "noAccount": "Sin necesidad de cuenta",
+    "shareLink": "Invitar por enlace",
+    "linkCopied": "¡Enlace copiado!",
+    "copyLink": "Copiar enlace",
+    "revoke": "Revocar",
+    "namePlaceholder": "Nombre de la persona"
+  },
   "newTask": {
     "title": "Nueva tarea",
     "titleLabel": "Título",
