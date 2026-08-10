@@ -13,6 +13,8 @@
     { id: 'casa', el: document.getElementById('shotCasa') },
     { id: 'viaje', el: document.getElementById('shotViaje') },
     { id: 'trabajo', el: document.getElementById('shotTrabajo') },
+    { id: 'expenses', el: document.getElementById('shotExpenses') },
+    { id: 'invite', el: document.getElementById('shotInvite') },
   ];
 
   /* ---------- Idioma ---------- */
