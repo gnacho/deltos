@@ -570,6 +570,9 @@ export default function Layout() {
           <IconNavLink to="/activity" label={t('nav.activity')}>
             <Clock className="w-[18px] h-[18px]" aria-hidden="true" />
           </IconNavLink>
+          <IconNavLink to="/expenses" label={t('nav.expenses')}>
+            <Receipt className="w-[18px] h-[18px]" aria-hidden="true" />
+          </IconNavLink>
           <IconNavLink to="/settings" label={t('nav.settings')}>
             <Settings className="w-[18px] h-[18px]" aria-hidden="true" />
           </IconNavLink>
@@ -621,7 +624,7 @@ export default function Layout() {
 
       {/* ============ BOTTOM NAV MÓVIL (<md) ============ */}
       <nav className="bottom-nav md:hidden fixed bottom-0 inset-x-0 z-40 bg-surface border-t border-app" aria-label={t('nav.main')}>
-        <div className="h-16 grid grid-cols-4">
+        <div className="h-16 grid grid-cols-5">
           <NavLink to="/" end className={({ isActive }) => bnCls(isActive)} aria-label={t('nav.todo')}>
             <LayoutGrid className="w-5 h-5" aria-hidden="true" />
             <span className="text-[11px] font-medium">{t('nav.todo')}</span>
@@ -629,6 +632,10 @@ export default function Layout() {
           <NavLink to="/projects" className={() => bnCls(isProjectsSection)} aria-label={t('nav.projects')}>
             <Folder className="w-5 h-5" aria-hidden="true" />
             <span className="text-[11px] font-medium">{t('nav.projects')}</span>
+          </NavLink>
+          <NavLink to="/expenses" className={({ isActive }) => bnCls(isActive)} aria-label={t('nav.expenses')}>
+            <Receipt className="w-5 h-5" aria-hidden="true" />
+            <span className="text-[11px] font-medium">{t('nav.expenses')}</span>
           </NavLink>
           <NavLink to="/activity" className={({ isActive }) => bnCls(isActive)} aria-label={t('nav.activity')}>
             <Clock className="w-5 h-5" aria-hidden="true" />
