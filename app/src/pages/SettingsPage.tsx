@@ -1002,11 +1002,11 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* Layout: cada tarjeta en su propia fila al 100% */}
+      {/* Layout canónico: app → perfil → admin → acerca de */}
       <div className="flex flex-col gap-4 md:gap-5">
         <AppearanceCard />
-        <MiPerfilCard />
         <LabelsCard />
+        <MiPerfilCard />
         {isAdmin && <AdminBar />}
         <AboutCard installState={installState} install={install} />
       </div>
