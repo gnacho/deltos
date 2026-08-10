@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Info, Paperclip, MessageCircle, Clock, Trash2 } from 'lucide-react';
+import { X, Info, Paperclip, MessageCircle, Clock, Trash2, Link } from 'lucide-react';
 import type { FormEvent } from 'react';
 import { useData } from '@/data/data-context';
 import { getCsrfToken } from '@/data/api-client';
@@ -599,11 +599,27 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
                         )}
                         <button
                           type="button"
+                          onClick={async () => {
+                            try {
+                              const res = await fetch(`/api/invite/${encodeURIComponent(inv.id)}/link`, { credentials: 'same-origin' });
+                              if (!res.ok) return;
+                              const { url } = await res.json();
+                              await navigator.clipboard.writeText(url);
+                              announce(t('invite.linkCopied'));
+                            } catch { /* ignore */ }
+                          }}
+                          className="w-7 h-7 rounded-lg text-muted hover:bg-surface2 hover:text-brand flex items-center justify-center"
+                          title={t('invite.copyLink')}
+                        >
+                          <Link className="w-3.5 h-3.5" aria-hidden="true" />
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => handleRevokeInvite(inv.id)}
-                          className="text-[12px] text-muted hover:text-rose-600 dark:hover:text-rose-400"
+                          className="w-7 h-7 rounded-lg text-muted hover:text-rose-600 dark:hover:text-rose-400 flex items-center justify-center"
                           title={t('invite.revoke')}
                         >
-                          ✕
+                          <X className="w-3.5 h-3.5" aria-hidden="true" />
                         </button>
                       </li>
                     ))}

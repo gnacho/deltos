@@ -48,8 +48,8 @@
   },
   "expenseSteps": {
     "nuevo": "New",
-    "en-curso": "In progress",
-    "hecho": "Settled"
+    "en-curso": "Shared",
+    "hecho": "Paid"
   },
   "priority": {
     "alta": "High",
