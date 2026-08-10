@@ -220,15 +220,6 @@ export default function ExpenseBoard() {
       </div>
 
       <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 pt-5 lg:pt-7">
-        {/* Cabecera de vista */}
-        <div className="flex flex-wrap items-end justify-between gap-3 mb-5">
-          <div>
-            <h1 className="font-display font-bold text-2xl lg:text-[28px] tracking-tight">
-              {t('expenses.title')}
-            </h1>
-          </div>
-        </div>
-
         {/* Vista: Tablero | Resumen + Alcance + Nuevo gasto */}
         <div className="mb-5 flex flex-wrap items-center gap-2">
           <div
@@ -284,7 +275,7 @@ export default function ExpenseBoard() {
           <button
             type="button"
             onClick={() => handleOpenNew()}
-            className="inline-flex items-center gap-2 rounded-2xl bg-brand text-brandfg px-5 py-2.5 text-[14px] font-semibold hover:brightness-110 shadow-soft"
+            className="ml-auto inline-flex items-center gap-2 rounded-2xl bg-brand text-brandfg px-5 py-2.5 text-[14px] font-semibold hover:brightness-110 shadow-soft"
             aria-label={t('expenses.new')}
           >
             <Plus className="w-5 h-5" aria-hidden="true" />

@@ -28,18 +28,18 @@
     "errorGeneric": "Could not sign in"
   },
   "nav": {
-    "todo": "All",
+    "todo": "Tasks",
     "projects": "Projects",
     "activity": "Activity",
     "settings": "Settings",
     "main": "Main navigation",
-    "goTodo": "Go to the All view",
+    "goTodo": "Go to Tasks",
     "currentAccount": "Current account",
     "projectsSection": "PROJECTS",
-    "boardSelect": "Project",
+    "boardSelect": "Projects",
     "collapse": "Collapse menu",
     "expand": "Expand menu",
-    "expenses": "Board-summary"
+    "expenses": "Expenses"
   },
   "columns": {
     "nuevo": "New",

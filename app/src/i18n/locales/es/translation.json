@@ -28,18 +28,18 @@
     "errorGeneric": "No se ha podido iniciar sesión"
   },
   "nav": {
-    "todo": "Por hacer",
+    "todo": "Tareas",
     "projects": "Proyectos",
     "activity": "Actividad",
     "settings": "Ajustes",
     "main": "Navegación principal",
-    "goTodo": "Ir a Por hacer",
+    "goTodo": "Ir a Tareas",
     "currentAccount": "Cuenta actual",
     "projectsSection": "PROYECTOS",
-    "boardSelect": "Proyecto",
+    "boardSelect": "Proyectos",
     "collapse": "Plegar menú",
     "expand": "Desplegar menú",
-    "expenses": "Tablero-resumen"
+    "expenses": "Gastos"
   },
   "columns": {
     "nuevo": "Nuevo",

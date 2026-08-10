@@ -263,6 +263,7 @@ const TITLE_KEYS: [RegExp, string][] = [
   [/^\/$/, 'nav.todo'],
   [/^\/projects/, 'nav.projects'],
   [/^\/activity/, 'nav.activity'],
+  [/^\/expenses/, 'nav.expenses'],
   [/^\/settings/, 'nav.settings'],
 ];
 
