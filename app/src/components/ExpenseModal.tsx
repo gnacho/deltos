@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { X, Check } from 'lucide-react';
+import { X, Check, ChevronDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useData } from '@/data/data-context';
 import { useSession } from '@/auth/session-context';
@@ -74,6 +74,7 @@ export function ExpenseModal(props: Props) {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [deleteArmed, setDeleteArmed] = useState(false);
+  const [projectOpen, setProjectOpen] = useState(false);
 
   const amountCents = toCents(amountStr);
   const participants = useMemo(() => [...shareStr.keys()], [shareStr]);
@@ -265,15 +266,62 @@ export function ExpenseModal(props: Props) {
             {projects.length > 0 && (
               <div>
                 <span className="block text-[12px] font-semibold tracking-wide uppercase text-faint mb-1.5">{t('expenses.form.project')}</span>
-                <div className="flex flex-wrap gap-1.5">
-                  <button type="button" onClick={() => setProjectId(null)} className={pill(projectId === null)}>
-                    {t('expenses.form.noProject')}
+                <div className="relative">
+                  <button
+                    type="button"
+                    aria-haspopup="listbox"
+                    aria-expanded={projectOpen}
+                    onClick={() => setProjectOpen((o) => !o)}
+                    className="w-full inline-flex items-center gap-2 bg-surface2 border border-app rounded-xl px-3.5 py-2.5 text-[14px] font-medium outline-none focus:border-brand"
+                  >
+                    <span
+                      className={`w-2 h-2 rounded-full shrink-0 ${projectId ? colorOf(data.getProject(projectId)?.color ?? 'slate').dot : 'bg-faint/40'}`}
+                      aria-hidden="true"
+                    />
+                    <span className="flex-1 text-left">{projectId ? data.getProject(projectId)?.name ?? t('expenses.form.noProject') : t('expenses.form.noProject')}</span>
+                    <ChevronDown
+                      className={`w-4 h-4 text-faint transition-transform duration-200 ${projectOpen ? 'rotate-180' : ''}`}
+                      aria-hidden="true"
+                    />
                   </button>
-                  {projects.map((p) => (
-                    <button key={p.id} type="button" onClick={() => setProjectId(p.id)} className={pill(projectId === p.id)}>
-                      {p.name}
-                    </button>
-                  ))}
+                  {projectOpen && (
+                    <>
+                      <div className="fixed inset-0 z-20" onClick={() => setProjectOpen(false)} aria-hidden="true" />
+                      <ul
+                        role="listbox"
+                        aria-label={t('expenses.form.project')}
+                        className="absolute z-30 left-0 right-0 mt-1.5 max-h-64 overflow-y-auto nice-scroll rounded-xl bg-surface border border-app shadow-2xl py-1"
+                      >
+                        <li role="option" aria-selected={projectId === null}>
+                          <button
+                            type="button"
+                            onClick={() => { setProjectId(null); setProjectOpen(false); }}
+                            className={`w-full flex items-center gap-2 px-3.5 py-2 text-[14px] text-left hover:bg-surface2 ${!projectId ? 'font-medium text-brand' : ''}`}
+                          >
+                            <span className="w-2 h-2 rounded-full shrink-0 bg-faint/20" aria-hidden="true" />
+                            <span className="flex-1">{t('expenses.form.noProject')}</span>
+                            {!projectId && <span className="text-[12px] font-semibold">{t('task.current')}</span>}
+                          </button>
+                        </li>
+                        {projects.map((p) => {
+                          const active = p.id === projectId;
+                          return (
+                            <li key={p.id} role="option" aria-selected={active}>
+                              <button
+                                type="button"
+                                onClick={() => { setProjectId(p.id); setProjectOpen(false); }}
+                                className={`w-full flex items-center gap-2 px-3.5 py-2 text-[14px] text-left hover:bg-surface2 ${active ? 'font-medium text-brand' : ''}`}
+                              >
+                                <span className={`w-2 h-2 rounded-full shrink-0 ${colorOf(p.color).dot}`} aria-hidden="true" />
+                                <span className="flex-1">{p.name}</span>
+                                {active && <span className="text-[12px] font-semibold">{t('task.current')}</span>}
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </>
+                  )}
                 </div>
               </div>
             )}

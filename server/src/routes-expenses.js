@@ -496,7 +496,7 @@ export function registerExpenseRoutes(app, { prod, hub, uploadsDir }) {
       `SELECT c.*, u.username, u.color AS user_color
        FROM expense_comments c LEFT JOIN users u ON u.id = c.user_id
        WHERE c.expense_id = ? ORDER BY c.created_at`
-    ).all(id)
+    ).all(id).map((c) => ({ ...c, username: c.username || c.author_name || '?' }))
     return c.json({ comments })
   })
 

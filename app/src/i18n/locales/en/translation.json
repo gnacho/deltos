@@ -48,8 +48,8 @@
   },
   "expenseSteps": {
     "nuevo": "New",
-    "en-curso": "In progress",
-    "hecho": "Settled"
+    "en-curso": "Shared",
+    "hecho": "Paid"
   },
   "priority": {
     "alta": "High",
@@ -290,6 +290,26 @@
     "pending": "Pending",
     "paidBy": "Paid by {{name}}",
     "minTransfers": "Settlement with minimal transfers"
+  },
+  "expenseEvents": {
+    "created": "created the expense",
+    "titleChanged": "changed title from \"{{from}}\" to \"{{to}}\"",
+    "titleEdited": "edited the title",
+    "amountChanged": "changed amount from {{from}} to {{to}}",
+    "amountTo": "set amount to {{amount}}",
+    "amountEdited": "changed the amount",
+    "notesEdited": "edited the notes",
+    "sharesUpdated": "updated the split ({{count}} people)",
+    "payerChanged": "changed who paid",
+    "paymentMethodTo": "changed payment method to {{method}}",
+    "paymentMethodEdited": "changed the payment method",
+    "moved": "moved from \"{{from}}\" to \"{{to}}\"",
+    "movedTo": "moved to \"{{to}}\"",
+    "stepChanged": "changed the stage",
+    "paidShare": "marked their share as paid",
+    "settled": "settled up",
+    "attachmentAdded": "attached {{filename}}",
+    "attachmentAddedGeneric": "attached a file"
   },
   "invite": {
     "hello": "Hi {{name}}!",
