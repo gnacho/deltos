@@ -161,7 +161,7 @@ function MiPerfilCard() {
   };
 
   const actionBtnCls =
-    'inline-flex h-9 items-center gap-1.5 rounded-lg border border-app bg-surface2 px-2.5 sm:px-3 text-[13px] font-medium text-muted transition-colors hover:bg-surface hover:text-text-primary';
+    'inline-flex h-9 items-center gap-1.5 rounded-lg border border-app bg-surface2 px-2.5 sm:px-3 text-[13px] font-medium text-muted transition-colors hover:bg-surface hover:text-text';
   const actionTextCls = 'hidden sm:inline';
 
   return (
@@ -200,7 +200,7 @@ function MiPerfilCard() {
                 type="button"
                 onClick={cancelName}
                 disabled={nameBusy}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-app bg-surface2 text-muted transition-colors hover:bg-surface hover:text-text-primary"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-app bg-surface2 text-muted transition-colors hover:bg-surface hover:text-text"
                 aria-label={t('common.cancel')}
               >
                 <X className="w-4 h-4" />
@@ -251,7 +251,7 @@ function MiPerfilCard() {
                 type="button"
                 onClick={cancelEmail}
                 disabled={emailBusy}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-app bg-surface2 text-muted transition-colors hover:bg-surface hover:text-text-primary"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-app bg-surface2 text-muted transition-colors hover:bg-surface hover:text-text"
                 aria-label={t('common.cancel')}
               >
                 <X className="w-4 h-4" />
@@ -264,7 +264,7 @@ function MiPerfilCard() {
               className={`inline-flex h-9 w-9 items-center justify-center rounded-full transition-colors ${
                 user.email
                   ? 'bg-amber-500/10 text-amber-500 hover:bg-amber-500/20'
-                  : 'bg-surface2 text-faint border border-app hover:bg-surface hover:text-text-primary'
+                  : 'bg-surface2 text-faint border border-app hover:bg-surface hover:text-text'
               }`}
               title={user.email ? user.email : t('settings.addEmail')}
               aria-label={user.email ? t('settings.editEmail') : t('settings.addEmail')}
@@ -279,7 +279,7 @@ function MiPerfilCard() {
             id="mp-lang"
             value={user.language ?? 'auto'}
             onChange={(e) => void changeLanguage(e.target.value as Language)}
-            className="h-9 w-[120px] shrink-0 rounded-lg border border-app bg-elevated px-2 text-[13px] text-text-primary outline-none focus:border-brand"
+            className="h-9 w-[120px] shrink-0 rounded-lg border border-app bg-elevated px-2 text-[13px] text-text outline-none focus:border-brand"
           >
             <option value="auto">🌐 {t('settings.langAuto')}</option>
             <option value="es">🇪🇸 Español</option>
@@ -355,7 +355,7 @@ function MiPerfilCard() {
 function NotificationsInline() {
   const { t } = useTranslation();
   const { soporte, estado, activar, desactivar } = usePush();
-  const TIPOS = ['asignacion', 'comentario', 'tarea_movida', 'mencion', 'vencimiento'] as const;
+  const TIPOS = ['asignacion', 'comentario', 'tarea_movida', 'mencion', 'vencimiento', 'pago_requerido', 'pago_completado'] as const;
   const [prefs, setPrefs] = useState<Record<string, boolean> | null>(null);
 
   useEffect(() => {
@@ -418,7 +418,7 @@ function NotificationsInline() {
               <p className="text-[13px] font-medium text-faint">{t('settings.notifTipos')}</p>
               {TIPOS.map((tipo) => (
                 <div key={tipo} className="flex items-center justify-between gap-3">
-                  <span className="text-sm text-text-primary">{t(`settings.notifTipo.${tipo}`)}</span>
+                  <span className="text-sm text-text">{t(`settings.notifTipo.${tipo}`)}</span>
                   <CheckToggle
                     checked={prefs[tipo] !== false}
                     onChange={(checked) => cambiarPref(tipo, checked)}

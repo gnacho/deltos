@@ -839,7 +839,7 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
     const attachments = qByTask('SELECT id, task_id, filename, size, mime, created_at FROM attachments WHERE task_id IN (__IDS__) ORDER BY created_at')
     const events = qByTask('SELECT * FROM activity_events WHERE task_id IN (__IDS__) ORDER BY created_at')
     const trash = qByProject('SELECT * FROM tasks WHERE deleted_at IS NOT NULL AND project_id IN (__IDS__) ORDER BY deleted_at DESC')
-    const expenses = db.prepare('SELECT * FROM expenses ORDER BY step, position').all()
+    const expenses = db.prepare('SELECT * FROM expenses WHERE deleted_at IS NULL ORDER BY step, position').all()
     const expenseTrash = db.prepare('SELECT * FROM expenses WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC').all()
     return c.json({
       exported_at: new Date().toISOString(),

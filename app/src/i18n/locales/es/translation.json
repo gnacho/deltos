@@ -240,8 +240,25 @@
       "creating": "Creando…",
       "delete": "Eliminar gasto",
       "deleteConfirm": "¿Seguro? Pulsa para confirmar",
-      "deleting": "Eliminando…"
-    }
+      "deleting": "Eliminando…",
+      "amountRequired": "Indica un importe válido",
+      "saving": "Guardando…"
+    },
+    "openCount_one": "{{count}} gasto abierto",
+    "openCount_other": "{{count}} gastos abiertos",
+    "new": "Nuevo gasto",
+    "board": "Tablero",
+    "summary": "Resumen",
+    "viewAria": "Vista de gastos",
+    "monthTotal": "Total del mes",
+    "byCategory": "Por categoría",
+    "last6Months": "Últimos 6 meses",
+    "noCategory": "Sin categoría",
+    "balances": "Saldos pendientes",
+    "settledUp": "Todo en paz: nadie debe nada.",
+    "balanceOwesYou": "{{name}} te debe {{amount}}",
+    "balanceYouOwe": "Debes {{amount}} a {{name}}",
+    "balancePair": "{{from}} debe {{amount}} a {{to}}"
   },
   "newTask": {
     "title": "Nueva tarea",
