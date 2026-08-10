@@ -270,6 +270,7 @@ const TITLE_KEYS: [RegExp, string][] = [
 export default function Layout() {
   const { t } = useTranslation();
   const { user, demo } = useSession();
+  const showExpenses = user.expenses_enabled !== false;
   const data = useData();
   const location = useLocation();
   const navigate = useNavigate();
@@ -441,9 +442,11 @@ export default function Layout() {
             <IconNavLink to="/activity" label={t('nav.activity')}>
               <Clock className="w-[18px] h-[18px]" aria-hidden="true" />
             </IconNavLink>
-            <IconNavLink to="/expenses" label={t('nav.expenses')}>
-              <Receipt className="w-[18px] h-[18px]" aria-hidden="true" />
-            </IconNavLink>
+            {showExpenses && (
+              <IconNavLink to="/expenses" label={t('nav.expenses')}>
+                <Receipt className="w-[18px] h-[18px]" aria-hidden="true" />
+              </IconNavLink>
+            )}
             <IconNavLink to="/settings" label={t('nav.settings')}>
               <Settings className="w-[18px] h-[18px]" aria-hidden="true" />
             </IconNavLink>
@@ -506,12 +509,14 @@ export default function Layout() {
                 </span>
                 <span className="flex-1 text-left">{t('nav.activity')}</span>
               </NavLink>
-              <NavLink to="/expenses" className={sideItemCls}>
-                <span className="text-faint">
-                  <Receipt className="w-4 h-4" aria-hidden="true" />
-                </span>
-                <span className="flex-1 text-left">{t('nav.expenses')}</span>
-              </NavLink>
+              {showExpenses && (
+                <NavLink to="/expenses" className={sideItemCls}>
+                  <span className="text-faint">
+                    <Receipt className="w-4 h-4" aria-hidden="true" />
+                  </span>
+                  <span className="flex-1 text-left">{t('nav.expenses')}</span>
+                </NavLink>
+              )}
             </div>
             <div className="flex items-center justify-between px-2 pb-2">
               <Link
@@ -603,9 +608,11 @@ export default function Layout() {
           <IconNavLink to="/activity" label={t('nav.activity')}>
             <Clock className="w-[18px] h-[18px]" aria-hidden="true" />
           </IconNavLink>
-          <IconNavLink to="/expenses" label={t('nav.expenses')}>
-            <Receipt className="w-[18px] h-[18px]" aria-hidden="true" />
-          </IconNavLink>
+          {showExpenses && (
+            <IconNavLink to="/expenses" label={t('nav.expenses')}>
+              <Receipt className="w-[18px] h-[18px]" aria-hidden="true" />
+            </IconNavLink>
+          )}
           <IconNavLink to="/settings" label={t('nav.settings')}>
             <Settings className="w-[18px] h-[18px]" aria-hidden="true" />
           </IconNavLink>
@@ -681,14 +688,16 @@ export default function Layout() {
             <Folder className="w-5 h-5" aria-hidden="true" />
             <span className="text-[11px] font-medium">{t('nav.projects')}</span>
           </NavLink>
-          <NavLink
-            to="/expenses"
-            className={({ isActive }) => bnCls(isActive)}
-            aria-label={t('nav.expenses')}
-          >
-            <Receipt className="w-5 h-5" aria-hidden="true" />
-            <span className="text-[11px] font-medium">{t('nav.expenses')}</span>
-          </NavLink>
+          {showExpenses && (
+            <NavLink
+              to="/expenses"
+              className={({ isActive }) => bnCls(isActive)}
+              aria-label={t('nav.expenses')}
+            >
+              <Receipt className="w-5 h-5" aria-hidden="true" />
+              <span className="text-[11px] font-medium">{t('nav.expenses')}</span>
+            </NavLink>
+          )}
           <NavLink
             to="/activity"
             className={({ isActive }) => bnCls(isActive)}
