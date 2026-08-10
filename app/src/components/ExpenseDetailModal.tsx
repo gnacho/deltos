@@ -509,6 +509,7 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
                   onChange={(e) => {
                     const val = e.target.value || null;
                     if (!val) patch({ requested_user_id: null, split_type: null });
+                    else if (!expense.split_type) patch({ requested_user_id: val, split_type: 'full' });
                     else patch({ requested_user_id: val });
                   }}
                   className="w-full px-3 py-2 rounded-lg bg-surface2 border border-app text-sm text-text focus:outline-none focus:border-brand"

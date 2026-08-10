@@ -349,6 +349,7 @@ export function ExpenseModal(props: Props) {
                 const val = e.target.value || null;
                 setRequestedUserId(val);
                 if (!val) setSplitType(null);
+                else if (!splitType) setSplitType('full');
               }}
               className="w-full px-3 py-2 rounded-lg bg-surface2 border border-app text-sm text-text focus:outline-none focus:border-brand"
             >
