@@ -588,7 +588,7 @@ function AppearanceCard() {
           {/* Densidad */}
           <div>
             <p className="mb-1.5 text-[11px] font-medium uppercase tracking-[0.08em] text-faint">{t('settings.density.title')}</p>
-            <div role="radiogroup" aria-label={t('settings.density.title')} className="flex rounded-xl border border-app p-0.5">
+            <div role="radiogroup" aria-label={t('settings.density.title')} className="flex rounded-xl border border-app bg-surface2 p-0.5">
               {(['comfortable', 'compact'] as const).map((d) => (
                 <button
                   key={d}
@@ -597,7 +597,7 @@ function AppearanceCard() {
                   aria-checked={density === d}
                   onClick={() => setDensity(d)}
                   className={`h-8 flex-1 rounded-lg text-[13px] transition-colors${
-                    density === d ? ' bg-surface font-semibold text-text' : ' text-faint hover:text-muted'
+                    density === d ? ' bg-surface shadow-soft font-semibold text-text' : ' text-faint hover:text-muted'
                   }`}
                 >
                   {t(`settings.density.${d}`)}
