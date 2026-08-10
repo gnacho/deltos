@@ -18,6 +18,7 @@ import { useSession } from '@/auth/session-context';
 import { useTheme } from '@/theme/theme-context';
 import { apiPost, dispatchUnauthorized } from '@/data/api-client';
 import { LogoMark } from '@/components/Logo';
+import { Avatar } from '@/components/Avatar';
 import { ConnectionDot } from '@/components/ConnectionDot';
 import { colorOf } from '@/lib/colors';
 import { ProjectIcon } from '@/components/ProjectIcon';
@@ -494,6 +495,16 @@ export default function Layout() {
           </div>
 
           <nav className="flex-1 overflow-y-auto nice-scroll px-3 pb-3" aria-label={t('nav.main')}>
+            <Link
+              to="/settings"
+              className="flex items-center gap-2.5 rounded-xl px-3 py-2 mb-4 hover:bg-surface2 transition-colors"
+            >
+              <Avatar name={user.username} color={user.color} size="lg" />
+              <div className="min-w-0">
+                <p className="text-sm font-medium leading-tight truncate">{user.username}</p>
+                <p className="text-xs text-faint leading-tight">{t('nav.currentAccount')}</p>
+              </div>
+            </Link>
             <div className="space-y-0.5 mb-5">
               <NavLink to="/" end className={sideItemCls}>
                 <span className="text-faint">
@@ -565,7 +576,7 @@ export default function Layout() {
                 to="/settings"
                 className={`flex h-9 flex-1 items-center justify-center gap-2 rounded-lg px-3 text-sm font-medium transition-colors ${
                   location.pathname.startsWith('/settings')
-                    ? 'bg-surface2'
+                    ? 'bg-brand/10 text-brand'
                     : 'text-muted hover:bg-surface2'
                 }`}
               >
