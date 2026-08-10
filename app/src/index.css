@@ -240,24 +240,49 @@ body {
 }
 .card.dragging {
   animation: none;
-  opacity: 0.4;
-  transform: rotate(1.5deg) scale(0.98);
+  opacity: 0.25;
+  filter: blur(1px);
   cursor: grabbing;
 }
+/* Clon usado como ghost del cursor (setDragImage) — opaco y con sombra */
+.lift-ghost {
+  opacity: 0.92 !important;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.22) !important;
+  transform: rotate(0.6deg) scale(1.03) !important;
+  pointer-events: none !important;
+}
+/* Hueco donde caerá la tarjeta: borde punteado animado */
 .drop-placeholder {
-  border: 2px dashed rgb(var(--accent, 148 163 184) / 0.55);
+  border: 2px dashed rgb(var(--accent, 148 163 184) / 0.5);
   border-radius: 1rem;
   background: rgb(var(--accent, 148 163 184) / 0.08);
+  animation: placeholder-pulse 1s ease-in-out infinite;
+}
+@keyframes placeholder-pulse {
+  0%, 100% { opacity: 0.5; }
+  50%      { opacity: 1; }
+}
+/* Columna destino: borde resplandeciente animado */
+@keyframes col-glow {
+  0%, 100% { box-shadow: inset 0 0 0 2px rgb(var(--accent, 148 163 184) / 0.3); }
+  50%      { box-shadow: inset 0 0 0 3px rgb(var(--accent, 148 163 184) / 0.55); }
 }
 section[data-col] {
   border-radius: 1rem;
-  transition:
-    background-color 0.2s ease,
-    box-shadow 0.2s ease;
+  transition: background-color 0.2s ease;
 }
 section[data-col].col-target {
   background-color: var(--surface-2);
-  box-shadow: inset 0 0 0 1.5px rgb(var(--accent, 148 163 184) / 0.4);
+  animation: col-glow 1.5s ease-in-out infinite;
+}
+/* Rebote al soltar */
+@keyframes card-drop {
+  0%   { transform: scale(1.04); }
+  40%  { transform: scale(0.97); }
+  100% { transform: scale(1); }
+}
+.card.card-dropped {
+  animation: card-drop 0.35s ease-out;
 }
 /* Durante un re-render con FLIP se desactiva la animación de entrada */
 .no-anim .card {
@@ -265,10 +290,18 @@ section[data-col].col-target {
 }
 @media (prefers-reduced-motion: reduce) {
   .card.dragging {
-    transform: none;
+    filter: none;
   }
-  section[data-col] {
-    transition: none;
+  section[data-col].col-target {
+    animation: none;
+    box-shadow: inset 0 0 0 2px rgb(var(--accent, 148 163 184) / 0.35);
+  }
+  .card.card-dropped {
+    animation: none;
+  }
+  .drop-placeholder {
+    animation: none;
+    opacity: 1;
   }
 }
 
@@ -299,4 +332,72 @@ html[data-density='compact'] .settings-card {
 }
 html[data-density='compact'] .timeline > li {
   padding-bottom: 0.375rem;
+}
+
+/* ===== Movimiento móvil de tarjetas: long-press levanta, se arrastra a la etapa ===== */
+.mm-lift {
+  position: relative;
+  z-index: 60;
+  transform: scale(1.05) rotate(1.2deg);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.3);
+  transition:
+    transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 0.18s ease;
+  will-change: transform;
+  pointer-events: none; /* elementFromPoint debe ver a través de la tarjeta */
+  touch-action: none;
+}
+.mm-dim {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(0, 0, 0, 0.18);
+  backdrop-filter: blur(1px);
+  pointer-events: none;
+  animation: mm-dim-in 0.2s ease both;
+}
+@keyframes mm-dim-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+/* Mientras se arrastra, la barra de etapas sube por encima del velo */
+body.mm-dragging [data-segbar] {
+  z-index: 70;
+}
+/* Etapa bajo el dedo: crece y se enciende con el acento */
+[data-seg].mm-target {
+  transform: scale(1.12);
+  box-shadow:
+    0 0 0 2px rgb(var(--accent-rgb)),
+    0 4px 16px rgb(var(--accent-rgb) / 0.35);
+  transition:
+    transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 0.15s ease;
+}
+/* El contador de la etapa da un salto al recibir la tarjeta */
+@keyframes mm-pop {
+  0%   { transform: scale(1); }
+  45%  { transform: scale(1.7); }
+  100% { transform: scale(1); }
+}
+.mm-pop {
+  display: inline-block;
+  animation: mm-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .mm-lift {
+    transform: none;
+    transition: none;
+  }
+  .mm-dim {
+    animation: none;
+    backdrop-filter: none;
+  }
+  [data-seg].mm-target {
+    transform: none;
+    transition: none;
+  }
+  .mm-pop {
+    animation: none;
+  }
 }
