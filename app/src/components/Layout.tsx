@@ -581,7 +581,7 @@ export default function Layout() {
                 }`}
               >
                 <Settings className="w-[18px] h-[18px]" aria-hidden="true" />
-                <span className="flex-1 text-left">{t('nav.settings')}</span>
+                <span>{t('nav.settings')}</span>
               </NavLink>
               <button
                 type="button"
