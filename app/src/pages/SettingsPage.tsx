@@ -825,139 +825,89 @@ function LabelsCard() {
   return (
     <Card>
       <Heading icon={Tag}>{t('settings.labels.title')}</Heading>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <p className="text-[13px] text-faint mb-3">{t('settings.labels.subtitle')}</p>
-          {labels.length === 0 ? (
-            <p className="rounded-xl border border-dashed border-app px-4 py-5 text-center text-[13px] text-muted">
-              {t('settings.labels.empty')}
-            </p>
-          ) : (
-            <ul className="space-y-1.5">
-              {labels.map((l) => (
-                <li key={l.id} className="rounded-lg border border-app bg-surface2 px-3 py-2">
-                  {editing === l.id ? (
-                    <form
-                      className="flex flex-wrap items-center gap-2"
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        void saveEdit(l.id);
-                      }}
-                    >
-                      <input
-                        value={editName}
-                        maxLength={40}
-                        autoFocus
-                        onChange={(e) => setEditName(e.target.value)}
-                        aria-label={t('settings.labels.name')}
-                        className={`${inputCls} flex-1 min-w-32`}
-                      />
-                      <button
-                        type="submit"
-                        disabled={busy || !editName.trim()}
-                        className="h-9 rounded-xl bg-brand px-3 text-[13px] font-semibold text-brandfg hover:brightness-110 disabled:opacity-60"
-                      >
-                        {t('common.save')}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setEditing(null)}
-                        className="h-9 rounded-xl border border-app px-3 text-[13px] text-muted"
-                      >
-                        {t('common.cancel')}
-                      </button>
-                    </form>
-                  ) : (
-                    <>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[12px] font-medium ${colorOf(l.color).chip}`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${colorOf(l.color).dot}`} aria-hidden="true" />
-                          {l.name}
-                        </span>
-                        <span className="flex-1" />
-                        <button
-                          type="button"
-                          aria-label={t('settings.labels.rename')}
-                          title={t('settings.labels.rename')}
-                          onClick={() => startEdit(l)}
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-app bg-surface text-muted hover:text-text"
-                        >
-                          <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
+      <p className="text-[13px] text-faint mb-3">{t('settings.labels.subtitle')}</p>
+      {labels.length === 0 ? (
+        <p className="rounded-lg border border-dashed border-app px-3 py-4 text-center text-[13px] text-muted">
+          {t('settings.labels.empty')}
+        </p>
+      ) : (
+        <ul className="space-y-1.5 mb-4">
+          {labels.map((l) => (
+            <li key={l.id} className="rounded-lg border border-app bg-surface2 px-3 py-2">
+              {editing === l.id ? (
+                <form
+                  className="flex flex-wrap items-center gap-2"
+                  onSubmit={(e) => { e.preventDefault(); void saveEdit(l.id); }}
+                >
+                  <input value={editName} maxLength={40} autoFocus onChange={(e) => setEditName(e.target.value)}
+                    aria-label={t('settings.labels.name')} className={`${inputCls} flex-1 min-w-32`} />
+                  <button type="submit" disabled={busy || !editName.trim()}
+                    className="h-8 rounded-lg bg-brand px-3 text-[12px] font-semibold text-brandfg hover:brightness-110 disabled:opacity-60">
+                    {t('common.save')}
+                  </button>
+                  <button type="button" onClick={() => setEditing(null)}
+                    className="h-8 rounded-lg border border-app px-3 text-[12px] text-muted">
+                    {t('common.cancel')}
+                  </button>
+                </form>
+              ) : (
+                <>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium ${colorOf(l.color).chip}`}>
+                      <span className={`w-1 h-1 rounded-full ${colorOf(l.color).dot}`} aria-hidden="true" />
+                      {l.name}
+                    </span>
+                    <span className="flex-1" />
+                    <button type="button" aria-label={t('settings.labels.rename')} title={t('settings.labels.rename')}
+                      onClick={() => startEdit(l)}
+                      className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-app bg-surface text-muted hover:text-text">
+                      <Pencil className="w-3 h-3" aria-hidden="true" />
+                    </button>
+                    {confirmDelete === l.id ? (
+                      <span className="flex gap-1">
+                        <button type="button" onClick={() => void remove(l.id)}
+                          className="h-7 rounded-md bg-rose-600 px-2 text-[11px] font-semibold text-white">
+                          {t('common.confirm')}
                         </button>
-                        {confirmDelete === l.id ? (
-                          <span className="flex gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => void remove(l.id)}
-                              className="h-8 rounded-lg bg-rose-600 px-3 text-[13px] font-semibold text-white"
-                            >
-                              {t('common.confirm')}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setConfirmDelete(null)}
-                              className="h-8 rounded-lg border border-app px-3 text-[13px] text-muted"
-                            >
-                              {t('common.cancel')}
-                            </button>
-                          </span>
-                        ) : (
-                          <button
-                            type="button"
-                            aria-label={t('settings.labels.delete')}
-                            title={t('settings.labels.delete')}
-                            onClick={() => {
-                              setConfirmDelete(l.id);
-                              setEditing(null);
-                            }}
-                             className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-app bg-surface text-muted hover:text-rose-600 dark:hover:text-rose-400"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
-                          </button>
-                        )}
-                      </div>
-                      <div className="mt-2">
-                        <ColorSwatches
-                          value={l.color}
-                          onChange={(c) => void recolor(l.id, c)}
-                          ariaLabel={t('settings.labels.color')}
-                        />
-                      </div>
-                    </>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+                        <button type="button" onClick={() => setConfirmDelete(null)}
+                          className="h-7 rounded-md border border-app px-2 text-[11px] text-muted">
+                          {t('common.cancel')}
+                        </button>
+                      </span>
+                    ) : (
+                      <button type="button" aria-label={t('settings.labels.delete')} title={t('settings.labels.delete')}
+                        onClick={() => { setConfirmDelete(l.id); setEditing(null); }}
+                        className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-app bg-surface text-muted hover:text-rose-600 dark:hover:text-rose-400">
+                        <Trash2 className="w-3 h-3" aria-hidden="true" />
+                      </button>
+                    )}
+                  </div>
+                  <div className="mt-1.5">
+                    <ColorSwatches value={l.color} onChange={(c) => void recolor(l.id, c)} ariaLabel={t('settings.labels.color')} />
+                  </div>
+                </>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
 
-        <div>
-          <p className="text-[13px] font-medium mb-2">{t('settings.labels.name')}</p>
-          <form onSubmit={create} className="space-y-2.5">
-            <input
-              id="nl-name"
-              value={name}
-              maxLength={40}
-              onChange={(e) => setName(e.target.value)}
-              placeholder={t('settings.labels.namePlaceholder')}
-              className={inputCls}
-            />
+      {/* Crear etiqueta — compacto, al final */}
+      <div className="border-t border-app pt-3">
+        <p className="text-[12px] font-medium mb-1.5">{t('settings.labels.name')}</p>
+        <form onSubmit={create} className="flex flex-wrap items-end gap-2">
+          <input id="nl-name" value={name} maxLength={40} onChange={(e) => setName(e.target.value)}
+            placeholder={t('settings.labels.namePlaceholder')} className={`${inputCls} flex-1 min-w-[160px]`} />
+          <div className="flex items-center gap-1.5">
             <ColorSwatches value={color} onChange={setColor} ariaLabel={t('settings.labels.color')} />
-            {error && (
-              <p role="alert" className="text-[13px] font-medium text-rose-600 dark:text-rose-400">
-                {error}
-              </p>
-            )}
-            <button
-              type="submit"
-              disabled={busy || !name.trim()}
-              className="inline-flex h-11 items-center gap-2 rounded-xl bg-brand px-5 text-[14px] font-semibold text-brandfg hover:brightness-110 disabled:opacity-60"
-            >
-              <Tag className="w-4 h-4" aria-hidden="true" />
-              {busy ? t('settings.labels.creating') : t('settings.labels.create')}
-            </button>
-          </form>
-        </div>
+          </div>
+          <button type="submit" disabled={busy || !name.trim()}
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand px-3 text-[13px] font-semibold text-brandfg hover:brightness-110 disabled:opacity-60 shrink-0">
+            <Tag className="w-3.5 h-3.5" aria-hidden="true" />
+            {busy ? t('settings.labels.creating') : t('settings.labels.create')}
+          </button>
+        </form>
+        {error && <p role="alert" className="text-[12px] font-medium text-rose-600 dark:text-rose-400 mt-1.5">{error}</p>}
       </div>
     </Card>
   );
