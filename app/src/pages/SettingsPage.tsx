@@ -513,79 +513,79 @@ function AppearanceCard() {
   return (
     <Card className="h-full">
       <Heading icon={Sun}>{t('settings.appearance')}</Heading>
-      <div
-        className="grid grid-cols-3 gap-1 rounded-xl bg-surface2 p-1"
-        role="radiogroup"
-        aria-label={t('settings.appearance')}
-      >
-        {opts.map(({ m, icon: Icon, label }) => {
-          const on = mode === m;
-          return (
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        {/* Izquierda: tema + previews */}
+        <div className="space-y-4">
+          <div
+            className="grid grid-cols-3 gap-1 rounded-xl bg-surface2 p-1"
+            role="radiogroup"
+            aria-label={t('settings.appearance')}
+          >
+            {opts.map(({ m, icon: Icon, label }) => {
+              const on = mode === m;
+              return (
+                <button
+                  key={m}
+                  type="button"
+                  role="radio"
+                  aria-checked={on}
+                  onClick={() => setMode(m)}
+                  className={`flex flex-col items-center gap-1.5 rounded-xl py-3 text-[13px] ${
+                    on ? 'bg-surface shadow-soft font-medium' : 'text-muted'
+                  }`}
+                >
+                  <Icon className="w-[18px] h-[18px]" aria-hidden="true" />
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <ThemePreview variant="light" />
+            <ThemePreview variant="dark" />
+          </div>
+        </div>
+
+        {/* Derecha: acento, densidad, animaciones */}
+        <div className="space-y-4">
+          <AccentSwatches />
+          <div>
+            <p className="text-[13px] font-medium mb-1.5">{t('settings.density.title')}</p>
+            <div className="grid grid-cols-2 gap-1 rounded-xl bg-surface2 p-1" role="radiogroup" aria-label={t('settings.density.title')}>
+              {(['comfortable', 'compact'] as const).map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  role="radio"
+                  aria-checked={density === d}
+                  onClick={() => setDensity(d)}
+                  className={`rounded-xl py-2 text-[13px] ${density === d ? 'bg-surface shadow-soft font-medium' : 'text-muted'}`}
+                >
+                  {t(`settings.density.${d}`)}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex items-center justify-between gap-4">
+            <p className="text-[13px]">{t('settings.reduceMotion')}</p>
             <button
-              key={m}
               type="button"
-              role="radio"
-              aria-checked={on}
-              onClick={() => setMode(m)}
-              className={`flex flex-col items-center gap-1.5 rounded-xl py-3 text-[13px] ${
-                on ? 'bg-surface shadow-soft font-medium' : 'text-muted'
+              role="switch"
+              aria-checked={reduceMotion}
+              aria-label={t('settings.reduceMotion')}
+              onClick={() => setReduceMotion(!reduceMotion)}
+              className={`relative w-12 h-7 rounded-full shrink-0 transition-colors ${
+                reduceMotion ? 'bg-brand' : 'bg-surface2 border border-app'
               }`}
             >
-              <Icon className="w-[18px] h-[18px]" aria-hidden="true" />
-              {label}
+              <span
+                className={`absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-white shadow transition-transform ${
+                  reduceMotion ? 'translate-x-5' : ''
+                }`}
+              />
             </button>
-          );
-        })}
-      </div>
-      <p className="text-[13px] text-faint mt-3">{t('settings.themeHint')}</p>
-
-      {/* Previews con tokens reales */}
-      <div className="mt-4 grid grid-cols-2 gap-3">
-        <ThemePreview variant="light" />
-        <ThemePreview variant="dark" />
-      </div>
-
-      {/* Acento */}
-      <AccentSwatches />
-
-      {/* Densidad */}
-      <div className="mt-4">
-        <p className="text-[13px] font-medium mb-1.5">{t('settings.density.title')}</p>
-        <div className="grid grid-cols-2 gap-1 rounded-xl bg-surface2 p-1" role="radiogroup" aria-label={t('settings.density.title')}>
-          {(['comfortable', 'compact'] as const).map((d) => (
-            <button
-              key={d}
-              type="button"
-              role="radio"
-              aria-checked={density === d}
-              onClick={() => setDensity(d)}
-              className={`rounded-xl py-2 text-[13px] ${density === d ? 'bg-surface shadow-soft font-medium' : 'text-muted'}`}
-            >
-              {t(`settings.density.${d}`)}
-            </button>
-          ))}
+          </div>
         </div>
-      </div>
-
-      {/* Reducir animaciones */}
-      <div className="mt-4 flex items-center justify-between gap-4">
-        <p className="text-[13px]">{t('settings.reduceMotion')}</p>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={reduceMotion}
-          aria-label={t('settings.reduceMotion')}
-          onClick={() => setReduceMotion(!reduceMotion)}
-          className={`relative w-12 h-7 rounded-full shrink-0 transition-colors ${
-            reduceMotion ? 'bg-brand' : 'bg-surface2 border border-app'
-          }`}
-        >
-          <span
-            className={`absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-white shadow transition-transform ${
-              reduceMotion ? 'translate-x-5' : ''
-            }`}
-          />
-        </button>
       </div>
     </Card>
   );
@@ -805,139 +805,142 @@ function LabelsCard() {
   return (
     <Card className="h-full">
       <Heading icon={Tag}>{t('settings.labels.title')}</Heading>
-      <p className="text-[13px] text-faint mb-4">{t('settings.labels.subtitle')}</p>
-
-      {labels.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-app px-4 py-6 text-center text-[13px] text-muted mb-4">
-          {t('settings.labels.empty')}
-        </p>
-      ) : (
-        <ul className="space-y-2 mb-4">
-          {labels.map((l) => (
-            <li key={l.id} className="rounded-xl border border-app bg-surface2 px-3.5 py-2.5">
-              {editing === l.id ? (
-                <form
-                  className="flex flex-wrap items-center gap-2"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    void saveEdit(l.id);
-                  }}
-                >
-                  <input
-                    value={editName}
-                    maxLength={40}
-                    autoFocus
-                    onChange={(e) => setEditName(e.target.value)}
-                    aria-label={t('settings.labels.name')}
-                    className={`${inputCls} flex-1 min-w-32`}
-                  />
-                  <button
-                    type="submit"
-                    disabled={busy || !editName.trim()}
-                    className="h-9 rounded-xl bg-brand px-3 text-[13px] font-semibold text-brandfg hover:brightness-110 disabled:opacity-60"
-                  >
-                    {t('common.save')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEditing(null)}
-                    className="h-9 rounded-xl border border-app px-3 text-[13px] text-muted"
-                  >
-                    {t('common.cancel')}
-                  </button>
-                </form>
-              ) : (
-                <div className="flex flex-wrap items-center gap-2.5">
-                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[13px] font-medium ${colorOf(l.color).chip}`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${colorOf(l.color).dot}`} aria-hidden="true" />
-                    {l.name}
-                  </span>
-                  <span className="flex-1" />
-                  <button
-                    type="button"
-                    aria-label={t('settings.labels.rename')}
-                    title={t('settings.labels.rename')}
-                    onClick={() => startEdit(l)}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-app bg-surface text-muted hover:text-text"
-                  >
-                    <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
-                  </button>
-                  {confirmDelete === l.id ? (
-                    <span className="flex gap-1.5">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        {/* Izquierda: descripción + lista de etiquetas */}
+        <div>
+          <p className="text-[13px] text-faint mb-4">{t('settings.labels.subtitle')}</p>
+          {labels.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-app px-4 py-6 text-center text-[13px] text-muted">
+              {t('settings.labels.empty')}
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {labels.map((l) => (
+                <li key={l.id} className="rounded-xl border border-app bg-surface2 px-3.5 py-2.5">
+                  {editing === l.id ? (
+                    <form
+                      className="flex flex-wrap items-center gap-2"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        void saveEdit(l.id);
+                      }}
+                    >
+                      <input
+                        value={editName}
+                        maxLength={40}
+                        autoFocus
+                        onChange={(e) => setEditName(e.target.value)}
+                        aria-label={t('settings.labels.name')}
+                        className={`${inputCls} flex-1 min-w-32`}
+                      />
                       <button
-                        type="button"
-                        onClick={() => void remove(l.id)}
-                        className="h-8 rounded-lg bg-rose-600 px-3 text-[13px] font-semibold text-white"
+                        type="submit"
+                        disabled={busy || !editName.trim()}
+                        className="h-9 rounded-xl bg-brand px-3 text-[13px] font-semibold text-brandfg hover:brightness-110 disabled:opacity-60"
                       >
-                        {t('common.confirm')}
+                        {t('common.save')}
                       </button>
                       <button
                         type="button"
-                        onClick={() => setConfirmDelete(null)}
-                        className="h-8 rounded-lg border border-app px-3 text-[13px] text-muted"
+                        onClick={() => setEditing(null)}
+                        className="h-9 rounded-xl border border-app px-3 text-[13px] text-muted"
                       >
                         {t('common.cancel')}
                       </button>
-                    </span>
+                    </form>
                   ) : (
-                    <button
-                      type="button"
-                      aria-label={t('settings.labels.delete')}
-                      title={t('settings.labels.delete')}
-                      onClick={() => {
-                        setConfirmDelete(l.id);
-                        setEditing(null);
-                      }}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-app bg-surface text-muted hover:text-rose-600 dark:hover:text-rose-400"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
-                    </button>
+                    <>
+                      <div className="flex flex-wrap items-center gap-2.5">
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[13px] font-medium ${colorOf(l.color).chip}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${colorOf(l.color).dot}`} aria-hidden="true" />
+                          {l.name}
+                        </span>
+                        <span className="flex-1" />
+                        <button
+                          type="button"
+                          aria-label={t('settings.labels.rename')}
+                          title={t('settings.labels.rename')}
+                          onClick={() => startEdit(l)}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-app bg-surface text-muted hover:text-text"
+                        >
+                          <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
+                        </button>
+                        {confirmDelete === l.id ? (
+                          <span className="flex gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => void remove(l.id)}
+                              className="h-8 rounded-lg bg-rose-600 px-3 text-[13px] font-semibold text-white"
+                            >
+                              {t('common.confirm')}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setConfirmDelete(null)}
+                              className="h-8 rounded-lg border border-app px-3 text-[13px] text-muted"
+                            >
+                              {t('common.cancel')}
+                            </button>
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            aria-label={t('settings.labels.delete')}
+                            title={t('settings.labels.delete')}
+                            onClick={() => {
+                              setConfirmDelete(l.id);
+                              setEditing(null);
+                            }}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-app bg-surface text-muted hover:text-rose-600 dark:hover:text-rose-400"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                          </button>
+                        )}
+                      </div>
+                      <div className="mt-2.5">
+                        <ColorSwatches
+                          value={l.color}
+                          onChange={(c) => void recolor(l.id, c)}
+                          ariaLabel={t('settings.labels.color')}
+                        />
+                      </div>
+                    </>
                   )}
-                </div>
-              )}
-              {editing !== l.id && (
-                <div className="mt-2.5">
-                  <ColorSwatches
-                    value={l.color}
-                    onChange={(c) => void recolor(l.id, c)}
-                    ariaLabel={t('settings.labels.color')}
-                  />
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <form onSubmit={create} className="space-y-3 border-t border-app pt-4">
-        <div>
-          <label htmlFor="nl-name" className={labelCls}>
-            {t('settings.labels.name')}
-          </label>
-          <input
-            id="nl-name"
-            value={name}
-            maxLength={40}
-            onChange={(e) => setName(e.target.value)}
-            placeholder={t('settings.labels.namePlaceholder')}
-            className={inputCls}
-          />
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
-        <ColorSwatches value={color} onChange={setColor} ariaLabel={t('settings.labels.color')} />
-        {error && (
-          <p role="alert" className="text-[13px] font-medium text-rose-600 dark:text-rose-400">
-            {error}
-          </p>
-        )}
-        <button
-          type="submit"
-          disabled={busy || !name.trim()}
-          className="inline-flex h-11 items-center gap-2 rounded-xl bg-brand px-5 text-[14px] font-semibold text-brandfg hover:brightness-110 disabled:opacity-60"
-        >
-          <Tag className="w-4 h-4" aria-hidden="true" />
-          {busy ? t('settings.labels.creating') : t('settings.labels.create')}
-        </button>
-      </form>
+
+        {/* Derecha: crear etiqueta */}
+        <div>
+          <p className="text-[13px] font-medium mb-3">{t('settings.labels.name')}</p>
+          <form onSubmit={create} className="space-y-3">
+            <input
+              id="nl-name"
+              value={name}
+              maxLength={40}
+              onChange={(e) => setName(e.target.value)}
+              placeholder={t('settings.labels.namePlaceholder')}
+              className={inputCls}
+            />
+            <ColorSwatches value={color} onChange={setColor} ariaLabel={t('settings.labels.color')} />
+            {error && (
+              <p role="alert" className="text-[13px] font-medium text-rose-600 dark:text-rose-400">
+                {error}
+              </p>
+            )}
+            <button
+              type="submit"
+              disabled={busy || !name.trim()}
+              className="inline-flex h-11 items-center gap-2 rounded-xl bg-brand px-5 text-[14px] font-semibold text-brandfg hover:brightness-110 disabled:opacity-60"
+            >
+              <Tag className="w-4 h-4" aria-hidden="true" />
+              {busy ? t('settings.labels.creating') : t('settings.labels.create')}
+            </button>
+          </form>
+        </div>
+      </div>
     </Card>
   );
 }
@@ -967,9 +970,9 @@ function AboutCard({ installState, install }: { installState?: string; install?:
 
   const tiles: { icon: typeof Github; label: string; href?: string }[] = [
     { icon: Github, label: t('settings.about.code'), href: REPO_URL },
-    { icon: FileText, label: t('settings.about.changelog'), href: `${REPO_URL}/commits/main` },
-    { icon: Heart, label: t('settings.about.kofi') }, // sin href de momento (no hay cuenta)
-    { icon: ShieldCheck, label: t('settings.about.privacy') },
+    { icon: FileText, label: t('settings.about.changelog'), href: 'https://deltos.cloudless.club/' },
+    { icon: Heart, label: t('settings.about.kofi') },
+    { icon: ShieldCheck, label: t('settings.about.privacy'), href: 'https://cloudless.club/' },
   ];
   const tileCls =
     'flex items-center gap-2 rounded-lg border border-app px-2.5 py-1 text-[12px] font-medium text-muted transition-colors duration-150 hover:border-brand/50 hover:text-brand';

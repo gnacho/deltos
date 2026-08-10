@@ -76,6 +76,7 @@ export interface DataApi {
   releaseExpenseDetail: (id: string) => void;
   addExpenseComment: (id: string, body: string) => Promise<void>;
   settleExpenses: (otherUserId: string) => Promise<number>;
+  setMyShare: (id: string, paid: boolean) => Promise<void>;
   uploadExpenseAttachment: (id: string, file: File) => Promise<void>;
   deleteExpenseAttachment: (expenseId: string, attId: string) => Promise<void>;
 }

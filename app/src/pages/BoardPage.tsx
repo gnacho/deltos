@@ -15,7 +15,6 @@ import { COLUMNS } from '@/lib/constants';
 import { colorOf, COLUMN_ACCENT_RGB } from '@/lib/colors';
 import { announce } from '@/lib/announce';
 import { ProjectActions } from '@/components/ProjectActions';
-import { ProjectIcon } from '@/components/ProjectIcon';
 
 export default function BoardPage() {
   const { t } = useTranslation();
@@ -143,8 +142,6 @@ export default function BoardPage() {
 
   /* ---------- Render ---------- */
 
-  const title = isTodo ? t('nav.todo') : project!.name;
-  const subtitle = isTodo ? t('board.todoSubtitle') : t('board.projectSubtitle');
   // ¿Puede el usuario gestionar este proyecto (editar/borrar/miembros)?
   const canManage =
     isTodo || project!.owner_id == null || project!.owner_id === me.id || me.role === 'admin';
@@ -213,35 +210,22 @@ export default function BoardPage() {
       </div>
 
       <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 pt-5 lg:pt-7">
-        {/* Cabecera de vista */}
-        <div className="flex flex-wrap items-end justify-between gap-3 mb-5">
-          <div>
-            <h1 className="font-display font-bold text-2xl lg:text-[28px] tracking-tight inline-flex items-center gap-2.5">
-              {!isTodo && project && (
-                <ProjectIcon name={project.emoji} className="w-6 h-6 text-muted" />
-              )}
-              {title}
-            </h1>
-            <p className="text-sm text-muted mt-0.5">{subtitle}</p>
+        {!isTodo && project && canManage && (
+          <div className="flex justify-end mb-3">
+            <button
+              type="button"
+              onClick={() => setProjectActionsOpen(true)}
+              aria-label={t('projects.actions', { name: project.name })}
+              title={t('projects.actions', { name: project.name })}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-app bg-surface text-muted hover:text-text"
+            >
+              <Settings2 className="w-4.5 h-4.5" aria-hidden="true" />
+            </button>
           </div>
-          <div className="flex items-center gap-2">
-            <p className="tnum text-sm text-muted">{t('board.openTasks', { count: openCount })}</p>
-            {!isTodo && project && canManage && (
-              <button
-                type="button"
-                onClick={() => setProjectActionsOpen(true)}
-                aria-label={t('projects.actions', { name: project.name })}
-                title={t('projects.actions', { name: project.name })}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-app bg-surface text-muted hover:text-text"
-              >
-                <Settings2 className="w-4.5 h-4.5" aria-hidden="true" />
-              </button>
-            )}
-          </div>
-        </div>
+        )}
 
-        {/* Alcance: Todas / Mías / De otras ( quién trabaja cada tarjeta) */}
-        <div className="mb-5">
+        {/* Alcance: Todas / Mías / De otras + Nueva tarea */}
+        <div className="mb-5 flex flex-wrap items-center gap-2">
           <div
             role="tablist"
             aria-label={t('board.scopeAria')}
@@ -265,6 +249,15 @@ export default function BoardPage() {
               );
             })}
           </div>
+          <button
+            type="button"
+            onClick={() => openNewTask({ projectId: isTodo ? undefined : view, column: 'nuevo' })}
+            className="ml-auto inline-flex items-center gap-2 rounded-2xl bg-brand text-brandfg px-5 py-2.5 text-[14px] font-semibold hover:brightness-110 shadow-soft"
+            aria-label={t('board.newTask')}
+          >
+            <Plus className="w-5 h-5" aria-hidden="true" />
+            {t('board.newTask')}
+          </button>
         </div>
 
         {isTodo && <Filters filters={filters} onChange={setFilters} />}
@@ -368,6 +361,10 @@ export default function BoardPage() {
             );
           })}
         </div>
+      </div>
+
+      <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 pb-4">
+        <p className="text-sm text-muted">{t('board.openTasks', { count: openCount })}</p>
       </div>
 
       {/* FAB móvil: nueva tarea */}

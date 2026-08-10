@@ -34,7 +34,6 @@ export default function ExpenseBoard() {
   const [creating, setCreating] = useState(false);
   const [detailExpense, setDetailExpense] = useState<{ id: string } | null>(null);
   const [filter, setFilter] = useState<FilterType>('all');
-  const [defaultStep, setDefaultStep] = useState<ExpenseStep>('nuevo');
   const [seg, setSeg] = useState<ExpenseStep>('nuevo');
   const [view, setView] = useState<'tablero' | 'resumen'>('tablero');
 
@@ -45,9 +44,19 @@ export default function ExpenseBoard() {
   const visible = useMemo(() => {
     let list = expenses;
     if (filter === 'mine')
-      list = list.filter((e) => e.created_by === me?.id || e.requested_user_id === me?.id);
+      list = list.filter(
+        (e) =>
+          e.created_by === me?.id ||
+          e.payer_id === me?.id ||
+          e.shares.some((sh) => sh.user_id === me?.id),
+      );
     else if (filter === 'others')
-      list = list.filter((e) => e.created_by !== me?.id && e.requested_user_id !== me?.id);
+      list = list.filter(
+        (e) =>
+          e.created_by !== me?.id &&
+          e.payer_id !== me?.id &&
+          !e.shares.some((sh) => sh.user_id === me?.id),
+      );
     return list;
   }, [expenses, filter, me?.id]);
 
@@ -64,8 +73,7 @@ export default function ExpenseBoard() {
 
   const openCount = visible.filter((e) => e.step !== 'hecho').length;
 
-  const handleOpenNew = (step: ExpenseStep) => {
-    setDefaultStep(step);
+  const handleOpenNew = () => {
     setCreating(true);
   };
 
@@ -212,22 +220,7 @@ export default function ExpenseBoard() {
       </div>
 
       <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 pt-5 lg:pt-7">
-        {/* Cabecera de vista */}
-        <div className="flex flex-wrap items-end justify-between gap-3 mb-5">
-          <div>
-            <h1 className="font-display font-bold text-2xl lg:text-[28px] tracking-tight">
-              {t('expenses.title')}
-            </h1>
-            <p className="text-sm text-muted mt-0.5">{t('expenses.subtitle')}</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <p className="tnum text-sm text-muted">
-              {t('expenses.openCount', { count: openCount })}
-            </p>
-          </div>
-        </div>
-
-        {/* Vista: Tablero | Resumen + Alcance */}
+        {/* Vista: Tablero | Resumen + Alcance + Nuevo gasto */}
         <div className="mb-5 flex flex-wrap items-center gap-2">
           <div
             role="tablist"
@@ -252,6 +245,42 @@ export default function ExpenseBoard() {
               );
             })}
           </div>
+
+          {view === 'tablero' && (
+            <div
+              role="tablist"
+              aria-label={t('board.scopeAria')}
+              className="inline-flex items-center gap-1 rounded-full bg-surface2 p-1"
+            >
+              {scopes.map((s) => {
+                const active = filter === s.id;
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    onClick={() => setFilter(s.id)}
+                    className={`rounded-full px-3.5 h-9 text-[13px] font-medium whitespace-nowrap transition-colors ${
+                      active ? 'bg-surface shadow-soft text-text' : 'text-muted hover:text-text'
+                    }`}
+                  >
+                    {s.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={() => handleOpenNew()}
+            className="ml-auto inline-flex items-center gap-2 rounded-2xl bg-brand text-brandfg px-5 py-2.5 text-[14px] font-semibold hover:brightness-110 shadow-soft"
+            aria-label={t('expenses.new')}
+          >
+            <Plus className="w-5 h-5" aria-hidden="true" />
+            {t('expenses.new')}
+          </button>
         </div>
 
         {view === 'resumen' ? (
@@ -261,33 +290,6 @@ export default function ExpenseBoard() {
         ) : (
           <>
             <BalanceStrip expenses={expenses} />
-
-            {/* Alcance: Todas / Mías / De otras */}
-            <div className="mb-5">
-              <div
-                role="tablist"
-                aria-label={t('board.scopeAria')}
-                className="inline-flex items-center gap-1 rounded-full bg-surface2 p-1"
-              >
-                {scopes.map((s) => {
-                  const active = filter === s.id;
-                  return (
-                    <button
-                      key={s.id}
-                      type="button"
-                      role="tab"
-                      aria-selected={active}
-                      onClick={() => setFilter(s.id)}
-                      className={`rounded-full px-3.5 h-9 text-[13px] font-medium whitespace-nowrap transition-colors ${
-                        active ? 'bg-surface shadow-soft text-text' : 'text-muted hover:text-text'
-                      }`}
-                    >
-                      {s.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
 
             {/* Lista móvil (<lg): un solo estado */}
             <div
@@ -354,7 +356,7 @@ export default function ExpenseBoard() {
                       </span>
                       <button
                         type="button"
-                        onClick={() => handleOpenNew(st.id)}
+                        onClick={() => handleOpenNew()}
                         className="ml-auto w-7 h-7 rounded-lg text-faint hover:bg-surface2 hover:text-muted flex items-center justify-center"
                         aria-label={t('board.addToColumn', { column: t(`expenseSteps.${st.id}`) })}
                       >
@@ -390,10 +392,14 @@ export default function ExpenseBoard() {
         )}
       </div>
 
+      <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 pb-4">
+        <p className="text-sm text-muted">{t('expenses.openCount', { count: openCount })}</p>
+      </div>
+
       {/* FAB móvil: nuevo gasto */}
       <button
         type="button"
-        onClick={() => handleOpenNew(seg)}
+        onClick={() => handleOpenNew()}
         className="lg:hidden fixed right-4 z-40 w-14 h-14 rounded-2xl bg-brand text-brandfg shadow-lg flex items-center justify-center hover:brightness-110"
         style={{ bottom: 'calc(84px + env(safe-area-inset-bottom))' }}
         aria-label={t('expenses.new')}
@@ -401,14 +407,7 @@ export default function ExpenseBoard() {
         <Plus className="w-6 h-6" aria-hidden="true" />
       </button>
 
-      {creating && (
-        <ExpenseModal
-          mode="create"
-          defaultStep={defaultStep}
-          onClose={() => setCreating(false)}
-          onCreated={() => setCreating(false)}
-        />
-      )}
+      {creating && <ExpenseModal mode="create" onClose={() => setCreating(false)} />}
       {detailExpense && data.getExpense(detailExpense.id) && (
         <ExpenseDetailModal
           expense={data.getExpense(detailExpense.id)!}

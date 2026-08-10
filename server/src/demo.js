@@ -197,10 +197,37 @@ export function seedDemo(db, uploadsDir) {
     ev('t10', 'jordi', 'due', { from: null, to: dueStr(4) }, now - 1 * DAY)
     cm('t10', 'mar', 'Me gusta la segunda, la de Chiado. La reservo esta noche si no me dices lo contrario.', now - 1 * DAY)
     cm('t10', 'jordi', 'Perfecto, adelante. Guarda luego el justificante en la carpeta del viaje.', now - 2 * HOUR)
+
+    // --- 3 gastos de ejemplo (plugin expenses) ---
+    const insExpense = db.prepare(
+      `INSERT INTO expenses (id, title, amount_cents, label_id, notes, payer_id,
+       payment_method, spent_at, step, position, created_by, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    const insShare = db.prepare(
+      'INSERT INTO expense_shares (expense_id, user_id, share_cents, paid) VALUES (?, ?, ?, ?)'
+    )
+    // e1: Súper, pagó mar, a medias con jordi, todo pagado → hecho
+    insExpense.run('e1', 'Compra semanal Mercadona', 8745, 'l-compras',
+      'Fruta, verdura, carne y productos de limpieza. Con vale descuento del 5%.',
+      'mar', 'bizum', now - 5 * DAY, 'hecho', 0, 'mar', now - 5 * DAY, now - 1 * DAY)
+    insShare.run('e1', 'mar', 4373, 1)
+    insShare.run('e1', 'jordi', 4372, 1)
+    // e2: Cena a tres, pagó mar; nacho pagó su parte, jordi debe → en-curso
+    insExpense.run('e2', 'Cena aniversario en La Tagliatella', 6230, 'l-familia',
+      'Menú degustación. Pedimos que nos pongan velitas en el postre.',
+      'mar', 'transfer', now - 3 * DAY, 'en-curso', 0, 'mar', now - 3 * DAY, now - 3 * DAY)
+    insShare.run('e2', 'mar', 2076, 1)
+    insShare.run('e2', 'demo', 2077, 1)
+    insShare.run('e2', 'jordi', 2077, 0)
+    // e3: Factura de la luz, sin partes declaradas todavía → nuevo
+    insExpense.run('e3', 'Factura de la luz — julio', 14250, 'l-admin',
+      'Ha subido un 12% respecto al mes pasado. Revisar si es la nueva tarifa PVPC.',
+      'jordi', null, now - 1 * DAY, 'nuevo', 0, 'jordi', now - 1 * DAY, now - 1 * DAY)
   })
 
   tx()
   // Dataset determinista del mockup: 3 usuarios, 4 proyectos, 6 etiquetas, 15 tareas
-  log.info('demo_seeded', { users: 3, projects: 4, labels: 6, tasks: 15 })
+  log.info('demo_seeded', { users: 3, projects: 4, labels: 6, tasks: 15, expenses: 3 })
   return true
 }

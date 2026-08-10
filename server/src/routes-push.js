@@ -22,7 +22,7 @@ const subscribeSchema = z.object({
 // Tipos de notificación configurables por el usuario (toggle en Ajustes).
 // notifyUsers (push.js) trata la AUSENCIA de fila como 'enabled'; una fila con
 // enabled=0 la desactiva. Deben ir sincronizados con el catálogo de push.js.
-export const TIPOS_PUSH = ['asignacion', 'comentario', 'tarea_movida', 'mencion', 'vencimiento']
+export const TIPOS_PUSH = ['asignacion', 'comentario', 'tarea_movida', 'mencion', 'vencimiento', 'pago_requerido', 'pago_completado']
 
 const prefSchema = z.object({
   tipo: z.enum(TIPOS_PUSH),

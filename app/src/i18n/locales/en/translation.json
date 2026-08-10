@@ -28,15 +28,15 @@
     "errorGeneric": "Could not sign in"
   },
   "nav": {
-    "todo": "All",
+    "todo": "Tasks",
     "projects": "Projects",
     "activity": "Activity",
     "settings": "Settings",
     "main": "Main navigation",
-    "goTodo": "Go to the All view",
+    "goTodo": "Go to Tasks",
     "currentAccount": "Current account",
     "projectsSection": "PROJECTS",
-    "boardSelect": "Project",
+    "boardSelect": "Projects",
     "collapse": "Collapse menu",
     "expand": "Expand menu",
     "expenses": "Expenses"
@@ -65,7 +65,7 @@
     "none": "No date"
   },
   "board": {
-    "todoSubtitle": "Every project on a single board",
+    "todoSubtitle": "",
     "projectSubtitle": "Project board",
     "openTasks_one": "{{count}} open task",
     "openTasks_other": "{{count}} open tasks",
@@ -199,7 +199,7 @@
     "project": "<strong>{{user}}</strong> moved the card to project {{to}}"
   },
   "expenses": {
-    "title": "Expenses",
+    "title": "Board-summary",
     "subtitle": "Shared expense tracking with payment splits.",
     "empty": "No expenses yet. Create the first one with the button above.",
     "filterOwe": "I owe",
@@ -210,6 +210,7 @@
     "category": "Category",
     "notes": "Notes",
     "paid": "Paid",
+    "notPaid": "Not paid",
     "requested": "Requests from",
     "owes": "owes you",
     "youOwe": "You owe",
@@ -242,7 +243,21 @@
       "deleteConfirm": "Are you sure? Press to confirm",
       "deleting": "Deleting…",
       "amountRequired": "Enter a valid amount",
-      "saving": "Saving…"
+      "saving": "Saving…",
+      "date": "Expense date",
+      "payer": "Who paid",
+      "participants": "Participants & split",
+      "splitEqual": "Equal split",
+      "splitCustom": "Amounts per person",
+      "shareOf": "{{name}}'s share",
+      "sharesSum": "Shares must add up to the total amount",
+      "sharesSumHint": "Shares add up to {{sum}} but the total is {{total}}",
+      "project": "Project",
+      "noProject": "No project",
+      "noCategory": "No category",
+      "method": "Payment method",
+      "step": "Stage",
+      "title": "Title"
     },
     "openCount_one": "{{count}} open expense",
     "openCount_other": "{{count}} open expenses",
@@ -265,7 +280,16 @@
     "settleDone_other": "Settled: {{count}} expenses",
     "emptyColumn": "No expenses",
     "emptyState": "No expenses in \"{{column}}\"",
-    "etapa": "Stage"
+    "etapa": "Stage",
+    "sharesPending_one": "1 share pending",
+    "sharesPending_other": "{{count}} shares pending",
+    "sharesSettled_one": "1 share · paid",
+    "sharesSettled_other": "{{count}} shares · paid",
+    "noShares": "No split declared yet.",
+    "payerTag": "paid",
+    "pending": "Pending",
+    "paidBy": "Paid by {{name}}",
+    "minTransfers": "Settlement with minimal transfers"
   },
   "newTask": {
     "title": "New task",
@@ -440,7 +464,7 @@
       "updateNow": "Update and reload",
       "stack": "Node 24 · Hono · SQLite · React 19",
       "code": "Source on GitHub",
-      "changelog": "Changelog",
+      "changelog": "Project website",
       "kofi": "Support the project on Ko-fi",
       "privacy": "100% private · 0% cloud"
     },

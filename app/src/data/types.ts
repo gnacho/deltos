@@ -2,7 +2,6 @@
 
 export type ColumnId = 'nuevo' | 'encurso' | 'hecho';
 export type ExpenseStep = 'nuevo' | 'en-curso' | 'hecho';
-export type ExpenseSplitType = 'half' | 'custom' | 'full';
 export type PaymentMethod = 'bizum' | 'transfer' | 'efectivo';
 export type Priority = 'alta' | 'media' | 'baja';
 export type Language = 'auto' | 'es' | 'en';
@@ -166,6 +165,14 @@ export interface TaskPatch {
   project_id?: string;
 }
 
+export interface ExpenseShare {
+  user_id: string;
+  username: string;
+  user_color: string;
+  share_cents: number;
+  paid: boolean;
+}
+
 export interface Expense {
   id: string;
   title: string;
@@ -173,15 +180,15 @@ export interface Expense {
   label_id: string | null;
   label_name: string | null;
   label_color: string | null;
+  project_id: string | null;
+  project_name: string | null;
   notes: string;
-  paid_by_creator: boolean;
-  requested_user_id: string | null;
-  requested_username: string | null;
-  requested_color: string | null;
-  split_type: ExpenseSplitType | null;
-  split_amount_cents: number | null;
-  paid_by_requested: boolean;
+  payer_id: string;
+  payer_username: string;
+  payer_color: string;
   payment_method: PaymentMethod | null;
+  spent_at: number;
+  shares: ExpenseShare[];
   step: ExpenseStep;
   position: number;
   created_by: string;
@@ -192,15 +199,20 @@ export interface Expense {
   counts: { comments: number; attachments: number };
 }
 
+export interface ExpenseShareInput {
+  user_id: string;
+  share_cents: number;
+}
+
 export interface ExpenseInput {
   title: string;
   amount_cents: number;
   label_id?: string | null;
+  project_id?: string | null;
   notes?: string;
-  paid_by_creator?: boolean;
-  requested_user_id?: string | null;
-  split_type?: ExpenseSplitType | null;
-  split_amount_cents?: number | null;
+  payer_id?: string;
+  spent_at?: number;
+  shares?: ExpenseShareInput[];
   payment_method?: PaymentMethod | null;
   step?: ExpenseStep;
 }
@@ -209,12 +221,11 @@ export interface ExpensePatch {
   title?: string;
   amount_cents?: number;
   label_id?: string | null;
+  project_id?: string | null;
   notes?: string;
-  paid_by_creator?: boolean;
-  requested_user_id?: string | null;
-  split_type?: ExpenseSplitType | null;
-  split_amount_cents?: number | null;
-  paid_by_requested?: boolean;
+  payer_id?: string;
+  spent_at?: number;
+  shares?: ExpenseShareInput[];
   payment_method?: PaymentMethod | null;
   step?: ExpenseStep;
 }
