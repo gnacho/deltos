@@ -189,6 +189,7 @@ export interface Expense {
   created_by_color: string;
   created_at: number;
   updated_at: number;
+  counts: { comments: number; attachments: number };
 }
 
 export interface ExpenseInput {

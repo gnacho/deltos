@@ -1,45 +1,58 @@
-import { MessageCircle, Paperclip } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
-import type { Expense } from '@/data/types'
-import { Avatar } from '@/components/Avatar'
-import { TagChip } from '@/components/badges'
-import { useData } from '@/data/data-context'
+import { MessageCircle, Paperclip, Check } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import type { Expense } from '@/data/types';
+import { Avatar } from '@/components/Avatar';
+import { TagChip, UnassignedAvatar } from '@/components/badges';
+import { fmtMoney } from '@/lib/format';
 
-interface Props {
-  expense: Expense
-  index: number
-  onOpen: (id: string) => void
+interface CardProps {
+  expense: Expense;
+  index: number;
+  onOpen: (id: string) => void;
 }
 
-function fmtEur(cents: number): string {
-  return (cents / 100).toFixed(2).replace('.', ',') + ' \u20AC'
+/* Mismos pares claro/oscuro que PRIORITY_BADGE (lib/constants). */
+const BADGE_OK = 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300';
+const BADGE_PENDING = 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300';
+
+function SplitBadge({ expense, big }: { expense: Expense; big?: boolean }) {
+  const { t, i18n } = useTranslation();
+  if (!expense.requested_user_id) return null;
+  const label =
+    expense.split_type === 'half'
+      ? t('expenses.splitHalf')
+      : expense.split_type === 'custom'
+        ? fmtMoney(expense.split_amount_cents ?? 0, i18n.language)
+        : t('expenses.splitFull');
+  return (
+    <span
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-medium ${big ? 'text-[12px]' : 'text-[11px]'} ${
+        expense.paid_by_requested ? BADGE_OK : BADGE_PENDING
+      }`}
+    >
+      {label} → {expense.requested_username}
+      {expense.paid_by_requested && <Check className="w-3 h-3" aria-hidden="true" />}
+    </span>
+  );
 }
 
-export function ExpenseCard({ expense, index, onOpen }: Props) {
-  const { t } = useTranslation()
-  const data = useData()
-  const done = expense.step === 'hecho'
-  const delay = Math.min(index, 10) * 40
-
-  const creator = data.getUsers().find((u) => u.id === expense.created_by)
+/** Tarjeta desktop (completa): categoría, importe, badges de pago, contadores, avatar. */
+export function ExpenseCard({ expense, index, onOpen }: CardProps) {
+  const { t, i18n } = useTranslation();
+  const done = expense.step === 'hecho';
+  const delay = Math.min(index, 10) * 40;
   const label = expense.label_id
-    ? { id: expense.label_id, name: expense.label_name ?? '', color: expense.label_color ?? 'slate' }
-    : null
-
-  const detail = data.getExpenseDetail(expense.id)
-  const commentCount = detail?.comments?.length ?? 0
-  const attachCount = detail?.attachments?.length ?? 0
-
-  const getSplitLabel = () => {
-    if (!expense.split_type) return null
-    if (expense.split_type === 'half') return t('expenses.splitHalf')
-    if (expense.split_type === 'custom') return fmtEur(expense.split_amount_cents || 0)
-    return t('expenses.splitFull')
-  }
-
+    ? {
+        id: expense.label_id,
+        name: expense.label_name ?? '',
+        color: expense.label_color ?? 'slate',
+      }
+    : null;
   return (
     <button
       type="button"
+      data-task={expense.id}
+      draggable
       onClick={() => onOpen(expense.id)}
       style={{ animationDelay: `${delay}ms` }}
       className={`card w-full text-left rounded-2xl bg-surface border border-app shadow-soft p-3.5 transition-transform duration-150 hover:-translate-y-0.5 hover:shadow-md ${done ? 'opacity-60' : ''}`}
@@ -49,57 +62,79 @@ export function ExpenseCard({ expense, index, onOpen }: Props) {
           <TagChip label={label} />
         </div>
       )}
-
-      <h3 className={`text-[15px] font-medium leading-snug ${done ? 'line-through decoration-1' : ''}`}>
+      <h3
+        className={`text-[15px] font-medium leading-snug ${done ? 'line-through decoration-1' : ''}`}
+      >
         {expense.title}
       </h3>
-
-      <p className="text-[17px] font-semibold text-text-primary mt-0.5 tabular-nums">
-        {fmtEur(expense.amount_cents)}
+      <p className="tnum text-[17px] font-semibold mt-0.5">
+        {fmtMoney(expense.amount_cents, i18n.language)}
       </p>
-
       {(expense.paid_by_creator || expense.requested_user_id || expense.payment_method) && (
         <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
           {expense.paid_by_creator && (
-            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+            <span
+              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium ${BADGE_OK}`}
+            >
               {t('expenses.paid')}
             </span>
           )}
-          {expense.requested_user_id && (
-            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${expense.paid_by_requested ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'}`}>
-              {getSplitLabel()} &rarr; {expense.requested_username}
-              {expense.paid_by_requested && ' \u2713'}
-            </span>
-          )}
+          <SplitBadge expense={expense} />
           {expense.payment_method && (
-            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-surface2 text-text-muted">
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-surface2 text-muted">
               {t(`expenses.${expense.payment_method}`)}
             </span>
           )}
         </div>
       )}
-
       <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-app">
         <span className="tnum flex items-center gap-3 text-xs text-faint">
-          {commentCount > 0 && (
+          {expense.counts.comments > 0 && (
             <span className="inline-flex items-center gap-1">
               <MessageCircle className="w-3.5 h-3.5" aria-hidden="true" />
-              {commentCount}
+              {expense.counts.comments}
             </span>
           )}
-          {attachCount > 0 && (
+          {expense.counts.attachments > 0 && (
             <span className="inline-flex items-center gap-1">
               <Paperclip className="w-3.5 h-3.5" aria-hidden="true" />
-              {attachCount}
+              {expense.counts.attachments}
             </span>
           )}
         </span>
-        {creator ? (
-          <Avatar name={creator.username} color={creator.color} />
+        {expense.created_by_username ? (
+          <Avatar name={expense.created_by_username} color={expense.created_by_color} />
         ) : (
-          <div className="w-6 h-6 rounded-full bg-surface2" />
+          <UnassignedAvatar />
         )}
       </div>
     </button>
-  )
+  );
+}
+
+/** Tarjeta MÓVIL simplificada: título (17px/600, 2 líneas), importe y estado del split. */
+export function ExpenseCardMobile({ expense, index, onOpen }: CardProps) {
+  const { i18n } = useTranslation();
+  const done = expense.step === 'hecho';
+  const delay = Math.min(index, 10) * 40;
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(expense.id)}
+      style={{ animationDelay: `${delay}ms` }}
+      className={`card w-full text-left rounded-2xl bg-surface border border-app shadow-soft px-4 py-3.5 min-h-[64px] flex flex-col justify-center gap-2 ${done ? 'opacity-60' : ''}`}
+    >
+      <h3
+        className={`text-[17px] font-semibold leading-snug line-clamp-2 ${done ? 'line-through decoration-1' : ''}`}
+      >
+        {expense.title}
+      </h3>
+      <div className="flex items-center gap-x-3 gap-y-1.5 flex-wrap">
+        <span className="tnum text-[13px] font-semibold">
+          {fmtMoney(expense.amount_cents, i18n.language)}
+        </span>
+        <SplitBadge expense={expense} big />
+      </div>
+    </button>
+  );
 }
