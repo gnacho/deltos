@@ -197,9 +197,9 @@ export function ExpenseModal(props: Props) {
         onClick={onClose}
         aria-hidden="true"
       />
-      <div className="relative w-full sm:max-w-lg bg-surface rounded-t-2xl sm:rounded-2xl border border-app shadow-2xl max-h-[92vh] overflow-y-auto nice-scroll">
+      <div className="relative w-full sm:max-w-xl bg-surface rounded-t-2xl sm:rounded-2xl border border-app shadow-2xl max-h-[92vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="sticky top-0 z-10 bg-surface/95 backdrop-blur border-b border-app px-5 py-4 flex items-center gap-3">
+        <div className="shrink-0 z-10 bg-surface/95 backdrop-blur border-b border-app px-5 py-4 flex items-center gap-3">
           <h2 id="expense-form-title" className="font-display font-bold text-[18px] tracking-tight flex-1">
             {isEdit ? t('expenses.form.editTitle') : t('expenses.form.createTitle')}
           </h2>
@@ -213,7 +213,7 @@ export function ExpenseModal(props: Props) {
           </button>
         </div>
 
-        <div className="px-5 py-5 space-y-5">
+        <div className="flex-1 overflow-y-auto nice-scroll px-5 py-5 space-y-5">
           {/* Título */}
           <div>
             <label className="block text-[12px] font-semibold tracking-wide uppercase text-faint mb-1.5" htmlFor="exp-title">

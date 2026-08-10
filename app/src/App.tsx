@@ -15,6 +15,7 @@ const ExpenseBoard = lazyRetry(() => import('@/pages/ExpenseBoard'));
 const ProjectsPage = lazyRetry(() => import('@/pages/ProjectsPage'));
 const ActivityPage = lazyRetry(() => import('@/pages/ActivityPage'));
 const SettingsPage = lazyRetry(() => import('@/pages/SettingsPage'));
+const InvitePage = lazyRetry(() => import('@/pages/InvitePage'));
 
 function RouteFallback() {
   const { t } = useTranslation();
@@ -25,80 +26,96 @@ function RouteFallback() {
   );
 }
 
+function ProtectedRoutes() {
+  return (
+    <AuthGate>
+      <DataProvider>
+        <Routes>
+          <Route element={<Layout />}>
+            <Route
+              index
+              element={
+                <ErrorBoundary>
+                  <Suspense fallback={<RouteFallback />}>
+                    <BoardPage />
+                  </Suspense>
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="p/:projectId"
+              element={
+                <ErrorBoundary>
+                  <Suspense fallback={<RouteFallback />}>
+                    <BoardPage />
+                  </Suspense>
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="projects"
+              element={
+                <ErrorBoundary>
+                  <Suspense fallback={<RouteFallback />}>
+                    <ProjectsPage />
+                  </Suspense>
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="activity"
+              element={
+                <ErrorBoundary>
+                  <Suspense fallback={<RouteFallback />}>
+                    <ActivityPage />
+                  </Suspense>
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="settings"
+              element={
+                <ErrorBoundary>
+                  <Suspense fallback={<RouteFallback />}>
+                    <SettingsPage />
+                  </Suspense>
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="expenses"
+              element={
+                <ErrorBoundary>
+                  <Suspense fallback={<RouteFallback />}>
+                    <ExpenseBoard />
+                  </Suspense>
+                </ErrorBoundary>
+              }
+            />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
+        </Routes>
+      </DataProvider>
+    </AuthGate>
+  );
+}
+
 export default function App() {
   return (
     <ThemeProvider>
-      <AuthGate>
-        <DataProvider>
-          <BrowserRouter>
-            <Routes>
-              <Route element={<Layout />}>
-                <Route
-                  index
-                  element={
-                    <ErrorBoundary>
-                      <Suspense fallback={<RouteFallback />}>
-                        <BoardPage />
-                      </Suspense>
-                    </ErrorBoundary>
-                  }
-                />
-                <Route
-                  path="p/:projectId"
-                  element={
-                    <ErrorBoundary>
-                      <Suspense fallback={<RouteFallback />}>
-                        <BoardPage />
-                      </Suspense>
-                    </ErrorBoundary>
-                  }
-                />
-                <Route
-                  path="projects"
-                  element={
-                    <ErrorBoundary>
-                      <Suspense fallback={<RouteFallback />}>
-                        <ProjectsPage />
-                      </Suspense>
-                    </ErrorBoundary>
-                  }
-                />
-                <Route
-                  path="activity"
-                  element={
-                    <ErrorBoundary>
-                      <Suspense fallback={<RouteFallback />}>
-                        <ActivityPage />
-                      </Suspense>
-                    </ErrorBoundary>
-                  }
-                />
-                <Route
-                  path="settings"
-                  element={
-                    <ErrorBoundary>
-                      <Suspense fallback={<RouteFallback />}>
-                        <SettingsPage />
-                      </Suspense>
-                    </ErrorBoundary>
-                  }
-                />
-                <Route
-                  path="expenses"
-                  element={
-                    <ErrorBoundary>
-                      <Suspense fallback={<RouteFallback />}>
-                        <ExpenseBoard />
-                      </Suspense>
-                    </ErrorBoundary>
-                  }
-                />
-                <Route path="*" element={<Navigate to="/" replace />} />
-              </Route>
-            </Routes>
-          </BrowserRouter>
-        </DataProvider>
-      </AuthGate>
+      <BrowserRouter>
+        <Routes>
+          <Route
+            path="invite/:token"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <InvitePage />
+              </Suspense>
+            }
+          />
+          <Route path="*" element={<ProtectedRoutes />} />
+        </Routes>
+      </BrowserRouter>
     </ThemeProvider>
   );
 }
