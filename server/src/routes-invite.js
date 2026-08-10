@@ -67,7 +67,7 @@ export function registerInviteRoutes(app, { prod }) {
     if (!invite) httpError(404, ERROR_CODES.EXPENSE_NOT_FOUND);
 
     const expense = prod.prepare(
-      'SELECT id, title, amount_cents, payment_method, step, created_by_username, payer_id, notes FROM expenses WHERE id = ? AND deleted_at IS NULL'
+      'SELECT e.id, e.title, e.amount_cents, e.payment_method, e.step, e.payer_id, e.notes, u.username AS created_by_username FROM expenses e JOIN users u ON u.id = e.created_by WHERE e.id = ? AND e.deleted_at IS NULL'
     ).get(invite.expense_id);
     if (!expense) httpError(404, ERROR_CODES.EXPENSE_NOT_FOUND);
 
