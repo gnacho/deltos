@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { X, Info, Paperclip, MessageCircle, Clock, Trash2, Link } from 'lucide-react';
 import type { FormEvent } from 'react';
 import { useData } from '@/data/data-context';
-import { getCsrfToken } from '@/data/api-client';
+import { getCsrfToken, apiPost } from '@/data/api-client';
 import { useSession } from '@/auth/session-context';
 import type { Expense, ExpenseStep } from '@/data/types';
 import type { Attachment, ActivityEvent, Comment } from '@/data/types';
@@ -270,18 +270,12 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
     setInviteSending(true);
     setInviteError(null);
     try {
-      const csrf = getCsrfToken();
-      const res = await fetch('/api/invite/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrf ?? '' },
-        body: JSON.stringify({ invite_name: inviteName.trim(), share_cents: inviteCents, expense_id: expense.id, notes: inviteNotes.trim() }),
-        credentials: 'same-origin',
+      const respData = await apiPost<{ invite: { token: string } }>('/api/invite/create', {
+        invite_name: inviteName.trim(),
+        share_cents: inviteCents,
+        expense_id: expense.id,
+        notes: inviteNotes.trim(),
       });
-      if (!res.ok) {
-        const info = await res.json().catch(() => ({}));
-        throw new Error((info as any)?.error?.message || `HTTP ${res.status}`);
-      }
-      const respData = await res.json();
       await navigator.clipboard.writeText(`${window.location.origin}/invite/${respData.invite.token}`);
       setInviteDone(true);
       announce(t('invite.linkCopied'));
