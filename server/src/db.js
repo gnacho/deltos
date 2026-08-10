@@ -275,6 +275,22 @@ export function openDb(file) {
   db.pragma('journal_mode = WAL')
   db.pragma('synchronous = NORMAL') // no FULL: mejor rendimiento, suficiente con WAL
   db.pragma('foreign_keys = ON')
+
+  const expensesExists = db.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='expenses'"
+  ).get()
+  if (expensesExists) {
+    const expenseCols = db.prepare('PRAGMA table_info(expenses)').all().map((c) => c.name)
+    if (expenseCols.includes('requested_user_id')) {
+      db.exec('DROP TABLE IF EXISTS expense_shares')
+      db.exec('DROP TABLE IF EXISTS expense_activity_events')
+      db.exec('DROP TABLE IF EXISTS expense_comments')
+      db.exec('DROP TABLE IF EXISTS expense_attachments')
+      db.exec('DROP TABLE IF EXISTS expenses')
+      log.warn('schema_migrated', { table: 'expenses', action: 'recreated_v2_shares_pre' })
+    }
+  }
+
   db.exec(SCHEMA)
   migrateSchema(db)
   return db
@@ -348,18 +364,6 @@ export function migrateSchema(db) {
     log.info('schema_migrated', { table: 'activity_events', change: 'type CHECK + project' })
   }
   let expenseCols = db.prepare('PRAGMA table_info(expenses)').all().map((c) => c.name)
-  if (expenseCols.includes('requested_user_id')) {
-    // Esquema v1 (split de pareja). Recreación limpia al modelo de shares:
-    // decidido antes de tener datos reales; los de prueba se descartan.
-    db.exec('DROP TABLE IF EXISTS expense_shares')
-    db.exec('DROP TABLE IF EXISTS expense_activity_events')
-    db.exec('DROP TABLE IF EXISTS expense_comments')
-    db.exec('DROP TABLE IF EXISTS expense_attachments')
-    db.exec('DROP TABLE IF EXISTS expenses')
-    db.exec(SCHEMA)
-    expenseCols = db.prepare('PRAGMA table_info(expenses)').all().map((c) => c.name)
-    log.warn('schema_migrated', { table: 'expenses', action: 'recreated_v2_shares' })
-  }
   if (!expenseCols.includes('deleted_at')) {
     db.exec('ALTER TABLE expenses ADD COLUMN deleted_at INTEGER')
     log.info('schema_migrated', { table: 'expenses', column: 'deleted_at' })
