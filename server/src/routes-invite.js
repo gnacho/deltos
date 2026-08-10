@@ -52,7 +52,7 @@ export function registerInviteRoutes(app, { prod }) {
 
     prod.prepare(
       'INSERT INTO expense_invites (id, expense_id, token_hash, token, invite_name, share_cents, paid, notes, created_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)'
-    ).run(id, expenseId, tokenHash, token, inviteName, share_cents, notes, now);
+    ).run(id, expenseId, tokenHash, token, invite_name, share_cents, notes, now);
 
     log.info('invite_created', { expense_id: expenseId, invite_id: id, actor: user.id });
 

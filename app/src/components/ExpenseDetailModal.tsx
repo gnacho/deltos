@@ -178,9 +178,10 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteName, setInviteName] = useState('');
-  const [inviteCents, setInviteCents] = useState(Math.round(expense.amount_cents / 2));
+  const [inviteCents, setInviteCents] = useState(Math.max(Math.round(expense.amount_cents / 2), 1));
   const [inviteNotes, setInviteNotes] = useState('');
   const [inviteSending, setInviteSending] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteDone, setInviteDone] = useState(false);
   const [invites, setInvites] = useState<Array<{ id: string; invite_name: string; share_cents: number; paid: boolean; notes?: string }>>([]);
 
@@ -264,8 +265,10 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
     void data.setMyShare(expense.id, true).catch(() => announce(t('common.error')));
   };
   const handleInvite = async () => {
-    if (!inviteName.trim() || inviteCents <= 0) return;
+    if (!inviteName.trim()) { setInviteError(t('invite.nameRequired')); return; }
+    if (inviteCents < 0) { setInviteError(t('expenses.form.amountRequired')); return; }
     setInviteSending(true);
+    setInviteError(null);
     try {
       const csrf = getCsrfToken();
       const res = await fetch('/api/invite/create', {
@@ -274,17 +277,20 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
         body: JSON.stringify({ invite_name: inviteName.trim(), share_cents: inviteCents, expense_id: expense.id, notes: inviteNotes.trim() }),
         credentials: 'same-origin',
       });
-      if (!res.ok) throw res;
-      const data = await res.json();
-      await navigator.clipboard.writeText(`${window.location.origin}/invite/${data.invite.token}`);
+      if (!res.ok) {
+        const info = await res.json().catch(() => ({}));
+        throw new Error((info as any)?.error?.message || `HTTP ${res.status}`);
+      }
+      const respData = await res.json();
+      await navigator.clipboard.writeText(`${window.location.origin}/invite/${respData.invite.token}`);
       setInviteDone(true);
       announce(t('invite.linkCopied'));
       fetch(`/api/expenses/${expense.id}/invites`, { credentials: 'same-origin' })
         .then((r) => r.json())
         .then((d) => setInvites(d.invites ?? []))
         .catch(() => {});
-    } catch {
-      announce(t('common.error'));
+    } catch (e) {
+      setInviteError(e instanceof Error ? e.message : t('common.error'));
     } finally {
       setInviteSending(false);
     }
@@ -370,8 +376,11 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
               aria-label={t('task.closeDetail')}
             >
               <X className="w-5 h-5" aria-hidden="true" />
-            </button>
-          </div>
+                    </button>
+                    {inviteError && (
+                      <p role="alert" className="text-[12px] font-medium text-rose-600 dark:text-rose-400">{inviteError}</p>
+                    )}
+                  </div>
           <div
             role="tablist"
             aria-label={t('task.tabs.label')}
@@ -760,7 +769,7 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
                     <button
                       type="button"
                       onClick={handleInvite}
-                      disabled={inviteSending || !inviteName.trim() || inviteCents <= 0}
+                      disabled={inviteSending || !inviteName.trim() || inviteCents < 0}
                       className="w-full h-9 rounded-lg bg-brand text-brandfg text-[13px] font-semibold hover:brightness-110 disabled:opacity-60"
                     >
                       {inviteSending ? '...' : t('invite.copyLink')}
