@@ -27,6 +27,7 @@ export function inviteRoutes(db, demo) {
 
   // POST /api/expenses/:id/invite — generar link de invitación (autenticado)
   router.post('/api/expenses/:id/invite', requireAuth, zValidator('json', createSchema), (c) => {
+    try {
     const expenseId = c.req.param('id');
     const user = c.get('user');
     const { invite_name, share_cents } = c.req.valid('json');
@@ -45,7 +46,6 @@ export function inviteRoutes(db, demo) {
 
     log.info('invite_created', { expense_id: expenseId, invite_id: id, actor: user.id });
 
-    // No devolvemos el token en claro en logs — se devuelve solo al crear
     return c.json({
       invite: {
         id,
@@ -53,10 +53,14 @@ export function inviteRoutes(db, demo) {
         invite_name,
         share_cents,
         paid: false,
-        token,  // solo aquí se ve el token en claro
+        token,
         url: `${c.req.header('origin') || ''}/invite/${token}`,
       },
     }, 201);
+    } catch (e) {
+      log.error('invite_create_error', { error: String(e), stack: e.stack });
+      throw e;
+    }
   });
 
   // DELETE /api/expenses/:id/invite — revocar invitación (autenticado)
