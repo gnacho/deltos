@@ -8,6 +8,7 @@ import { colorOf } from '@/lib/colors'
 
 interface CreateProps {
   mode: 'create'
+  defaultStep?: ExpenseStep
   onClose: () => void
   onCreated: (expense: Expense) => void
 }
@@ -44,7 +45,9 @@ export function ExpenseModal(props: Props) {
   const [splitAmountText, setSplitAmountText] = useState(
     expense?.split_amount_cents ? (expense.split_amount_cents / 100).toFixed(2).replace('.', ',') : ''
   )
-  const [step, setStep] = useState<ExpenseStep>(expense?.step ?? 'nuevo')
+  const [step, setStep] = useState<ExpenseStep>(
+    expense?.step ?? (props.mode === 'create' ? (props.defaultStep ?? 'nuevo') : 'nuevo')
+  )
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(expense?.payment_method ?? null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)

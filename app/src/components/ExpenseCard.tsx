@@ -1,6 +1,6 @@
 import { MessageCircle, Paperclip } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import type { Expense, ExpenseStep } from '@/data/types'
+import type { Expense } from '@/data/types'
 import { Avatar } from '@/components/Avatar'
 import { TagChip } from '@/components/badges'
 import { useData } from '@/data/data-context'
@@ -9,21 +9,22 @@ interface Props {
   expense: Expense
   index: number
   onOpen: (id: string) => void
-  onMove: (id: string, step: ExpenseStep) => void
 }
 
 function fmtEur(cents: number): string {
   return (cents / 100).toFixed(2).replace('.', ',') + ' \u20AC'
 }
 
-export function ExpenseCard({ expense, index, onOpen, onMove }: Props) {
+export function ExpenseCard({ expense, index, onOpen }: Props) {
   const { t } = useTranslation()
   const data = useData()
   const done = expense.step === 'hecho'
   const delay = Math.min(index, 10) * 40
 
   const creator = data.getUsers().find((u) => u.id === expense.created_by)
-  const label = expense.label_id ? { id: expense.label_id, name: expense.label_name ?? '', color: expense.label_color ?? 'slate' } : null
+  const label = expense.label_id
+    ? { id: expense.label_id, name: expense.label_name ?? '', color: expense.label_color ?? 'slate' }
+    : null
 
   const detail = data.getExpenseDetail(expense.id)
   const commentCount = detail?.comments?.length ?? 0
@@ -53,28 +54,30 @@ export function ExpenseCard({ expense, index, onOpen, onMove }: Props) {
         {expense.title}
       </h3>
 
-      <p className="text-[15px] font-semibold text-text-primary mt-0.5">
+      <p className="text-[17px] font-semibold text-text-primary mt-0.5 tabular-nums">
         {fmtEur(expense.amount_cents)}
       </p>
 
-      <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
-        {expense.paid_by_creator && (
-          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
-            {t('expenses.paid')}
-          </span>
-        )}
-        {expense.requested_user_id && (
-          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${expense.paid_by_requested ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'}`}>
-            {getSplitLabel()} &rarr; {expense.requested_username}
-            {expense.paid_by_requested && ' \u2713'}
-          </span>
-        )}
-        {expense.payment_method && (
-          <span className="text-[10px] text-text-muted">
-            {t(`expenses.${expense.payment_method}`)}
-          </span>
-        )}
-      </div>
+      {(expense.paid_by_creator || expense.requested_user_id || expense.payment_method) && (
+        <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
+          {expense.paid_by_creator && (
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+              {t('expenses.paid')}
+            </span>
+          )}
+          {expense.requested_user_id && (
+            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${expense.paid_by_requested ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'}`}>
+              {getSplitLabel()} &rarr; {expense.requested_username}
+              {expense.paid_by_requested && ' \u2713'}
+            </span>
+          )}
+          {expense.payment_method && (
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-surface2 text-text-muted">
+              {t(`expenses.${expense.payment_method}`)}
+            </span>
+          )}
+        </div>
+      )}
 
       <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-app">
         <span className="tnum flex items-center gap-3 text-xs text-faint">
@@ -96,27 +99,6 @@ export function ExpenseCard({ expense, index, onOpen, onMove }: Props) {
         ) : (
           <div className="w-6 h-6 rounded-full bg-surface2" />
         )}
-      </div>
-
-      {/* Step controls */}
-      <div className="flex gap-1 mt-2 pt-2 border-t border-app">
-        {(['nuevo', 'en-curso', 'hecho'] as const).map((s) => (
-          <button
-            key={s}
-            onClick={(e) => {
-              e.stopPropagation()
-              if (s !== expense.step) onMove(expense.id, s)
-            }}
-            className={`flex-1 py-0.5 rounded text-[10px] font-medium transition-colors ${
-              expense.step === s
-                ? 'bg-brand/15 text-brand cursor-default'
-                : 'text-text-muted hover:bg-surface2 hover:text-text-secondary'
-            }`}
-            aria-label={t(`expenseSteps.${s}`)}
-          >
-            {t(`expenseSteps.${s}`)}
-          </button>
-        ))}
       </div>
     </button>
   )
