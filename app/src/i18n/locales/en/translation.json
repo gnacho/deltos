@@ -301,7 +301,8 @@
     "linkCopied": "Link copied!",
     "copyLink": "Copy link",
     "revoke": "Revoke",
-    "namePlaceholder": "Person's name"
+    "namePlaceholder": "Person's name",
+    "notesPlaceholder": "Note for the invited person"
   },
   "newTask": {
     "title": "New task",
