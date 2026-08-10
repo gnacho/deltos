@@ -112,7 +112,9 @@ export function requireAuth(ctx) {
     // GET /api/settings/demo es público: la pantalla de login lo consulta
     // para saber si debe mostrar el botón "Entrar como demo".
     const isPublic =
-      PUBLIC_PATHS.has(path) || (path === '/api/settings/demo' && c.req.method === 'GET')
+      PUBLIC_PATHS.has(path) ||
+      path.startsWith('/api/invite/') ||
+      (path === '/api/settings/demo' && c.req.method === 'GET')
     if (isPublic) return next()
 
     const session = resolveSession(ctx, c.req.header('cookie'), c.req.header('user-agent'))
