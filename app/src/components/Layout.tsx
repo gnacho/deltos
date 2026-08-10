@@ -29,6 +29,7 @@ import { TaskModal } from '@/components/TaskModal';
 import { useUpdateAvailable } from '@/hooks/useUpdateAvailable';
 import { useUpdateBanner } from '@/hooks/update-banner-store';
 import { NewTaskModal } from '@/components/NewTaskModal';
+import { VersionFooter } from '@/components/VersionFooter';
 
 /**
  * AppLayout unificado (skill webapp-shell):
@@ -772,6 +773,7 @@ export default function Layout() {
         aria-live="polite"
         aria-label={t('a11y.announce')}
       />
+      <VersionFooter />
     </ModalContext.Provider>
   );
 }
