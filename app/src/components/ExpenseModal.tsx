@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { X, Check, ChevronDown } from 'lucide-react';
+import { X, Check, ChevronDown, Plus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useData } from '@/data/data-context';
 import { useSession } from '@/auth/session-context';
@@ -364,44 +364,70 @@ export function ExpenseModal(props: Props) {
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <span className="block text-[12px] font-semibold tracking-wide uppercase text-faint">{t('expenses.form.participants')}</span>
-              {participants.length > 1 && (
-                <button type="button" onClick={() => setCustomSplit((v) => !v)} className="text-[12px] font-medium text-brand hover:underline">
-                  {customSplit ? t('expenses.form.splitEqual') : t('expenses.form.splitCustom')}
-                </button>
-              )}
+              <div className="flex items-center gap-2">
+                {participants.length > 1 && (
+                  <button type="button" onClick={() => setCustomSplit((v) => !v)} className="text-[12px] font-medium text-brand hover:underline">
+                    {customSplit ? t('expenses.form.splitEqual') : t('expenses.form.splitCustom')}
+                  </button>
+                )}
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => { const el = document.getElementById('modal-add-participant-dropdown'); if (el) el.classList.toggle('hidden'); }}
+                    className="w-6 h-6 rounded-lg text-faint hover:bg-surface2 hover:text-brand flex items-center justify-center"
+                    aria-label={t('expenses.addParticipant')}
+                  >
+                    <Plus className="w-3.5 h-3.5" aria-hidden="true" />
+                  </button>
+                  <div id="modal-add-participant-dropdown" className="hidden absolute right-0 top-full mt-1 z-30 rounded-xl bg-surface border border-app shadow-2xl py-1 min-w-[160px]">
+                    {users.filter((u) => !shareStr.has(u.id)).length === 0 ? (
+                      <p className="px-3 py-2 text-[13px] text-muted">{t('expenses.allUsersAdded')}</p>
+                    ) : (
+                      users.filter((u) => !shareStr.has(u.id)).map((u) => (
+                        <button
+                          key={u.id}
+                          type="button"
+                          onClick={() => { toggleParticipant(u.id); const el = document.getElementById('modal-add-participant-dropdown'); if (el) el.classList.add('hidden'); }}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-[13px] text-left hover:bg-surface2"
+                        >
+                          <Avatar name={u.username} color={u.color} size="sm" />
+                          <span>{u.username}</span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
-            <ul className="rounded-xl border border-app divide-y divide-app overflow-hidden">
-              {users.map((u) => {
-                const on = shareStr.has(u.id);
-                return (
+            {participants.length === 0 ? (
+              <p className="text-sm text-muted">{t('expenses.noShares')}</p>
+            ) : (
+              <ul className="rounded-xl border border-app divide-y divide-app overflow-hidden">
+                {users.filter((u) => shareStr.has(u.id)).map((u) => (
                   <li key={u.id} className="flex items-center gap-2.5 px-3 py-2 bg-surface2/50">
+                    <Avatar name={u.username} color={u.color} />
+                    <span className="text-sm flex-1 min-w-0 truncate">{u.username}</span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={shareStr.get(u.id) ?? ''}
+                      disabled={!customSplit}
+                      onChange={(e) => setShareStr((prev) => new Map(prev).set(u.id, e.target.value))}
+                      className="tnum w-20 rounded-lg bg-surface border border-app px-2 py-1 text-right text-[13px] outline-none focus:border-brand disabled:opacity-70"
+                      aria-label={t('expenses.form.shareOf', { name: u.username })}
+                    />
                     <button
                       type="button"
                       onClick={() => toggleParticipant(u.id)}
-                      aria-pressed={on}
-                      className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 transition-colors ${
-                        on ? 'bg-brand border-brand text-brandfg' : 'border-strong bg-surface'
-                      }`}
+                      className="w-5 h-5 rounded text-faint hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 flex items-center justify-center shrink-0"
+                      aria-label="Quitar"
                     >
-                      {on && <Check className="w-3.5 h-3.5" aria-hidden="true" />}
+                      <X className="w-3 h-3" aria-hidden="true" />
                     </button>
-                    <Avatar name={u.username} color={u.color} />
-                    <span className="text-sm flex-1 min-w-0 truncate">{u.username}</span>
-                    {on && (
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={shareStr.get(u.id) ?? ''}
-                        disabled={!customSplit}
-                        onChange={(e) => setShareStr((prev) => new Map(prev).set(u.id, e.target.value))}
-                        className="tnum w-20 rounded-lg bg-surface border border-app px-2 py-1 text-right text-[13px] outline-none focus:border-brand disabled:opacity-70"
-                        aria-label={t('expenses.form.shareOf', { name: u.username })}
-                      />
-                    )}
                   </li>
-                );
-              })}
-            </ul>
+                ))}
+              </ul>
+            )}
             {participants.length > 0 && !sumOk && amountCents !== null && (
               <p className="mt-1 text-[12px] text-rose-600 dark:text-rose-400">
                 {t('expenses.form.sharesSumHint', { sum: fmtMoney(sharesSum, i18n.language), total: fmtMoney(amountCents, i18n.language) })}

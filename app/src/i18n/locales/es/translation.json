@@ -291,7 +291,8 @@
     "paidBy": "Pagó {{name}}",
     "minTransfers": "Liquidación con transferencias mínimas",
     "splitEqually": "Reparto equitativo",
-    "addParticipant": "Añadir persona"
+    "addParticipant": "Añadir persona",
+    "allUsersAdded": "Todas las personas añadidas"
   },
   "expenseEvents": {
     "created": "creó el gasto",
