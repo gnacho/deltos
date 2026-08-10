@@ -722,7 +722,7 @@ function ColorSwatches({
   ariaLabel: string;
 }) {
   return (
-    <div className="flex flex-wrap gap-2" role="group" aria-label={ariaLabel}>
+    <div className="flex flex-wrap gap-1.5" role="group" aria-label={ariaLabel}>
       {PROJECT_COLORS.map((c) => {
         const active = value === c;
         return (
@@ -823,20 +823,19 @@ function LabelsCard() {
   };
 
   return (
-    <Card className="h-full">
+    <Card>
       <Heading icon={Tag}>{t('settings.labels.title')}</Heading>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        {/* Izquierda: descripción + lista de etiquetas */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <p className="text-[13px] text-faint mb-4">{t('settings.labels.subtitle')}</p>
+          <p className="text-[13px] text-faint mb-3">{t('settings.labels.subtitle')}</p>
           {labels.length === 0 ? (
-            <p className="rounded-xl border border-dashed border-app px-4 py-6 text-center text-[13px] text-muted">
+            <p className="rounded-xl border border-dashed border-app px-4 py-5 text-center text-[13px] text-muted">
               {t('settings.labels.empty')}
             </p>
           ) : (
-            <ul className="space-y-2">
+            <ul className="space-y-1.5">
               {labels.map((l) => (
-                <li key={l.id} className="rounded-xl border border-app bg-surface2 px-3.5 py-2.5">
+                <li key={l.id} className="rounded-lg border border-app bg-surface2 px-3 py-2">
                   {editing === l.id ? (
                     <form
                       className="flex flex-wrap items-center gap-2"
@@ -870,8 +869,8 @@ function LabelsCard() {
                     </form>
                   ) : (
                     <>
-                      <div className="flex flex-wrap items-center gap-2.5">
-                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[13px] font-medium ${colorOf(l.color).chip}`}>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[12px] font-medium ${colorOf(l.color).chip}`}>
                           <span className={`w-1.5 h-1.5 rounded-full ${colorOf(l.color).dot}`} aria-hidden="true" />
                           {l.name}
                         </span>
@@ -881,7 +880,7 @@ function LabelsCard() {
                           aria-label={t('settings.labels.rename')}
                           title={t('settings.labels.rename')}
                           onClick={() => startEdit(l)}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-app bg-surface text-muted hover:text-text"
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-app bg-surface text-muted hover:text-text"
                         >
                           <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
                         </button>
@@ -911,13 +910,13 @@ function LabelsCard() {
                               setConfirmDelete(l.id);
                               setEditing(null);
                             }}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-app bg-surface text-muted hover:text-rose-600 dark:hover:text-rose-400"
+                             className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-app bg-surface text-muted hover:text-rose-600 dark:hover:text-rose-400"
                           >
                             <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
                           </button>
                         )}
                       </div>
-                      <div className="mt-2.5">
+                      <div className="mt-2">
                         <ColorSwatches
                           value={l.color}
                           onChange={(c) => void recolor(l.id, c)}
@@ -932,10 +931,9 @@ function LabelsCard() {
           )}
         </div>
 
-        {/* Derecha: crear etiqueta */}
         <div>
-          <p className="text-[13px] font-medium mb-3">{t('settings.labels.name')}</p>
-          <form onSubmit={create} className="space-y-3">
+          <p className="text-[13px] font-medium mb-2">{t('settings.labels.name')}</p>
+          <form onSubmit={create} className="space-y-2.5">
             <input
               id="nl-name"
               value={name}
