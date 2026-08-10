@@ -345,6 +345,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [bump],
   );
 
+  const setMyShare = useCallback(
+    async (id: string, paid: boolean): Promise<void> => {
+      await apiPut(`/api/expenses/${id}/my-share`, { paid });
+      await fetchExpenses();
+    },
+    [fetchExpenses],
+  );
+
   const settleExpenses = useCallback(
     async (otherUserId: string): Promise<number> => {
       const res = await apiPost<{ settled: number }>('/api/expenses/settle', {
@@ -453,6 +461,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       releaseExpenseDetail,
       addExpenseComment,
       settleExpenses,
+      setMyShare,
       uploadExpenseAttachment,
       deleteExpenseAttachment,
     };

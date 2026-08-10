@@ -869,7 +869,7 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
          ORDER BY e.deleted_at DESC`
       )
       .all()
-      .map((e) => ({ ...e, paid_by_creator: !!e.paid_by_creator, paid_by_requested: !!e.paid_by_requested }))
+      .map((e) => ({ ...e }))
     return c.json({ tasks, expenses })
   })
 

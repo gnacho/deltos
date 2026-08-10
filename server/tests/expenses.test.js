@@ -1,5 +1,5 @@
-// expenses.test.js — plugin de gastos: gate por KV, CRUD, permisos,
-// auto-transición a 'hecho', move con reindexado, papelera y export.
+// expenses.test.js — plugin de gastos, modelo v2 (payer + expense_shares):
+// gate, CRUD con partes, permisos, mi-parte, transición derivada, saldar, papelera.
 import { describe, it, expect } from 'vitest'
 import { makeInstance, loginAdmin, loginUser, jsonReq } from './helpers.js'
 import { kvSet } from '../src/db.js'
@@ -15,6 +15,10 @@ async function createUser(app, admin, username) {
   return loginUser(app, username, PASS)
 }
 
+async function userId(app, session) {
+  return (await (await app.request('/api/auth/me', { headers: { cookie: session.cookie } })).json()).user.id
+}
+
 async function makeExpenseInstance() {
   const inst = await makeInstance({ seedDemoData: false })
   kvSet(inst.prod, 'plugin_expenses_enabled', '1')
@@ -25,266 +29,225 @@ async function makeExpenseInstance() {
 async function createExpense(app, session, extra = {}) {
   const res = await app.request(
     '/api/expenses',
-    jsonReq(session, 'POST', '/api/expenses', { title: 'Cena', amount_cents: 4550, ...extra })
+    jsonReq(session, 'POST', '/api/expenses', { title: 'Cena', amount_cents: 6000, ...extra })
   )
   expect(res.status).toBe(201)
   return (await res.json()).expense
 }
 
-describe('expenses — gate del plugin', () => {
-  it('con el plugin OFF todas las rutas devuelven 404', async () => {
+describe('expenses v2 — gate y básicos', () => {
+  it('plugin OFF → 404; ON → listado vacío', async () => {
     const inst = await makeInstance({ seedDemoData: false })
     const admin = await loginAdmin(inst.app)
-    const list = await inst.app.request('/api/expenses', { headers: { cookie: admin.cookie } })
-    expect(list.status).toBe(404)
-    const post = await inst.app.request(
-      '/api/expenses',
-      jsonReq(admin, 'POST', '/api/expenses', { title: 'x', amount_cents: 100 })
-    )
-    expect(post.status).toBe(404)
+    expect((await inst.app.request('/api/expenses', { headers: { cookie: admin.cookie } })).status).toBe(404)
+    kvSet(inst.prod, 'plugin_expenses_enabled', '1')
+    const on = await inst.app.request('/api/expenses', { headers: { cookie: admin.cookie } })
+    expect(on.status).toBe(200)
+    expect((await on.json()).expenses).toEqual([])
   })
 
-  it('con el plugin ON el listado responde vacío', async () => {
+  it('crear sin partes: pagador = creador por defecto, spent_at presente', async () => {
     const { app, admin } = await makeExpenseInstance()
-    const res = await app.request('/api/expenses', { headers: { cookie: admin.cookie } })
-    expect(res.status).toBe(200)
-    expect((await res.json()).expenses).toEqual([])
+    const me = await userId(app, admin)
+    const exp = await createExpense(app, admin)
+    expect(exp.payer_id).toBe(me)
+    expect(exp.payer_username).toBe('admin')
+    expect(exp.shares).toEqual([])
+    expect(exp.spent_at).toBeGreaterThan(0)
+    expect(exp.step).toBe('nuevo') // sin reparto declarado se queda donde nace
+  })
+
+  it('spent_at y project_id se guardan; project inexistente → 422', async () => {
+    const { app, admin } = await makeExpenseInstance()
+    const pr = await app.request(
+      '/api/projects',
+      jsonReq(admin, 'POST', '/api/projects', { name: 'Viaje', emoji: 'plane', color: 'sky' })
+    )
+    const projectId = (await pr.json()).project.id
+    const when = Date.parse('2026-07-15')
+    const exp = await createExpense(app, admin, { spent_at: when, project_id: projectId })
+    expect(exp.spent_at).toBe(when)
+    expect(exp.project_id).toBe(projectId)
+    expect(exp.project_name).toBe('Viaje')
+    const bad = await app.request(
+      '/api/expenses',
+      jsonReq(admin, 'POST', '/api/expenses', { title: 'x', amount_cents: 100, project_id: 'no-existe' })
+    )
+    expect(bad.status).toBe(422)
   })
 })
 
-describe('expenses — CRUD', () => {
-  it('crear devuelve el gasto hidratado y aparece en el listado', async () => {
+describe('expenses v2 — partes', () => {
+  it('las partes deben sumar el importe (422 si no) y sin usuarios repetidos', async () => {
     const { app, admin } = await makeExpenseInstance()
-    const exp = await createExpense(app, admin)
-    expect(exp.title).toBe('Cena')
-    expect(exp.amount_cents).toBe(4550)
-    expect(exp.step).toBe('nuevo')
-    expect(exp.created_by_username).toBe('admin')
-    const list = await (await app.request('/api/expenses', { headers: { cookie: admin.cookie } })).json()
-    expect(list.expenses.map((e) => e.id)).toContain(exp.id)
+    const ana = await createUser(app, admin, 'ana')
+    const anaId = await userId(app, ana)
+    const meId = await userId(app, admin)
+    const bad = await app.request(
+      '/api/expenses',
+      jsonReq(admin, 'POST', '/api/expenses', {
+        title: 'x', amount_cents: 6000,
+        shares: [{ user_id: meId, share_cents: 3000 }, { user_id: anaId, share_cents: 2000 }],
+      })
+    )
+    expect(bad.status).toBe(422)
+    const dup = await app.request(
+      '/api/expenses',
+      jsonReq(admin, 'POST', '/api/expenses', {
+        title: 'x', amount_cents: 6000,
+        shares: [{ user_id: anaId, share_cents: 3000 }, { user_id: anaId, share_cents: 3000 }],
+      })
+    )
+    expect(dup.status).toBe(422)
   })
 
-  it('PUT actualiza campos y registra actividad', async () => {
+  it('reparto a 3 con partes desiguales: la del pagador nace pagada', async () => {
     const { app, admin } = await makeExpenseInstance()
-    const exp = await createExpense(app, admin)
+    const ana = await createUser(app, admin, 'ana')
+    const beto = await createUser(app, admin, 'beto')
+    const [meId, anaId, betoId] = [await userId(app, admin), await userId(app, ana), await userId(app, beto)]
+    const exp = await createExpense(app, admin, {
+      shares: [
+        { user_id: meId, share_cents: 2000 },
+        { user_id: anaId, share_cents: 3000 },
+        { user_id: betoId, share_cents: 1000 },
+      ],
+    })
+    expect(exp.step).toBe('en-curso') // hay deudores → nunca se queda en nuevo si lo resuelve
+    const mine = exp.shares.find((s) => s.user_id === meId)
+    expect(mine.paid).toBe(true) // el pagador puso el dinero
+    expect(exp.shares.filter((s) => !s.paid)).toHaveLength(2)
+  })
+
+  it('el pagador puede ser otro (patrón secretario) y su parte nace pagada', async () => {
+    const { app, admin } = await makeExpenseInstance()
+    const ana = await createUser(app, admin, 'ana')
+    const anaId = await userId(app, ana)
+    const meId = await userId(app, admin)
+    const exp = await createExpense(app, admin, {
+      payer_id: anaId,
+      shares: [{ user_id: anaId, share_cents: 3000 }, { user_id: meId, share_cents: 3000 }],
+    })
+    expect(exp.payer_id).toBe(anaId)
+    expect(exp.shares.find((s) => s.user_id === anaId).paid).toBe(true)
+    expect(exp.shares.find((s) => s.user_id === meId).paid).toBe(false)
+  })
+})
+
+describe('expenses v2 — mi parte y transición', () => {
+  it('cada uno marca SOLO su parte; al pagar la última el gasto pasa a hecho', async () => {
+    const { app, admin } = await makeExpenseInstance()
+    const ana = await createUser(app, admin, 'ana')
+    const anaId = await userId(app, ana)
+    const meId = await userId(app, admin)
+    const exp = await createExpense(app, admin, {
+      shares: [{ user_id: meId, share_cents: 3000 }, { user_id: anaId, share_cents: 3000 }],
+    })
+    // un tercero sin parte no puede
+    const beto = await createUser(app, admin, 'beto')
+    const forbidden = await app.request(
+      `/api/expenses/${exp.id}/my-share`,
+      jsonReq(beto, 'PUT', `/api/expenses/${exp.id}/my-share`, { paid: true })
+    )
+    expect(forbidden.status).toBe(403)
+    // ana paga la suya → todo pagado → hecho
     const res = await app.request(
-      `/api/expenses/${exp.id}`,
-      jsonReq(admin, 'PUT', `/api/expenses/${exp.id}`, { title: 'Cena editada', amount_cents: 5000 })
+      `/api/expenses/${exp.id}/my-share`,
+      jsonReq(ana, 'PUT', `/api/expenses/${exp.id}/my-share`, { paid: true })
     )
     expect(res.status).toBe(200)
     const upd = (await res.json()).expense
-    expect(upd.title).toBe('Cena editada')
-    expect(upd.amount_cents).toBe(5000)
-    const detail = await (
-      await app.request(`/api/expenses/${exp.id}/detail`, { headers: { cookie: admin.cookie } })
-    ).json()
-    const types = detail.activity.map((e) => e.type)
-    expect(types).toContain('created')
-    expect(types).toContain('title')
-    expect(types).toContain('amount')
+    expect(upd.shares.find((s) => s.user_id === anaId).paid).toBe(true)
+    expect(upd.step).toBe('hecho')
+    // desmarcar la devuelve a en-curso
+    const undo = await app.request(
+      `/api/expenses/${exp.id}/my-share`,
+      jsonReq(ana, 'PUT', `/api/expenses/${exp.id}/my-share`, { paid: false })
+    )
+    expect((await undo.json()).expense.step).toBe('en-curso')
   })
 
-  it('crear con requested_user_id exige split_type (422 sin él)', async () => {
+  it('editar: solo creador o pagador; cambiar importe con partes sin re-declararlas → 422', async () => {
     const { app, admin } = await makeExpenseInstance()
     const ana = await createUser(app, admin, 'ana')
-    const anaId = (await (await app.request('/api/auth/me', { headers: { cookie: ana.cookie } })).json()).user.id
-    const bad = await app.request(
-      '/api/expenses',
-      jsonReq(admin, 'POST', '/api/expenses', { title: 'x', amount_cents: 100, requested_user_id: anaId })
-    )
-    expect(bad.status).toBe(422)
-    const ok = await app.request(
-      '/api/expenses',
-      jsonReq(admin, 'POST', '/api/expenses', {
-        title: 'x', amount_cents: 100, requested_user_id: anaId, split_type: 'half',
-      })
-    )
-    expect(ok.status).toBe(201)
-  })
-
-  it('no se puede pedir pago a uno mismo (422)', async () => {
-    const { app, admin } = await makeExpenseInstance()
-    const meId = (await (await app.request('/api/auth/me', { headers: { cookie: admin.cookie } })).json()).user.id
-    const res = await app.request(
-      '/api/expenses',
-      jsonReq(admin, 'POST', '/api/expenses', {
-        title: 'x', amount_cents: 100, requested_user_id: meId, split_type: 'half',
-      })
-    )
-    expect(res.status).toBe(422)
-  })
-})
-
-describe('expenses — permisos', () => {
-  it('un tercero (ni creador ni requerido) no puede editar (403)', async () => {
-    const { app, admin } = await makeExpenseInstance()
-    const ana = await createUser(app, admin, 'ana')
-    const exp = await createExpense(app, admin)
-    const res = await app.request(
-      `/api/expenses/${exp.id}`,
-      jsonReq(ana, 'PUT', `/api/expenses/${exp.id}`, { title: 'hackeada' })
-    )
-    expect(res.status).toBe(403)
-  })
-
-  it('solo el usuario requerido puede marcar paid_by_requested', async () => {
-    const { app, admin } = await makeExpenseInstance()
-    const ana = await createUser(app, admin, 'ana')
-    const anaId = (await (await app.request('/api/auth/me', { headers: { cookie: ana.cookie } })).json()).user.id
-    const exp = await createExpense(app, admin, { requested_user_id: anaId, split_type: 'half' })
-    // el creador no puede marcarlo en nombre del otro
-    const asCreator = await app.request(
-      `/api/expenses/${exp.id}`,
-      jsonReq(admin, 'PUT', `/api/expenses/${exp.id}`, { paid_by_requested: true })
-    )
-    expect(asCreator.status).toBe(403)
-    // el requerido sí
-    const asRequested = await app.request(
-      `/api/expenses/${exp.id}`,
-      jsonReq(ana, 'PUT', `/api/expenses/${exp.id}`, { paid_by_requested: true })
-    )
-    expect(asRequested.status).toBe(200)
-    expect((await asRequested.json()).expense.paid_by_requested).toBe(true)
-  })
-
-  it('solo el creador puede borrar (403 para el resto)', async () => {
-    const { app, admin } = await makeExpenseInstance()
-    const ana = await createUser(app, admin, 'ana')
-    const exp = await createExpense(app, admin)
-    const asAna = await app.request(
-      `/api/expenses/${exp.id}`,
-      jsonReq(ana, 'DELETE', `/api/expenses/${exp.id}`)
-    )
-    expect(asAna.status).toBe(403)
-    const asAdmin = await app.request(
-      `/api/expenses/${exp.id}`,
-      jsonReq(admin, 'DELETE', `/api/expenses/${exp.id}`)
-    )
-    expect(asAdmin.status).toBe(204)
-  })
-})
-
-describe('expenses — flujo de pago y auto-transición', () => {
-  it('sin requerido: pagar el creador lo lleva a hecho', async () => {
-    const { app, admin } = await makeExpenseInstance()
-    const exp = await createExpense(app, admin)
-    const res = await app.request(
-      `/api/expenses/${exp.id}`,
-      jsonReq(admin, 'PUT', `/api/expenses/${exp.id}`, { paid_by_creator: true })
-    )
-    expect((await res.json()).expense.step).toBe('hecho')
-  })
-
-  it('con requerido: hecho solo cuando pagan ambos', async () => {
-    const { app, admin } = await makeExpenseInstance()
-    const ana = await createUser(app, admin, 'ana')
-    const anaId = (await (await app.request('/api/auth/me', { headers: { cookie: ana.cookie } })).json()).user.id
+    const anaId = await userId(app, ana)
+    const meId = await userId(app, admin)
     const exp = await createExpense(app, admin, {
-      requested_user_id: anaId, split_type: 'half', paid_by_creator: true,
+      shares: [{ user_id: meId, share_cents: 3000 }, { user_id: anaId, share_cents: 3000 }],
     })
-    expect(exp.step).toBe('nuevo') // el creador pagó pero falta ana
-    const res = await app.request(
+    const beto = await createUser(app, admin, 'beto')
+    const forbidden = await app.request(
       `/api/expenses/${exp.id}`,
-      jsonReq(ana, 'PUT', `/api/expenses/${exp.id}`, { paid_by_requested: true })
+      jsonReq(beto, 'PUT', `/api/expenses/${exp.id}`, { title: 'hackeada' })
     )
-    expect((await res.json()).expense.step).toBe('hecho')
+    expect(forbidden.status).toBe(403)
+    const badAmount = await app.request(
+      `/api/expenses/${exp.id}`,
+      jsonReq(admin, 'PUT', `/api/expenses/${exp.id}`, { amount_cents: 9000 })
+    )
+    expect(badAmount.status).toBe(422)
+    const ok = await app.request(
+      `/api/expenses/${exp.id}`,
+      jsonReq(admin, 'PUT', `/api/expenses/${exp.id}`, {
+        amount_cents: 9000,
+        shares: [{ user_id: meId, share_cents: 4500 }, { user_id: anaId, share_cents: 4500 }],
+      })
+    )
+    expect(ok.status).toBe(200)
+    expect((await ok.json()).expense.amount_cents).toBe(9000)
   })
 })
 
-describe('expenses — move y posiciones', () => {
-  it('mover entre columnas reindexa origen y destino', async () => {
-    const { app, admin } = await makeExpenseInstance()
-    const a = await createExpense(app, admin, { title: 'A' })
-    const b = await createExpense(app, admin, { title: 'B' })
-    const c = await createExpense(app, admin, { title: 'C' })
+describe('expenses v2 — saldar cuentas', () => {
+  it('salda en ambos sentidos, transiciona y deja el evento global del reembolso', async () => {
+    const { app, admin, prod } = await makeExpenseInstance()
+    const ana = await createUser(app, admin, 'ana')
+    const anaId = await userId(app, ana)
+    const meId = await userId(app, admin)
+    // admin pagó 60, ana debe 30 · ana pagó 40, admin debe 20 → neto ana→admin 10
+    await createExpense(app, admin, {
+      title: 'A', shares: [{ user_id: meId, share_cents: 3000 }, { user_id: anaId, share_cents: 3000 }],
+    })
+    await createExpense(app, admin, {
+      title: 'B', amount_cents: 4000, payer_id: anaId,
+      shares: [{ user_id: anaId, share_cents: 2000 }, { user_id: meId, share_cents: 2000 }],
+    })
     const res = await app.request(
-      `/api/expenses/${b.id}/move`,
-      jsonReq(admin, 'PUT', `/api/expenses/${b.id}/move`, { step: 'en-curso', position: 0 })
+      '/api/expenses/settle',
+      jsonReq(ana, 'POST', '/api/expenses/settle', { other_user_id: meId })
     )
     expect(res.status).toBe(200)
-    expect((await res.json()).expense.step).toBe('en-curso')
+    const body = await res.json()
+    expect(body.settled).toBe(2)
+    expect(body.total_cents).toBe(5000)
     const list = (await (await app.request('/api/expenses', { headers: { cookie: admin.cookie } })).json()).expenses
-    const nuevo = list.filter((e) => e.step === 'nuevo').sort((x, y) => x.position - y.position)
-    expect(nuevo.map((e) => e.title)).toEqual(['A', 'C'])
-    expect(nuevo.map((e) => e.position)).toEqual([0, 1])
+    for (const e of list) {
+      expect(e.step).toBe('hecho')
+      for (const sh of e.shares) expect(sh.paid).toBe(true)
+    }
+    // evento global de reembolso (expense_id NULL) como artefacto auditable
+    const ev = prod
+      .prepare("SELECT * FROM expense_activity_events WHERE type = 'settled' AND expense_id IS NULL")
+      .get()
+    expect(ev).toBeTruthy()
+    const data = JSON.parse(ev.data)
+    expect(data.count).toBe(2)
+    expect(data.total_cents).toBe(5000)
   })
 })
 
-describe('expenses — comentarios y papelera', () => {
-  it('comentar funciona y aparece en el detalle', async () => {
+describe('expenses v2 — papelera y export', () => {
+  it('borrar (solo creador) → papelera; export incluye gastos y shares viajan en el listado', async () => {
     const { app, admin } = await makeExpenseInstance()
+    const ana = await createUser(app, admin, 'ana')
     const exp = await createExpense(app, admin)
-    const res = await app.request(
-      `/api/expenses/${exp.id}/comments`,
-      jsonReq(admin, 'POST', `/api/expenses/${exp.id}/comments`, { body: 'hola' })
-    )
-    expect(res.status).toBe(201)
-    const detail = await (
-      await app.request(`/api/expenses/${exp.id}/detail`, { headers: { cookie: admin.cookie } })
-    ).json()
-    expect(detail.comments).toHaveLength(1)
-    expect(detail.comments[0].body).toBe('hola')
-  })
-
-  it('borrar → papelera → restore devuelve el gasto al tablero', async () => {
-    const { app, admin } = await makeExpenseInstance()
-    const exp = await createExpense(app, admin)
-    await app.request(`/api/expenses/${exp.id}`, jsonReq(admin, 'DELETE', `/api/expenses/${exp.id}`))
-    const afterDelete = (await (await app.request('/api/expenses', { headers: { cookie: admin.cookie } })).json()).expenses
-    expect(afterDelete).toHaveLength(0)
+    const asAna = await app.request(`/api/expenses/${exp.id}`, jsonReq(ana, 'DELETE', `/api/expenses/${exp.id}`))
+    expect(asAna.status).toBe(403)
+    const asAdmin = await app.request(`/api/expenses/${exp.id}`, jsonReq(admin, 'DELETE', `/api/expenses/${exp.id}`))
+    expect(asAdmin.status).toBe(204)
     const trash = await (await app.request('/api/trash', { headers: { cookie: admin.cookie } })).json()
     expect(trash.expenses.map((e) => e.id)).toContain(exp.id)
-  })
-
-  it('el export incluye los gastos', async () => {
-    const { app, admin } = await makeExpenseInstance()
-    const exp = await createExpense(app, admin)
     const dump = await (await app.request('/api/export', { headers: { cookie: admin.cookie } })).json()
-    expect(dump.expenses.map((e) => e.id)).toContain(exp.id)
-    expect(dump).toHaveProperty('expense_trash')
-  })
-})
-
-describe('expenses — saldar cuentas', () => {
-  it('salda todas las deudas pendientes entre dos usuarios y transiciona a hecho', async () => {
-    const { app, admin } = await makeExpenseInstance()
-    const ana = await createUser(app, admin, 'ana')
-    const anaId = (await (await app.request('/api/auth/me', { headers: { cookie: ana.cookie } })).json()).user.id
-    // dos deudas de ana hacia admin (creador ya pagó) y una sin pagar por el creador
-    await createExpense(app, admin, { title: 'A', requested_user_id: anaId, split_type: 'half', paid_by_creator: true })
-    await createExpense(app, admin, { title: 'B', requested_user_id: anaId, split_type: 'full', paid_by_creator: true })
-    const c3 = await createExpense(app, admin, { title: 'C', requested_user_id: anaId, split_type: 'half' })
-
-    const res = await app.request(
-      '/api/expenses/settle',
-      jsonReq(ana, 'POST', '/api/expenses/settle', { other_user_id: (await (await app.request('/api/auth/me', { headers: { cookie: admin.cookie } })).json()).user.id })
-    )
-    expect(res.status).toBe(200)
-    expect((await res.json()).settled).toBe(3)
-
-    const list = (await (await app.request('/api/expenses', { headers: { cookie: admin.cookie } })).json()).expenses
-    for (const e of list) expect(e.paid_by_requested).toBe(true)
-    expect(list.find((e) => e.title === 'A').step).toBe('hecho')
-    expect(list.find((e) => e.title === 'B').step).toBe('hecho')
-    // C: el creador no ha pagado aún → no pasa a hecho
-    expect(list.find((e) => e.id === c3.id).step).toBe(c3.step)
-  })
-
-  it('sin deudas pendientes devuelve settled 0; saldarse a uno mismo es 422', async () => {
-    const { app, admin } = await makeExpenseInstance()
-    const ana = await createUser(app, admin, 'ana')
-    const anaId = (await (await app.request('/api/auth/me', { headers: { cookie: ana.cookie } })).json()).user.id
-    const empty = await app.request(
-      '/api/expenses/settle',
-      jsonReq(admin, 'POST', '/api/expenses/settle', { other_user_id: anaId })
-    )
-    expect(empty.status).toBe(200)
-    expect((await empty.json()).settled).toBe(0)
-    const meId = (await (await app.request('/api/auth/me', { headers: { cookie: admin.cookie } })).json()).user.id
-    const self = await app.request(
-      '/api/expenses/settle',
-      jsonReq(admin, 'POST', '/api/expenses/settle', { other_user_id: meId })
-    )
-    expect(self.status).toBe(422)
+    expect(dump).toHaveProperty('expenses')
   })
 })

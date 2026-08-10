@@ -199,13 +199,11 @@ CREATE TABLE IF NOT EXISTS expenses (
   title TEXT NOT NULL,
   amount_cents INTEGER NOT NULL,
   label_id TEXT REFERENCES labels(id) ON DELETE SET NULL,
+  project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
   notes TEXT DEFAULT '',
-  paid_by_creator INTEGER NOT NULL DEFAULT 0,
-  requested_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
-  split_type TEXT CHECK (split_type IN ('half','custom','full')),
-  split_amount_cents INTEGER,
-  paid_by_requested INTEGER NOT NULL DEFAULT 0,
+  payer_id TEXT NOT NULL REFERENCES users(id),
   payment_method TEXT CHECK (payment_method IN ('bizum','transfer','efectivo')),
+  spent_at INTEGER NOT NULL,
   step TEXT NOT NULL DEFAULT 'nuevo' CHECK (step IN ('nuevo','en-curso','hecho')),
   position INTEGER NOT NULL DEFAULT 0,
   created_by TEXT NOT NULL REFERENCES users(id),
@@ -216,7 +214,17 @@ CREATE TABLE IF NOT EXISTS expenses (
 
 CREATE INDEX IF NOT EXISTS idx_expenses_step ON expenses(step, position);
 CREATE INDEX IF NOT EXISTS idx_expenses_created_by ON expenses(created_by);
-CREATE INDEX IF NOT EXISTS idx_expenses_requested ON expenses(requested_user_id);
+CREATE INDEX IF NOT EXISTS idx_expenses_project ON expenses(project_id);
+
+CREATE TABLE IF NOT EXISTS expense_shares (
+  expense_id TEXT NOT NULL REFERENCES expenses(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  share_cents INTEGER NOT NULL,
+  paid INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (expense_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_expense_shares_user ON expense_shares(user_id);
 
 CREATE TABLE IF NOT EXISTS expense_attachments (
   id TEXT PRIMARY KEY,
@@ -244,7 +252,7 @@ CREATE TABLE IF NOT EXISTS expense_activity_events (
   expense_id TEXT REFERENCES expenses(id) ON DELETE CASCADE,
   user_id TEXT REFERENCES users(id),
   type TEXT NOT NULL CHECK (type IN
-    ('created','title','amount','category','notes','paid','requested','split','payment_method','moved','attachment')),
+    ('created','title','amount','category','notes','paid','shares','payer','settled','payment_method','moved','attachment')),
   data TEXT DEFAULT '{}',
   created_at INTEGER NOT NULL
 );
@@ -339,7 +347,19 @@ export function migrateSchema(db) {
     db.exec('CREATE INDEX IF NOT EXISTS idx_activity_created ON activity_events(created_at)')
     log.info('schema_migrated', { table: 'activity_events', change: 'type CHECK + project' })
   }
-  const expenseCols = db.prepare('PRAGMA table_info(expenses)').all().map((c) => c.name)
+  let expenseCols = db.prepare('PRAGMA table_info(expenses)').all().map((c) => c.name)
+  if (expenseCols.includes('requested_user_id')) {
+    // Esquema v1 (split de pareja). Recreación limpia al modelo de shares:
+    // decidido antes de tener datos reales; los de prueba se descartan.
+    db.exec('DROP TABLE IF EXISTS expense_shares')
+    db.exec('DROP TABLE IF EXISTS expense_activity_events')
+    db.exec('DROP TABLE IF EXISTS expense_comments')
+    db.exec('DROP TABLE IF EXISTS expense_attachments')
+    db.exec('DROP TABLE IF EXISTS expenses')
+    db.exec(SCHEMA)
+    expenseCols = db.prepare('PRAGMA table_info(expenses)').all().map((c) => c.name)
+    log.warn('schema_migrated', { table: 'expenses', action: 'recreated_v2_shares' })
+  }
   if (!expenseCols.includes('deleted_at')) {
     db.exec('ALTER TABLE expenses ADD COLUMN deleted_at INTEGER')
     log.info('schema_migrated', { table: 'expenses', column: 'deleted_at' })

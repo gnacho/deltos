@@ -34,7 +34,6 @@ export default function ExpenseBoard() {
   const [creating, setCreating] = useState(false);
   const [detailExpense, setDetailExpense] = useState<{ id: string } | null>(null);
   const [filter, setFilter] = useState<FilterType>('all');
-  const [defaultStep, setDefaultStep] = useState<ExpenseStep>('nuevo');
   const [seg, setSeg] = useState<ExpenseStep>('nuevo');
   const [view, setView] = useState<'tablero' | 'resumen'>('tablero');
 
@@ -45,9 +44,19 @@ export default function ExpenseBoard() {
   const visible = useMemo(() => {
     let list = expenses;
     if (filter === 'mine')
-      list = list.filter((e) => e.created_by === me?.id || e.requested_user_id === me?.id);
+      list = list.filter(
+        (e) =>
+          e.created_by === me?.id ||
+          e.payer_id === me?.id ||
+          e.shares.some((sh) => sh.user_id === me?.id),
+      );
     else if (filter === 'others')
-      list = list.filter((e) => e.created_by !== me?.id && e.requested_user_id !== me?.id);
+      list = list.filter(
+        (e) =>
+          e.created_by !== me?.id &&
+          e.payer_id !== me?.id &&
+          !e.shares.some((sh) => sh.user_id === me?.id),
+      );
     return list;
   }, [expenses, filter, me?.id]);
 
@@ -64,8 +73,7 @@ export default function ExpenseBoard() {
 
   const openCount = visible.filter((e) => e.step !== 'hecho').length;
 
-  const handleOpenNew = (step: ExpenseStep) => {
-    setDefaultStep(step);
+  const handleOpenNew = () => {
     setCreating(true);
   };
 
@@ -354,7 +362,7 @@ export default function ExpenseBoard() {
                       </span>
                       <button
                         type="button"
-                        onClick={() => handleOpenNew(st.id)}
+                        onClick={() => handleOpenNew()}
                         className="ml-auto w-7 h-7 rounded-lg text-faint hover:bg-surface2 hover:text-muted flex items-center justify-center"
                         aria-label={t('board.addToColumn', { column: t(`expenseSteps.${st.id}`) })}
                       >
@@ -393,7 +401,7 @@ export default function ExpenseBoard() {
       {/* FAB móvil: nuevo gasto */}
       <button
         type="button"
-        onClick={() => handleOpenNew(seg)}
+        onClick={() => handleOpenNew()}
         className="lg:hidden fixed right-4 z-40 w-14 h-14 rounded-2xl bg-brand text-brandfg shadow-lg flex items-center justify-center hover:brightness-110"
         style={{ bottom: 'calc(84px + env(safe-area-inset-bottom))' }}
         aria-label={t('expenses.new')}
@@ -401,14 +409,7 @@ export default function ExpenseBoard() {
         <Plus className="w-6 h-6" aria-hidden="true" />
       </button>
 
-      {creating && (
-        <ExpenseModal
-          mode="create"
-          defaultStep={defaultStep}
-          onClose={() => setCreating(false)}
-          onCreated={() => setCreating(false)}
-        />
-      )}
+      {creating && <ExpenseModal mode="create" onClose={() => setCreating(false)} />}
       {detailExpense && data.getExpense(detailExpense.id) && (
         <ExpenseDetailModal
           expense={data.getExpense(detailExpense.id)!}

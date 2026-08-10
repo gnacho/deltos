@@ -87,11 +87,7 @@ const CATALOGO = {
     resumen: { titulo: 'Actividad en Deltos', cuerpo: (d) => `${d.total} cambios mientras estabas en horas de silencio` },
     pago_requerido: {
       titulo: 'Te piden un pago',
-      cuerpo: (d) => {
-        if (d.split_type === 'full') return `${d.usuario} te pide ${fmtEur(d.importe)} por «${d.titulo}»`
-        if (d.split_type === 'custom') return `${d.usuario} te pide ${fmtEur(d.split_amount)} por «${d.titulo}»`
-        return `${d.usuario} te pide ${fmtEur(Math.round(d.importe / 2))} (mitad de ${fmtEur(d.importe)}) por «${d.titulo}»`
-      },
+      cuerpo: (d) => `${d.usuario} te pide tu parte de «${d.titulo}» (${fmtEur(d.importe)} en total)`,
     },
     pago_completado: {
       titulo: 'Pago recibido',
@@ -117,11 +113,7 @@ const CATALOGO = {
     resumen: { titulo: 'Deltos activity', cuerpo: (d) => `${d.total} changes during your quiet hours` },
     pago_requerido: {
       titulo: 'Payment requested',
-      cuerpo: (d) => {
-        if (d.split_type === 'full') return `${d.usuario} asks you for ${fmtEurEn(d.importe)} for "${d.titulo}"`
-        if (d.split_type === 'custom') return `${d.usuario} asks you for ${fmtEurEn(d.split_amount)} for "${d.titulo}"`
-        return `${d.usuario} asks you for ${fmtEurEn(Math.round(d.importe / 2))} (half of ${fmtEurEn(d.importe)}) for "${d.titulo}"`
-      },
+      cuerpo: (d) => `${d.usuario} asks for your share of "${d.titulo}" (${fmtEurEn(d.importe)} total)`,
     },
     pago_completado: {
       titulo: 'Payment received',

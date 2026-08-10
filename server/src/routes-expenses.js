@@ -11,7 +11,6 @@ import { logger } from './logger.js'
 
 const log = logger.child({ component: 'expenses' })
 
-const SPLIT_TYPES = ['half', 'custom', 'full']
 const STEPS = ['nuevo', 'en-curso', 'hecho']
 
 const ALLOWED_MIME_TYPES = new Set([
@@ -32,15 +31,20 @@ const ALLOWED_MIME_TYPES = new Set([
 
 const idParamSchema = z.object({ id: z.string().min(1).max(100) })
 
+const shareSchema = z.object({
+  user_id: z.string().min(1).max(100),
+  share_cents: z.number().int().min(0),
+})
+
 const createSchema = z.object({
   title: z.string().min(1).max(200),
   amount_cents: z.number().int().min(1),
   label_id: z.string().nullable().optional(),
+  project_id: z.string().nullable().optional(),
   notes: z.string().max(5000).default(''),
-  paid_by_creator: z.boolean().default(false),
-  requested_user_id: z.string().nullable().optional(),
-  split_type: z.enum(SPLIT_TYPES).nullable().optional(),
-  split_amount_cents: z.number().int().min(1).nullable().optional(),
+  payer_id: z.string().min(1).max(100).optional(),
+  spent_at: z.number().int().min(0).optional(),
+  shares: z.array(shareSchema).max(50).default([]),
   payment_method: z.enum(['bizum', 'transfer', 'efectivo']).nullable().optional(),
   step: z.enum(STEPS).default('nuevo'),
 })
@@ -49,15 +53,16 @@ const updateSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   amount_cents: z.number().int().min(1).optional(),
   label_id: z.string().nullable().optional(),
+  project_id: z.string().nullable().optional(),
   notes: z.string().max(5000).optional(),
-  paid_by_creator: z.boolean().optional(),
-  requested_user_id: z.string().nullable().optional(),
-  split_type: z.enum(SPLIT_TYPES).nullable().optional(),
-  split_amount_cents: z.number().int().min(1).nullable().optional(),
-  paid_by_requested: z.boolean().optional(),
+  payer_id: z.string().min(1).max(100).optional(),
+  spent_at: z.number().int().min(0).optional(),
+  shares: z.array(shareSchema).max(50).optional(),
   payment_method: z.enum(['bizum', 'transfer', 'efectivo']).nullable().optional(),
   step: z.enum(STEPS).optional(),
 })
+
+const myShareSchema = z.object({ paid: z.boolean() })
 
 const moveSchema = z.object({
   step: z.enum(STEPS),
@@ -65,6 +70,46 @@ const moveSchema = z.object({
 })
 
 const commentSchema = z.object({ body: z.string().min(1).max(5000) })
+
+/* Las partes deben sumar el importe, sin usuarios repetidos y todos existentes.
+   La parte del pagador (si aparece) nace pagada: él puso el dinero. */
+function validateShares(db, shares, amountCents, payerId) {
+  const seen = new Set()
+  let sum = 0
+  for (const sh of shares) {
+    if (seen.has(sh.user_id)) httpError(422, ERROR_CODES.VALIDATION_FAILED)
+    seen.add(sh.user_id)
+    if (!db.prepare('SELECT id FROM users WHERE id = ?').get(sh.user_id)) {
+      httpError(422, ERROR_CODES.ASSIGNEE_NOT_MEMBER)
+    }
+    sum += sh.share_cents
+  }
+  if (shares.length > 0 && sum !== amountCents) httpError(422, ERROR_CODES.VALIDATION_FAILED)
+  void payerId
+}
+
+function writeShares(db, expenseId, shares, payerId) {
+  db.prepare('DELETE FROM expense_shares WHERE expense_id = ?').run(expenseId)
+  const ins = db.prepare(
+    'INSERT INTO expense_shares (expense_id, user_id, share_cents, paid) VALUES (?, ?, ?, ?)'
+  )
+  for (const sh of shares) {
+    ins.run(expenseId, sh.user_id, sh.share_cents, sh.user_id === payerId ? 1 : 0)
+  }
+}
+
+/* Ciclo de vida derivado de las partes (spec issue #55):
+   nuevo = sin reparto declarado · en-curso = repartido con deudores pendientes
+   · hecho = todas las partes pagadas. El move manual puede forzar cualquier
+   columna; esto solo aplica al crear/editar/pagar partes. */
+function resolveStep(db, expenseId, payerId, requestedStep) {
+  const shares = db.prepare(
+    'SELECT COUNT(*) AS n, SUM(CASE WHEN user_id != ? AND paid = 0 THEN 1 ELSE 0 END) AS pending FROM expense_shares WHERE expense_id = ?'
+  ).get(payerId, expenseId)
+  if (shares.n === 0) return requestedStep /* sin reparto declarado: no se toca */
+  if ((shares.pending ?? 0) === 0) return 'hecho'
+  return requestedStep === 'nuevo' || requestedStep === 'hecho' ? 'en-curso' : requestedStep
+}
 
 function pluginEnabled(prod) {
   return kvGet(prod, 'plugin_expenses_enabled', '0') === '1'
@@ -83,30 +128,16 @@ function removeAttachmentFiles(db, uploadsDir, expenseId) {
   }
 }
 
-function hydrateExpense(db, id) {
-  const row = db.prepare(
-    `SELECT e.*, u.username AS created_by_username, u.color AS created_by_color,
-            ru.username AS requested_username, ru.color AS requested_color,
-            (SELECT COUNT(*) FROM expense_comments c WHERE c.expense_id = e.id) AS comment_count,
-            (SELECT COUNT(*) FROM expense_attachments a WHERE a.expense_id = e.id) AS attachment_count,
-            l.name AS label_name, l.color AS label_color
-     FROM expenses e
-     JOIN users u ON u.id = e.created_by
-     LEFT JOIN users ru ON ru.id = e.requested_user_id
-     LEFT JOIN labels l ON l.id = e.label_id
-     WHERE e.id = ?`
-  ).get(id)
-  if (!row) return null
+function shapeRow(row, shares) {
   return {
     id: row.id, title: row.title, amount_cents: row.amount_cents,
     label_id: row.label_id, label_name: row.label_name, label_color: row.label_color,
+    project_id: row.project_id, project_name: row.project_name,
     notes: row.notes,
-    paid_by_creator: !!row.paid_by_creator,
-    requested_user_id: row.requested_user_id,
-    requested_username: row.requested_username, requested_color: row.requested_color,
-    split_type: row.split_type, split_amount_cents: row.split_amount_cents,
-    paid_by_requested: !!row.paid_by_requested,
+    payer_id: row.payer_id, payer_username: row.payer_username, payer_color: row.payer_color,
     payment_method: row.payment_method,
+    spent_at: row.spent_at,
+    shares,
     step: row.step, position: row.position,
     created_by: row.created_by, created_by_username: row.created_by_username,
     created_by_color: row.created_by_color,
@@ -115,35 +146,51 @@ function hydrateExpense(db, id) {
   }
 }
 
+const EXPENSE_SELECT = `
+  SELECT e.*, u.username AS created_by_username, u.color AS created_by_color,
+         pu.username AS payer_username, pu.color AS payer_color,
+         p.name AS project_name,
+         (SELECT COUNT(*) FROM expense_comments c WHERE c.expense_id = e.id) AS comment_count,
+         (SELECT COUNT(*) FROM expense_attachments a WHERE a.expense_id = e.id) AS attachment_count,
+         l.name AS label_name, l.color AS label_color
+  FROM expenses e
+  JOIN users u ON u.id = e.created_by
+  JOIN users pu ON pu.id = e.payer_id
+  LEFT JOIN projects p ON p.id = e.project_id
+  LEFT JOIN labels l ON l.id = e.label_id`
+
+function sharesFor(db, ids) {
+  if (ids.length === 0) return new Map()
+  const rows = db.prepare(
+    `SELECT s.*, u.username, u.color AS user_color
+     FROM expense_shares s JOIN users u ON u.id = s.user_id
+     WHERE s.expense_id IN (${ids.map(() => '?').join(',')})
+     ORDER BY s.share_cents DESC`
+  ).all(...ids)
+  const map = new Map()
+  for (const r of rows) {
+    const list = map.get(r.expense_id) ?? []
+    list.push({
+      user_id: r.user_id, username: r.username, user_color: r.user_color,
+      share_cents: r.share_cents, paid: !!r.paid,
+    })
+    map.set(r.expense_id, list)
+  }
+  return map
+}
+
+function hydrateExpense(db, id) {
+  const row = db.prepare(`${EXPENSE_SELECT} WHERE e.id = ?`).get(id)
+  if (!row) return null
+  return shapeRow(row, sharesFor(db, [id]).get(id) ?? [])
+}
+
 function listExpenses(db) {
-  return db.prepare(
-    `SELECT e.*, u.username AS created_by_username, u.color AS created_by_color,
-            ru.username AS requested_username, ru.color AS requested_color,
-            (SELECT COUNT(*) FROM expense_comments c WHERE c.expense_id = e.id) AS comment_count,
-            (SELECT COUNT(*) FROM expense_attachments a WHERE a.expense_id = e.id) AS attachment_count,
-            l.name AS label_name, l.color AS label_color
-     FROM expenses e
-     JOIN users u ON u.id = e.created_by
-     LEFT JOIN users ru ON ru.id = e.requested_user_id
-     LEFT JOIN labels l ON l.id = e.label_id
-     WHERE e.deleted_at IS NULL
-     ORDER BY e.step, e.position`
-  ).all().map((row) => ({
-    id: row.id, title: row.title, amount_cents: row.amount_cents,
-    label_id: row.label_id, label_name: row.label_name, label_color: row.label_color,
-    notes: row.notes,
-    paid_by_creator: !!row.paid_by_creator,
-    requested_user_id: row.requested_user_id,
-    requested_username: row.requested_username, requested_color: row.requested_color,
-    split_type: row.split_type, split_amount_cents: row.split_amount_cents,
-    paid_by_requested: !!row.paid_by_requested,
-    payment_method: row.payment_method,
-    step: row.step, position: row.position,
-    created_by: row.created_by, created_by_username: row.created_by_username,
-    created_by_color: row.created_by_color,
-    created_at: row.created_at, updated_at: row.updated_at,
-    counts: { comments: row.comment_count ?? 0, attachments: row.attachment_count ?? 0 },
-  }))
+  const rows = db.prepare(
+    `${EXPENSE_SELECT} WHERE e.deleted_at IS NULL ORDER BY e.step, e.position`
+  ).all()
+  const shares = sharesFor(db, rows.map((r) => r.id))
+  return rows.map((row) => shapeRow(row, shares.get(row.id) ?? []))
 }
 
 function expenseDetail(db, id) {
@@ -189,27 +236,39 @@ export function registerExpenseRoutes(app, { prod, hub, uploadsDir }) {
     const target = db.prepare('SELECT id, username FROM users WHERE id = ?').get(otherId)
     if (!target) httpError(422, ERROR_CODES.ASSIGNEE_NOT_MEMBER)
 
+    /* Partes pendientes entre los dos, en ambos sentidos (deudor ↔ pagador) */
     const pending = db.prepare(
-      `SELECT * FROM expenses
-       WHERE deleted_at IS NULL AND paid_by_requested = 0 AND requested_user_id IS NOT NULL
-         AND ((created_by = ? AND requested_user_id = ?) OR (created_by = ? AND requested_user_id = ?))`
+      `SELECT s.expense_id, s.user_id, s.share_cents, e.step, e.payer_id, e.title
+       FROM expense_shares s JOIN expenses e ON e.id = s.expense_id
+       WHERE e.deleted_at IS NULL AND s.paid = 0
+         AND ((s.user_id = ? AND e.payer_id = ?) OR (s.user_id = ? AND e.payer_id = ?))`
     ).all(user.id, otherId, otherId, user.id)
     if (pending.length === 0) return c.json({ settled: 0 })
 
     const now = Date.now()
+    const total = pending.reduce((sum, sh) => sum + sh.share_cents, 0)
     db.transaction(() => {
-      for (const e of pending) {
-        const newStep = e.paid_by_creator ? 'hecho' : e.step
-        db.prepare('UPDATE expenses SET paid_by_requested = 1, step = ?, updated_at = ? WHERE id = ?')
-          .run(newStep, now, e.id)
-        addExpenseEvent(db, e.id, user.id, 'paid', { paid_by_requested: true, settle: true })
-        if (newStep !== e.step) addExpenseEvent(db, e.id, user.id, 'moved', { from: e.step, to: newStep })
+      for (const sh of pending) {
+        db.prepare('UPDATE expense_shares SET paid = 1 WHERE expense_id = ? AND user_id = ?')
+          .run(sh.expense_id, sh.user_id)
+        addExpenseEvent(db, sh.expense_id, user.id, 'paid', { share: true, settle: true })
       }
+      const ids = [...new Set(pending.map((sh) => sh.expense_id))]
+      for (const eid of ids) {
+        const e = db.prepare('SELECT step, payer_id FROM expenses WHERE id = ?').get(eid)
+        const newStep = resolveStep(db, eid, e.payer_id, e.step)
+        db.prepare('UPDATE expenses SET step = ?, updated_at = ? WHERE id = ?').run(newStep, now, eid)
+        if (newStep !== e.step) addExpenseEvent(db, eid, user.id, 'moved', { from: e.step, to: newStep })
+      }
+      /* Reembolso visible: evento global (expense_id NULL) como artefacto del saldado */
+      addExpenseEvent(db, null, user.id, 'settled', {
+        other_user_id: otherId, other_username: target.username,
+        count: pending.length, total_cents: total,
+      })
     })()
 
     hub.broadcast('expenses')
 
-    // Avisar al otro implicado de que las cuentas quedaron saldadas
     const actor = db.prepare('SELECT username FROM users WHERE id = ?').get(user.id)
     const titulo = pending.length === 1 ? pending[0].title : `${pending.length}\u00d7`
     notifyUsers(db, [otherId], 'pago_completado', {
@@ -217,7 +276,7 @@ export function registerExpenseRoutes(app, { prod, hub, uploadsDir }) {
     }, { demo: c.get('demo'), url: '/expenses' }).catch((err) =>
       log.error('push_notify_failed', { tipo: 'pago_completado', error: err }))
 
-    return c.json({ settled: pending.length })
+    return c.json({ settled: pending.length, total_cents: total })
   })
 
   // --- Listar gastos ---
@@ -239,13 +298,14 @@ export function registerExpenseRoutes(app, { prod, hub, uploadsDir }) {
     const data = c.req.valid('json')
     const now = Date.now()
 
-    if (data.requested_user_id) {
-      if (!data.split_type) httpError(422, ERROR_CODES.VALIDATION_FAILED)
-      if (data.split_type === 'custom' && !data.split_amount_cents) httpError(422, ERROR_CODES.VALIDATION_FAILED)
-      const target = db.prepare('SELECT id FROM users WHERE id = ?').get(data.requested_user_id)
-      if (!target) httpError(422, ERROR_CODES.ASSIGNEE_NOT_MEMBER)
-      if (data.requested_user_id === user.id) httpError(422, ERROR_CODES.VALIDATION_FAILED)
+    const payerId = data.payer_id ?? user.id
+    if (!db.prepare('SELECT id FROM users WHERE id = ?').get(payerId)) {
+      httpError(422, ERROR_CODES.ASSIGNEE_NOT_MEMBER)
     }
+    if (data.project_id && !db.prepare('SELECT id FROM projects WHERE id = ?').get(data.project_id)) {
+      httpError(422, ERROR_CODES.VALIDATION_FAILED)
+    }
+    validateShares(db, data.shares, data.amount_cents, payerId)
 
     const id = crypto.randomUUID()
     const maxPos = db.prepare('SELECT COALESCE(MAX(position), -1) AS mx FROM expenses WHERE step = ? AND deleted_at IS NULL').get(data.step).mx
@@ -253,26 +313,29 @@ export function registerExpenseRoutes(app, { prod, hub, uploadsDir }) {
 
     db.transaction(() => {
       db.prepare(
-        `INSERT INTO expenses (id, title, amount_cents, label_id, notes, paid_by_creator,
-         requested_user_id, split_type, split_amount_cents, payment_method, step, position, created_by, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-      ).run(id, data.title, data.amount_cents, data.label_id || null, data.notes,
-        data.paid_by_creator ? 1 : 0, data.requested_user_id || null, data.split_type || null,
-        data.split_amount_cents || null, data.payment_method || null, data.step, position, user.id, now, now)
+        `INSERT INTO expenses (id, title, amount_cents, label_id, project_id, notes, payer_id,
+         payment_method, spent_at, step, position, created_by, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run(id, data.title, data.amount_cents, data.label_id || null, data.project_id || null,
+        data.notes, payerId, data.payment_method || null, data.spent_at ?? now,
+        data.step, position, user.id, now, now)
+      writeShares(db, id, data.shares, payerId)
+      const step = resolveStep(db, id, payerId, data.step)
+      if (step !== data.step) db.prepare('UPDATE expenses SET step = ? WHERE id = ?').run(step, id)
       addExpenseEvent(db, id, user.id, 'created', {})
       if (data.notes) addExpenseEvent(db, id, user.id, 'notes', {})
-      if (data.paid_by_creator) addExpenseEvent(db, id, user.id, 'paid', {})
-      if (data.requested_user_id) addExpenseEvent(db, id, user.id, 'requested', { split_type: data.split_type })
+      if (data.shares.length > 0) addExpenseEvent(db, id, user.id, 'shares', { count: data.shares.length })
       if (data.payment_method) addExpenseEvent(db, id, user.id, 'payment_method', { method: data.payment_method })
     })()
 
     hub.broadcast('expenses')
 
-    if (data.requested_user_id && data.requested_user_id !== user.id) {
+    /* Push a cada deudor (todas las partes menos la del pagador) */
+    const debtors = data.shares.filter((sh) => sh.user_id !== payerId && sh.user_id !== user.id)
+    if (debtors.length > 0) {
       const creador = db.prepare('SELECT username FROM users WHERE id = ?').get(user.id)
-      notifyUsers(db, [data.requested_user_id], 'pago_requerido', {
+      notifyUsers(db, debtors.map((sh) => sh.user_id), 'pago_requerido', {
         usuario: creador.username, titulo: data.title, importe: data.amount_cents,
-        split_type: data.split_type, split_amount: data.split_amount_cents,
       }, { demo: c.get('demo'), url: '/expenses' }).catch((err) =>
         log.error('push_notify_failed', { tipo: 'pago_requerido', error: err }))
     }
@@ -289,6 +352,8 @@ export function registerExpenseRoutes(app, { prod, hub, uploadsDir }) {
   })
 
   // --- Actualizar gasto ---
+  // Permisos: creador o pagador editan el gasto; cada participante marca SOLO
+  // su parte vía /my-share. hecho se deriva de las partes (resolveStep).
   app.put('/api/expenses/:id', zValidator('param', idParamSchema, validationHook), zValidator('json', updateSchema, validationHook), async (c) => {
     const db = c.get('db')
     const user = c.get('user')
@@ -296,80 +361,85 @@ export function registerExpenseRoutes(app, { prod, hub, uploadsDir }) {
     const id = c.req.valid('param').id
     const now = Date.now()
 
-    const current = db.prepare('SELECT * FROM expenses WHERE id = ? AND deleted_at IS NULL').get(id)
+    const current = getExpense(db, id)
     if (!current) httpError(404, ERROR_CODES.EXPENSE_NOT_FOUND)
-
-    if (current.created_by !== user.id && current.requested_user_id !== user.id) {
+    if (current.created_by !== user.id && current.payer_id !== user.id) {
       httpError(403, ERROR_CODES.PROJECT_NOT_MEMBER)
     }
 
-    if (data.requested_user_id !== undefined && data.requested_user_id !== current.requested_user_id) {
-      if (data.requested_user_id && !data.split_type && !current.split_type) httpError(422, ERROR_CODES.VALIDATION_FAILED)
-      if (data.requested_user_id) {
-        const target = db.prepare('SELECT id FROM users WHERE id = ?').get(data.requested_user_id)
-        if (!target) httpError(422, ERROR_CODES.ASSIGNEE_NOT_MEMBER)
-        if (data.requested_user_id === user.id) httpError(422, ERROR_CODES.VALIDATION_FAILED)
-      }
+    const payerId = data.payer_id ?? current.payer_id
+    if (data.payer_id && !db.prepare('SELECT id FROM users WHERE id = ?').get(payerId)) {
+      httpError(422, ERROR_CODES.ASSIGNEE_NOT_MEMBER)
     }
-
-    if (data.paid_by_requested !== undefined && user.id !== current.requested_user_id) {
-      httpError(403, ERROR_CODES.PROJECT_NOT_MEMBER)
+    if (data.project_id && !db.prepare('SELECT id FROM projects WHERE id = ?').get(data.project_id)) {
+      httpError(422, ERROR_CODES.VALIDATION_FAILED)
     }
-
-    let newStep = data.step !== undefined ? data.step : current.step
-    const creatorPaid = data.paid_by_creator !== undefined ? data.paid_by_creator : !!current.paid_by_creator
-    const requestedPaid = data.paid_by_requested !== undefined ? data.paid_by_requested : !!current.paid_by_requested
-    const hasRequest = data.requested_user_id !== undefined ? !!data.requested_user_id : !!current.requested_user_id
-    if (creatorPaid && (!hasRequest || requestedPaid)) newStep = 'hecho'
+    const amount = data.amount_cents ?? current.amount_cents
+    if (data.shares !== undefined) validateShares(db, data.shares, amount, payerId)
+    else if (data.amount_cents !== undefined && data.amount_cents !== current.amount_cents) {
+      /* cambiar el importe sin re-declarar las partes rompería la suma */
+      const n = db.prepare('SELECT COUNT(*) AS n FROM expense_shares WHERE expense_id = ?').get(id).n
+      if (n > 0) httpError(422, ERROR_CODES.VALIDATION_FAILED)
+    }
 
     db.transaction(() => {
       db.prepare(
-        `UPDATE expenses SET title = ?, amount_cents = ?, label_id = ?, notes = ?,
-         paid_by_creator = ?, requested_user_id = ?, split_type = ?, split_amount_cents = ?,
-         paid_by_requested = ?, payment_method = ?, step = ?, updated_at = ?
-         WHERE id = ?`
+        `UPDATE expenses SET title = ?, amount_cents = ?, label_id = ?, project_id = ?, notes = ?,
+         payer_id = ?, payment_method = ?, spent_at = ?, updated_at = ? WHERE id = ?`
       ).run(
-        data.title ?? current.title, data.amount_cents ?? current.amount_cents,
+        data.title ?? current.title, amount,
         data.label_id !== undefined ? (data.label_id || null) : current.label_id,
+        data.project_id !== undefined ? (data.project_id || null) : current.project_id,
         data.notes ?? current.notes,
-        data.paid_by_creator !== undefined ? (data.paid_by_creator ? 1 : 0) : current.paid_by_creator,
-        data.requested_user_id !== undefined ? (data.requested_user_id || null) : current.requested_user_id,
-        data.split_type !== undefined ? (data.split_type || null) : current.split_type,
-        data.split_amount_cents !== undefined ? (data.split_amount_cents || null) : current.split_amount_cents,
-        data.paid_by_requested !== undefined ? (data.paid_by_requested ? 1 : 0) : current.paid_by_requested,
+        payerId,
         data.payment_method !== undefined ? (data.payment_method || null) : current.payment_method,
-        newStep, now, id)
+        data.spent_at ?? current.spent_at,
+        now, id)
+      if (data.shares !== undefined) writeShares(db, id, data.shares, payerId)
+      const requested = data.step !== undefined ? data.step : current.step
+      const newStep = resolveStep(db, id, payerId, requested)
+      db.prepare('UPDATE expenses SET step = ? WHERE id = ?').run(newStep, id)
 
       if (data.title !== undefined && data.title !== current.title) addExpenseEvent(db, id, user.id, 'title', { from: current.title, to: data.title })
       if (data.amount_cents !== undefined && data.amount_cents !== current.amount_cents) addExpenseEvent(db, id, user.id, 'amount', { from: current.amount_cents, to: data.amount_cents })
       if (data.notes !== undefined && data.notes !== current.notes) addExpenseEvent(db, id, user.id, 'notes', {})
-      if (data.paid_by_creator !== undefined && data.paid_by_creator !== !!current.paid_by_creator) addExpenseEvent(db, id, user.id, 'paid', { paid: data.paid_by_creator })
-      if (data.requested_user_id !== undefined && data.requested_user_id !== current.requested_user_id) addExpenseEvent(db, id, user.id, 'requested', {})
-      if (data.split_type !== undefined && data.split_type !== current.split_type) addExpenseEvent(db, id, user.id, 'split', { from: current.split_type, to: data.split_type })
+      if (data.shares !== undefined) addExpenseEvent(db, id, user.id, 'shares', { count: data.shares.length })
+      if (data.payer_id !== undefined && data.payer_id !== current.payer_id) addExpenseEvent(db, id, user.id, 'payer', {})
       if (data.payment_method !== undefined && data.payment_method !== current.payment_method) addExpenseEvent(db, id, user.id, 'payment_method', { to: data.payment_method })
-      if (data.paid_by_requested !== undefined && data.paid_by_requested !== !!current.paid_by_requested) addExpenseEvent(db, id, user.id, 'paid', { paid_by_requested: true })
+      if (newStep !== current.step) addExpenseEvent(db, id, user.id, 'moved', { from: current.step, to: newStep })
+    })()
+
+    hub.broadcast('expenses')
+    return c.json({ expense: hydrateExpense(db, id) })
+  })
+
+  // --- Marcar/desmarcar MI parte como pagada ---
+  app.put('/api/expenses/:id/my-share', zValidator('param', idParamSchema, validationHook), zValidator('json', myShareSchema, validationHook), async (c) => {
+    const db = c.get('db')
+    const user = c.get('user')
+    const id = c.req.valid('param').id
+    const { paid } = c.req.valid('json')
+
+    const current = getExpense(db, id)
+    if (!current) httpError(404, ERROR_CODES.EXPENSE_NOT_FOUND)
+    const share = db.prepare('SELECT * FROM expense_shares WHERE expense_id = ? AND user_id = ?').get(id, user.id)
+    if (!share) httpError(403, ERROR_CODES.PROJECT_NOT_MEMBER)
+
+    db.transaction(() => {
+      db.prepare('UPDATE expense_shares SET paid = ? WHERE expense_id = ? AND user_id = ?')
+        .run(paid ? 1 : 0, id, user.id)
+      const newStep = resolveStep(db, id, current.payer_id, current.step)
+      db.prepare('UPDATE expenses SET step = ?, updated_at = ? WHERE id = ?').run(newStep, Date.now(), id)
+      addExpenseEvent(db, id, user.id, 'paid', { share: true, paid })
       if (newStep !== current.step) addExpenseEvent(db, id, user.id, 'moved', { from: current.step, to: newStep })
     })()
 
     hub.broadcast('expenses')
 
-    const newRequested = data.requested_user_id !== undefined ? data.requested_user_id : current.requested_user_id
-    if (newRequested && newRequested !== current.requested_user_id && newRequested !== user.id) {
-      const creador = db.prepare('SELECT username FROM users WHERE id = ?').get(user.id)
-      const st = data.split_type || current.split_type
-      notifyUsers(db, [newRequested], 'pago_requerido', {
-        usuario: creador.username, titulo: data.title ?? current.title,
-        importe: data.amount_cents ?? current.amount_cents,
-        split_type: st, split_amount: data.split_amount_cents ?? current.split_amount_cents,
-      }, { demo: c.get('demo'), url: '/expenses' }).catch((err) =>
-        log.error('push_notify_failed', { tipo: 'pago_requerido', error: err }))
-    }
-
-    if (data.paid_by_requested && current.created_by !== user.id) {
-      const pagador = db.prepare('SELECT username FROM users WHERE id = ?').get(user.id)
-      notifyUsers(db, [current.created_by], 'pago_completado', {
-        usuario: pagador.username, titulo: data.title ?? current.title,
-        importe: data.amount_cents ?? current.amount_cents,
+    if (paid && current.payer_id !== user.id) {
+      const actor = db.prepare('SELECT username FROM users WHERE id = ?').get(user.id)
+      notifyUsers(db, [current.payer_id], 'pago_completado', {
+        usuario: actor.username, titulo: current.title,
       }, { demo: c.get('demo'), url: '/expenses' }).catch((err) =>
         log.error('push_notify_failed', { tipo: 'pago_completado', error: err }))
     }
@@ -444,8 +514,9 @@ export function registerExpenseRoutes(app, { prod, hub, uploadsDir }) {
     db.prepare('UPDATE expenses SET updated_at = ? WHERE id = ?').run(now, id)
     hub.broadcast('expenses')
 
-    // Notificar a interesados (creador + requested)
-    const ids = [expense.created_by, expense.requested_user_id].filter((uid) => uid && uid !== user.id)
+    // Notificar a interesados (creador, pagador y participantes)
+    const shareIds = db.prepare('SELECT user_id FROM expense_shares WHERE expense_id = ?').all(id).map((r) => r.user_id)
+    const ids = [expense.created_by, expense.payer_id, ...shareIds].filter((uid) => uid && uid !== user.id)
     if (ids.length > 0) {
       const actor = db.prepare('SELECT username FROM users WHERE id = ?').get(user.id)
       notifyUsers(db, [...new Set(ids)], 'comentario', {

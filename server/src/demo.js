@@ -200,23 +200,30 @@ export function seedDemo(db, uploadsDir) {
 
     // --- 3 gastos de ejemplo (plugin expenses) ---
     const insExpense = db.prepare(
-      `INSERT INTO expenses (id, title, amount_cents, label_id, notes, paid_by_creator,
-       requested_user_id, split_type, split_amount_cents, paid_by_requested, step, position,
-       created_by, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO expenses (id, title, amount_cents, label_id, notes, payer_id,
+       payment_method, spent_at, step, position, created_by, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
-    // e1: Súper semanal, pagado por mar, mitad a jordi, ambos pagado → hecho
+    const insShare = db.prepare(
+      'INSERT INTO expense_shares (expense_id, user_id, share_cents, paid) VALUES (?, ?, ?, ?)'
+    )
+    // e1: Súper, pagó mar, a medias con jordi, todo pagado → hecho
     insExpense.run('e1', 'Compra semanal Mercadona', 8745, 'l-compras',
       'Fruta, verdura, carne y productos de limpieza. Con vale descuento del 5%.',
-      1, 'jordi', 'half', null, 1, 'hecho', 0, 'mar', now - 5 * DAY, now - 1 * DAY)
-    // e2: Cena fuera, pagado por mar, pide totalidad a jordi → en-curso
+      'mar', 'bizum', now - 5 * DAY, 'hecho', 0, 'mar', now - 5 * DAY, now - 1 * DAY)
+    insShare.run('e1', 'mar', 4373, 1)
+    insShare.run('e1', 'jordi', 4372, 1)
+    // e2: Cena a tres, pagó mar; nacho pagó su parte, jordi debe → en-curso
     insExpense.run('e2', 'Cena aniversario en La Tagliatella', 6230, 'l-familia',
-      'Menú degustación para dos. Pedimos que nos pongan velitas en el postre.',
-      1, 'jordi', 'full', null, 0, 'en-curso', 0, 'mar', now - 3 * DAY, now - 3 * DAY)
-    // e3: Factura luz, pendiente de pagar → nuevo
+      'Menú degustación. Pedimos que nos pongan velitas en el postre.',
+      'mar', 'transfer', now - 3 * DAY, 'en-curso', 0, 'mar', now - 3 * DAY, now - 3 * DAY)
+    insShare.run('e2', 'mar', 2076, 1)
+    insShare.run('e2', 'demo', 2077, 1)
+    insShare.run('e2', 'jordi', 2077, 0)
+    // e3: Factura de la luz, sin partes declaradas todavía → nuevo
     insExpense.run('e3', 'Factura de la luz — julio', 14250, 'l-admin',
       'Ha subido un 12% respecto al mes pasado. Revisar si es la nueva tarifa PVPC.',
-      0, null, null, null, 0, 'nuevo', 0, 'jordi', now - 1 * DAY, now - 1 * DAY)
+      'jordi', null, now - 1 * DAY, 'nuevo', 0, 'jordi', now - 1 * DAY, now - 1 * DAY)
   })
 
   tx()
