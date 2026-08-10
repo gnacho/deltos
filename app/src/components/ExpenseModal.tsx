@@ -178,9 +178,6 @@ export function ExpenseModal(props: Props) {
   };
 
   const isCreator = expense ? expense.created_by === me.id : true;
-  const field =
-    'w-full rounded-xl bg-surface2 border border-app px-3 py-2 text-sm outline-none focus:border-brand';
-  const label = 'block text-xs font-medium text-muted mb-1';
   const pill = (active: boolean) =>
     `px-3 h-9 rounded-full text-[13px] font-medium border transition-colors ${
       active
@@ -190,7 +187,7 @@ export function ExpenseModal(props: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center pt-[6vh] px-4"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
       role="dialog"
       aria-modal="true"
       aria-labelledby="expense-form-title"
@@ -200,25 +197,26 @@ export function ExpenseModal(props: Props) {
         onClick={onClose}
         aria-hidden="true"
       />
-      <div className="relative w-full max-w-lg bg-surface rounded-2xl shadow-xl border border-app overflow-hidden">
+      <div className="relative w-full sm:max-w-lg bg-surface rounded-t-2xl sm:rounded-2xl border border-app shadow-2xl max-h-[92vh] overflow-y-auto nice-scroll">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3 border-b border-app">
-          <h2 id="expense-form-title" className="font-display font-bold text-base tracking-tight">
+        <div className="sticky top-0 z-10 bg-surface/95 backdrop-blur border-b border-app px-5 py-4 flex items-center gap-3">
+          <h2 id="expense-form-title" className="font-display font-bold text-[18px] tracking-tight flex-1">
             {isEdit ? t('expenses.form.editTitle') : t('expenses.form.createTitle')}
           </h2>
           <button
             type="button"
             onClick={onClose}
-            className="p-1 rounded-lg text-muted hover:bg-surface2 hover:text-text transition-colors"
+            className="w-10 h-10 rounded-lg text-muted hover:bg-surface2 flex items-center justify-center"
+            aria-label={t('common.close')}
           >
-            <X size={18} />
+            <X className="w-5 h-5" aria-hidden="true" />
           </button>
         </div>
 
-        <div className="px-5 py-3.5 space-y-3 max-h-[72vh] overflow-y-auto nice-scroll">
-          {/* Título + importe + fecha */}
+        <div className="px-5 py-5 space-y-5">
+          {/* Título */}
           <div>
-            <label className={label} htmlFor="exp-title">
+            <label className="block text-[12px] font-semibold tracking-wide uppercase text-faint mb-1.5" htmlFor="exp-title">
               {t('expenses.form.title')}
             </label>
             <input
@@ -227,13 +225,15 @@ export function ExpenseModal(props: Props) {
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className={field}
+              className="w-full bg-surface2 border border-app rounded-xl px-3.5 py-2.5 text-[15px] font-medium outline-none focus:border-brand"
               placeholder={t('expenses.form.titlePlaceholder')}
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+
+          {/* Importe + fecha */}
+          <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className={label} htmlFor="exp-amount">
+              <label className="block text-[12px] font-semibold tracking-wide uppercase text-faint mb-1.5" htmlFor="exp-amount">
                 {t('expenses.amount')}
               </label>
               <input
@@ -242,12 +242,12 @@ export function ExpenseModal(props: Props) {
                 inputMode="decimal"
                 value={amountStr}
                 onChange={(e) => setAmountStr(e.target.value)}
-                className={`${field} tnum`}
+                className="w-full bg-surface2 border border-app rounded-xl px-3.5 py-2.5 text-[15px] font-medium outline-none focus:border-brand tnum"
                 placeholder="0,00"
               />
             </div>
             <div>
-              <label className={label} htmlFor="exp-date">
+              <label className="block text-[12px] font-semibold tracking-wide uppercase text-faint mb-1.5" htmlFor="exp-date">
                 {t('expenses.form.date')}
               </label>
               <input
@@ -255,22 +255,50 @@ export function ExpenseModal(props: Props) {
                 type="date"
                 value={spentAt}
                 onChange={(e) => setSpentAt(e.target.value)}
-                className={`${field} tnum`}
+                className="w-full bg-surface2 border border-app rounded-xl px-3.5 py-2.5 text-[15px] font-medium outline-none focus:border-brand tnum"
               />
+            </div>
+          </div>
+
+          {/* Proyecto (opcional) + categoría */}
+          <div className="grid grid-cols-2 gap-4">
+            {projects.length > 0 && (
+              <div>
+                <span className="block text-[12px] font-semibold tracking-wide uppercase text-faint mb-1.5">{t('expenses.form.project')}</span>
+                <div className="flex flex-wrap gap-1.5">
+                  <button type="button" onClick={() => setProjectId(null)} className={pill(projectId === null)}>
+                    {t('expenses.form.noProject')}
+                  </button>
+                  {projects.map((p) => (
+                    <button key={p.id} type="button" onClick={() => setProjectId(p.id)} className={pill(projectId === p.id)}>
+                      {p.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className={projects.length === 0 ? 'col-span-2' : ''}>
+              <span className="block text-[12px] font-semibold tracking-wide uppercase text-faint mb-1.5">{t('expenses.category')}</span>
+              <div className="flex flex-wrap gap-1.5">
+                <button type="button" onClick={() => setLabelId(null)} className={pill(labelId === null)}>
+                  {t('expenses.form.noCategory')}
+                </button>
+                {labels.map((l) => (
+                  <button key={l.id} type="button" onClick={() => setLabelId(l.id)} className={pill(labelId === l.id)}>
+                    <span className={`inline-block w-2 h-2 rounded-full mr-1.5 ${colorOf(l.color).dot}`} aria-hidden="true" />
+                    {l.name}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
           {/* Pagador */}
           <div>
-            <span className={label}>{t('expenses.form.payer')}</span>
+            <span className="block text-[12px] font-semibold tracking-wide uppercase text-faint mb-1.5">{t('expenses.form.payer')}</span>
             <div className="flex flex-wrap gap-1.5">
               {users.map((u) => (
-                <button
-                  key={u.id}
-                  type="button"
-                  onClick={() => setPayerId(u.id)}
-                  className={pill(payerId === u.id)}
-                >
+                <button key={u.id} type="button" onClick={() => setPayerId(u.id)} className={pill(payerId === u.id)}>
                   {u.username}
                 </button>
               ))}
@@ -279,14 +307,10 @@ export function ExpenseModal(props: Props) {
 
           {/* Participantes y reparto */}
           <div>
-            <div className="flex items-center justify-between mb-1">
-              <span className={label}>{t('expenses.form.participants')}</span>
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="block text-[12px] font-semibold tracking-wide uppercase text-faint">{t('expenses.form.participants')}</span>
               {participants.length > 1 && (
-                <button
-                  type="button"
-                  onClick={() => setCustomSplit((v) => !v)}
-                  className="text-[12px] font-medium text-brand hover:underline"
-                >
+                <button type="button" onClick={() => setCustomSplit((v) => !v)} className="text-[12px] font-medium text-brand hover:underline">
                   {customSplit ? t('expenses.form.splitEqual') : t('expenses.form.splitCustom')}
                 </button>
               )}
@@ -314,9 +338,7 @@ export function ExpenseModal(props: Props) {
                         inputMode="decimal"
                         value={shareStr.get(u.id) ?? ''}
                         disabled={!customSplit}
-                        onChange={(e) =>
-                          setShareStr((prev) => new Map(prev).set(u.id, e.target.value))
-                        }
+                        onChange={(e) => setShareStr((prev) => new Map(prev).set(u.id, e.target.value))}
                         className="tnum w-20 rounded-lg bg-surface border border-app px-2 py-1 text-right text-[13px] outline-none focus:border-brand disabled:opacity-70"
                         aria-label={t('expenses.form.shareOf', { name: u.username })}
                       />
@@ -327,93 +349,28 @@ export function ExpenseModal(props: Props) {
             </ul>
             {participants.length > 0 && !sumOk && amountCents !== null && (
               <p className="mt-1 text-[12px] text-rose-600 dark:text-rose-400">
-                {t('expenses.form.sharesSumHint', {
-                  sum: fmtMoney(sharesSum, i18n.language),
-                  total: fmtMoney(amountCents, i18n.language),
-                })}
+                {t('expenses.form.sharesSumHint', { sum: fmtMoney(sharesSum, i18n.language), total: fmtMoney(amountCents, i18n.language) })}
               </p>
             )}
           </div>
 
-          {/* Proyecto (opcional) + categoría */}
-          {projects.length > 0 && (
-            <div>
-              <span className={label}>{t('expenses.form.project')}</span>
-              <div className="flex flex-wrap gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setProjectId(null)}
-                  className={pill(projectId === null)}
-                >
-                  {t('expenses.form.noProject')}
-                </button>
-                {projects.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => setProjectId(p.id)}
-                    className={pill(projectId === p.id)}
-                  >
-                    {p.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-          <div>
-            <span className={label}>{t('expenses.category')}</span>
-            <div className="flex flex-wrap gap-1.5">
-              <button
-                type="button"
-                onClick={() => setLabelId(null)}
-                className={pill(labelId === null)}
-              >
-                {t('expenses.form.noCategory')}
-              </button>
-              {labels.map((l) => (
-                <button
-                  key={l.id}
-                  type="button"
-                  onClick={() => setLabelId(l.id)}
-                  className={pill(labelId === l.id)}
-                >
-                  <span
-                    className={`inline-block w-2 h-2 rounded-full mr-1.5 ${colorOf(l.color).dot}`}
-                    aria-hidden="true"
-                  />
-                  {l.name}
-                </button>
-              ))}
-            </div>
-          </div>
-
           {/* Método + etapa */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-4">
             <div>
-              <span className={label}>{t('expenses.form.method')}</span>
+              <span className="block text-[12px] font-semibold tracking-wide uppercase text-faint mb-1.5">{t('expenses.form.method')}</span>
               <div className="flex flex-wrap gap-1.5">
                 {METHODS.map((m) => (
-                  <button
-                    key={m}
-                    type="button"
-                    onClick={() => setMethod(method === m ? null : m)}
-                    className={pill(method === m)}
-                  >
+                  <button key={m} type="button" onClick={() => setMethod(method === m ? null : m)} className={pill(method === m)}>
                     {t(`expenses.${m}`)}
                   </button>
                 ))}
               </div>
             </div>
             <div>
-              <span className={label}>{t('expenses.form.step')}</span>
+              <span className="block text-[12px] font-semibold tracking-wide uppercase text-faint mb-1.5">{t('expenses.form.step')}</span>
               <div className="flex flex-wrap gap-1.5">
                 {STEPS.map((st) => (
-                  <button
-                    key={st}
-                    type="button"
-                    onClick={() => setStep(st)}
-                    className={pill(step === st)}
-                  >
+                  <button key={st} type="button" onClick={() => setStep(st)} className={pill(step === st)}>
                     {t(`expenseSteps.${st}`)}
                   </button>
                 ))}
@@ -423,7 +380,7 @@ export function ExpenseModal(props: Props) {
 
           {/* Notas */}
           <div>
-            <label className={label} htmlFor="exp-notes">
+            <label className="block text-[12px] font-semibold tracking-wide uppercase text-faint mb-1.5" htmlFor="exp-notes">
               {t('expenses.notes')}
             </label>
             <textarea
@@ -431,7 +388,7 @@ export function ExpenseModal(props: Props) {
               rows={2}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              className={`${field} resize-none`}
+              className="w-full bg-surface2 border border-app rounded-xl px-3.5 py-2.5 text-[15px] font-medium outline-none focus:border-brand resize-none"
             />
           </div>
 
@@ -443,43 +400,43 @@ export function ExpenseModal(props: Props) {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-5 py-3 border-t border-app">
-          <div>
-            {isEdit && isCreator && expense && (
-              <button
-                type="button"
-                onClick={handleDelete}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                  deleteArmed
-                    ? 'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300'
-                    : 'text-muted hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/10'
-                }`}
-              >
-                {deleteArmed ? t('expenses.form.deleteConfirm') : t('expenses.form.delete')}
-              </button>
-            )}
-          </div>
-          <div className="flex gap-2">
+        <div className="px-5 py-4 border-t border-app space-y-2">
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={saving}
+            className="w-full h-12 rounded-xl bg-brand text-brandfg text-[15px] font-semibold hover:brightness-110 disabled:opacity-60 shadow-soft"
+          >
+            {saving
+              ? isEdit
+                ? t('expenses.form.saving')
+                : t('expenses.form.creating')
+              : isEdit
+                ? t('common.save')
+                : t('expenses.form.create')}
+          </button>
+          <div className="flex items-center justify-between">
+            <div>
+              {isEdit && isCreator && expense && (
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                    deleteArmed
+                      ? 'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300'
+                      : 'text-muted hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/10'
+                  }`}
+                >
+                  {deleteArmed ? t('expenses.form.deleteConfirm') : t('expenses.form.delete')}
+                </button>
+              )}
+            </div>
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-1.5 rounded-lg text-sm text-muted hover:bg-surface2 hover:text-text transition-colors"
+              className="px-4 py-2 rounded-lg text-sm text-muted hover:bg-surface2 hover:text-text transition-colors"
             >
               {t('common.cancel')}
-            </button>
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={saving}
-              className="px-4 py-1.5 rounded-lg text-sm font-medium bg-brand text-brandfg hover:opacity-90 transition-opacity disabled:opacity-50"
-            >
-              {saving
-                ? isEdit
-                  ? t('expenses.form.saving')
-                  : t('expenses.form.creating')
-                : isEdit
-                  ? t('common.save')
-                  : t('expenses.form.create')}
             </button>
           </div>
         </div>
