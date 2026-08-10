@@ -1,167 +1,202 @@
-import { useState, useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Plus } from 'lucide-react'
+import type { ExpenseStep } from '@/data/types'
 import { useData } from '@/data/data-context'
 import { useSession } from '@/auth/session-context'
-import type { Expense, ExpenseStep } from '@/data/types'
 import { ExpenseCard } from '@/components/ExpenseCard'
-import { ExpenseModal } from '@/components/ExpenseModal'
 import { ExpenseDetailModal } from '@/components/ExpenseDetailModal'
+import { ExpenseModal } from '@/components/ExpenseModal'
 import { colorOf } from '@/lib/colors'
-import { Plus } from 'lucide-react'
 
-const STEPS: ExpenseStep[] = ['nuevo', 'en-curso', 'hecho']
+const STEPS: { id: ExpenseStep; color: string }[] = [
+  { id: 'nuevo', color: 'sky' },
+  { id: 'en-curso', color: 'amber' },
+  { id: 'hecho', color: 'emerald' },
+]
 
-const STEP_COLORS: Record<ExpenseStep, string> = {
-  'nuevo': 'sky',
-  'en-curso': 'amber',
-  'hecho': 'emerald',
+const STEP_ACCENT_RGB: Record<string, string> = {
+  sky: '14 165 233',
+  amber: '245 158 11',
+  emerald: '16 185 129',
 }
 
-type FilterType = 'all' | 'owe' | 'owed' | 'unpaid' | 'paid'
+type FilterType = 'all' | 'mine' | 'others'
 
 export default function ExpenseBoard() {
   const { t } = useTranslation()
   const data = useData()
-  const { user } = useSession()
+  const { user: me } = useSession()
   const [creating, setCreating] = useState(false)
-  const [detailExpense, setDetailExpense] = useState<Expense | null>(null)
+  const [detailExpense, setDetailExpense] = useState<{ id: string } | null>(null)
   const [filter, setFilter] = useState<FilterType>('all')
+  const [defaultStep, setDefaultStep] = useState<ExpenseStep>('nuevo')
+  const [seg, setSeg] = useState<ExpenseStep>('nuevo')
 
   const expenses = data.getExpenses()
 
-  const filtered = useMemo(() => {
-    if (filter === 'all') return expenses
-    if (filter === 'owe') return expenses.filter((e) => e.requested_user_id === user?.id && !e.paid_by_requested)
-    if (filter === 'owed') return expenses.filter((e) => e.created_by === user?.id && e.requested_user_id && !e.paid_by_requested)
-    if (filter === 'unpaid') return expenses.filter((e) => !e.paid_by_creator || (e.requested_user_id && !e.paid_by_requested))
-    if (filter === 'paid') return expenses.filter((e) => e.paid_by_creator && (!e.requested_user_id || e.paid_by_requested))
-    return expenses
-  }, [expenses, filter, user])
+  const visible = useMemo(() => {
+    let list = expenses
+    if (filter === 'mine') list = list.filter((e) => e.created_by === me?.id || e.requested_user_id === me?.id)
+    else if (filter === 'others') list = list.filter((e) => e.created_by !== me?.id && e.requested_user_id !== me?.id)
+    return list
+  }, [expenses, filter, me?.id])
 
   const byStep = useMemo(() => {
-    const map = new Map<ExpenseStep, Expense[]>()
+    const map = new Map<ExpenseStep, typeof expenses>()
     for (const s of STEPS) {
-      map.set(s, filtered.filter((e) => e.step === s).sort((a, b) => a.position - b.position))
+      map.set(s.id, visible.filter((e) => e.step === s.id).sort((a, b) => a.position - b.position))
     }
     return map
-  }, [filtered])
+  }, [visible])
 
-  const openTotal = expenses.filter((e) => e.step !== 'hecho').length
+  const openCount = visible.filter((e) => e.step !== 'hecho').length
 
-  const handleCreated = (_expense: Expense) => {
-    setCreating(false)
-  }
-
-  const handleDetailClose = () => {
-    setDetailExpense(null)
-  }
-
-  const handleDeleted = () => {
-    setDetailExpense(null)
-  }
-
-  const handleMove = (id: string, step: ExpenseStep) => {
-    const targetList = byStep.get(step) || []
-    data.moveExpense(id, step, targetList.length)
+  const handleOpenNew = (step: ExpenseStep) => {
+    setDefaultStep(step)
+    setCreating(true)
   }
 
   if (!data.ready) return null
 
+  const scopes: Array<{ id: FilterType; label: string }> = [
+    { id: 'all', label: t('board.scopeAll') },
+    { id: 'mine', label: t('board.scopeMine') },
+    { id: 'others', label: t('board.scopeOthers') },
+  ]
+
   return (
-    <div className="h-full flex flex-col">
-      <div className="flex items-center justify-between px-4 md:px-6 py-3 border-b border-border-app">
-        <div>
-          <h1 className="text-lg font-semibold text-text-primary">{t('expenses.title')}</h1>
-          <p className="text-sm text-text-muted">
-            {t('expenses.subtitle')}
-            {openTotal > 0 && ` · ${openTotal} ${t('expenses.filterUnpaid').toLowerCase()}`}
-          </p>
-        </div>
-        <button
-          onClick={() => setCreating(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-brand text-brandfg hover:opacity-90 transition-opacity"
-        >
-          <Plus size={16} />
-          {t('expenses.form.createTitle')}
-        </button>
-      </div>
-
-      {/* Filtros */}
-      <div className="flex gap-1.5 px-4 md:px-6 py-2 border-b border-border-app overflow-x-auto">
-        {([
-          ['all', t('board.scopeAll')],
-          ['owe', t('expenses.filterOwe')],
-          ['owed', t('expenses.filterOwed')],
-          ['unpaid', t('expenses.filterUnpaid')],
-          ['paid', t('expenses.filterPaid')],
-        ] as const).map(([key, label]) => (
-          <button
-            key={key}
-            onClick={() => setFilter(key)}
-            className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
-              filter === key
-                ? 'bg-brand/15 text-brand'
-                : 'text-text-muted hover:bg-surface2 hover:text-text-secondary'
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {/* Columnas */}
-      <div className="flex-1 overflow-auto">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-0 lg:gap-0 p-4 md:p-6 h-full">
-          {STEPS.map((step) => {
-            const items = byStep.get(step) || []
-            const color = STEP_COLORS[step]
-            const c = colorOf(color)
+    <div className="pt-[52px] lg:pt-0">
+      {/* ============ SEGMENTED CONTROL MÓVIL ============ */}
+      <div className="lg:hidden fixed top-14 inset-x-0 z-30 border-b border-app px-4 py-2.5" style={{ backgroundColor: 'var(--bg)' }}>
+        <div role="tablist" aria-label={t('board.statesAria')} className="flex items-center gap-1 rounded-full bg-surface2 p-1"
+          onKeyDown={(e) => {
+            if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return
+            const b = (e.target as HTMLElement).closest<HTMLElement>('[data-seg]')
+            if (!b) return
+            e.preventDefault()
+            const tabsEl = Array.from((e.currentTarget as HTMLElement).querySelectorAll<HTMLElement>('[data-seg]'))
+            const i = tabsEl.indexOf(b)
+            const next = tabsEl[(i + (e.key === 'ArrowRight' ? 1 : tabsEl.length - 1)) % tabsEl.length]
+            setSeg(next.dataset.seg as ExpenseStep)
+            next.focus()
+          }}>
+          {STEPS.map((st) => {
+            const n = byStep.get(st.id)?.length ?? 0
+            const active = seg === st.id
             return (
-              <div key={step} className="flex flex-col min-h-0">
-                <div className="flex items-center gap-2 mb-3 px-1">
-                  <span
-                    className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                    style={{ backgroundColor: c.dot }}
-                  />
-                  <h2 className="text-sm font-semibold text-text-primary">
-                    {t(`expenseSteps.${step}`)}
-                  </h2>
-                  <span className="text-xs text-text-muted tabular-nums">{items.length}</span>
-                </div>
-                <div className="flex-1 overflow-y-auto space-y-2 pr-1 min-h-[100px]">
-                  {items.length === 0 ? (
-                    <p className="text-xs text-text-muted py-4 text-center">{t('board.emptyColumn')}</p>
-                  ) : (
-                    items.map((expense, i) => (
-                      <ExpenseCard
-                        key={expense.id}
-                        expense={expense}
-                        index={i}
-                        onOpen={(id) => setDetailExpense(items.find(e => e.id === id) || null)}
-                        onMove={handleMove}
-                      />
-                    ))
-                  )}
-                </div>
-              </div>
+              <button key={st.id} type="button" role="tab" data-seg={st.id} aria-selected={active}
+                aria-label={t('board.segAria', { column: t(`expenseSteps.${st.id}`), count: n })}
+                onClick={() => setSeg(st.id)}
+                className={`flex-1 min-w-0 flex items-center justify-center gap-1.5 rounded-full px-2 h-11 text-[13px] font-medium whitespace-nowrap ${
+                  active ? 'bg-surface shadow-soft' : 'text-muted'}`}>
+                <span className={`w-2 h-2 rounded-full shrink-0 ${colorOf(st.color).dot}`} aria-hidden="true" />
+                <span className="truncate">{t(`expenseSteps.${st.id}`)}</span>
+                <span className={`tnum text-[12px] ${active ? 'text-muted' : 'text-faint'}`}>{n}</span>
+              </button>
             )
           })}
         </div>
       </div>
 
+      <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 pt-5 lg:pt-7">
+        {/* Cabecera de vista */}
+        <div className="flex flex-wrap items-end justify-between gap-3 mb-5">
+          <div>
+            <h1 className="font-display font-bold text-2xl lg:text-[28px] tracking-tight">
+              {t('expenses.title')}
+            </h1>
+            <p className="text-sm text-muted mt-0.5">{t('expenses.subtitle')}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <p className="tnum text-sm text-muted">{t('board.openTasks', { count: openCount })}</p>
+          </div>
+        </div>
+
+        {/* Alcance: Todas / Mías / De otras */}
+        <div className="mb-5">
+          <div role="tablist" aria-label={t('board.scopeAria')} className="inline-flex items-center gap-1 rounded-full bg-surface2 p-1">
+            {scopes.map((s) => {
+              const active = filter === s.id
+              return (
+                <button key={s.id} type="button" role="tab" aria-selected={active}
+                  onClick={() => setFilter(s.id)}
+                  className={`rounded-full px-3.5 h-9 text-[13px] font-medium whitespace-nowrap transition-colors ${
+                    active ? 'bg-surface shadow-soft text-text' : 'text-muted hover:text-text'}`}>
+                  {s.label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Lista móvil (<lg): un solo estado */}
+        <div className="lg:hidden space-y-3 pb-4" aria-live="polite" aria-label={t('board.listAria')}>
+          {(byStep.get(seg) ?? []).map((exp, i) => (
+            <ExpenseCard key={exp.id} expense={exp} index={i}
+              onOpen={(id) => setDetailExpense({ id })} />
+          ))}
+          {(byStep.get(seg) ?? []).length === 0 && (
+            <p className="rounded-2xl border border-dashed border-app px-4 py-8 text-center text-[15px] text-muted">
+              {t('board.emptyState', { column: t(`expenseSteps.${seg}`) })}
+            </p>
+          )}
+        </div>
+
+        {/* Tablero escritorio (lg+): kanban 3 columnas */}
+        <div className="hidden lg:grid lg:grid-cols-3 lg:items-start gap-4" aria-live="polite">
+          {STEPS.map((st) => {
+            const list = byStep.get(st.id) ?? []
+            return (
+              <section key={st.id} data-col={st.id}
+                style={{ '--accent': STEP_ACCENT_RGB[st.color] ?? '148 163 184' } as React.CSSProperties}
+                className="flex flex-col" aria-label={t('board.columnAria', { column: t(`expenseSteps.${st.id}`) })}>
+                <header className="flex items-center gap-2 px-1 pb-3">
+                  <span className={`w-2.5 h-2.5 rounded-full ${colorOf(st.color).dot}`} aria-hidden="true" />
+                  <h2 className="font-display font-semibold text-sm">{t(`expenseSteps.${st.id}`)}</h2>
+                  <span className="tnum font-display text-xs text-faint" data-count>{list.length}</span>
+                  <button type="button" onClick={() => handleOpenNew(st.id)}
+                    className="ml-auto w-7 h-7 rounded-lg text-faint hover:bg-surface2 hover:text-muted flex items-center justify-center"
+                    aria-label={t('board.addToColumn', { column: t(`expenseSteps.${st.id}`) })}>
+                    <Plus className="w-4 h-4" aria-hidden="true" />
+                  </button>
+                </header>
+                <div data-list className="flex-1 space-y-3 overflow-y-auto nice-scroll max-h-[calc(100vh-215px)] pr-1.5 pb-1">
+                  {list.map((exp, i) => (
+                    <ExpenseCard key={exp.id} expense={exp} index={i}
+                      onOpen={(id) => setDetailExpense({ id })} />
+                  ))}
+                  {list.length === 0 && (
+                    <p data-empty className="rounded-2xl border border-dashed border-app px-4 py-6 text-center text-sm text-muted">
+                      {t('board.emptyColumn')}
+                    </p>
+                  )}
+                </div>
+              </section>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* FAB móvil: nuevo gasto */}
+      <button type="button" onClick={() => handleOpenNew(seg)}
+        className="lg:hidden fixed right-4 z-40 w-14 h-14 rounded-2xl bg-brand text-brandfg shadow-lg flex items-center justify-center hover:brightness-110"
+        style={{ bottom: 'calc(84px + env(safe-area-inset-bottom))' }}
+        aria-label={t('board.newTask')}>
+        <Plus className="w-6 h-6" aria-hidden="true" />
+      </button>
+
       {creating && (
-        <ExpenseModal
-          mode="create"
-          onClose={() => setCreating(false)}
-          onCreated={handleCreated}
-        />
+        <ExpenseModal mode="create" defaultStep={defaultStep} onClose={() => setCreating(false)}
+          onCreated={() => setCreating(false)} />
       )}
       {detailExpense && (
-        <ExpenseDetailModal
-          expense={detailExpense}
-          onClose={handleDetailClose}
-          onDeleted={handleDeleted}
-        />
+        <ExpenseDetailModal expense={data.getExpense(detailExpense.id) ?? data.getExpenses()[0]}
+          onClose={() => {
+            data.releaseExpenseDetail(detailExpense.id)
+            setDetailExpense(null)
+          }}
+          onDeleted={() => setDetailExpense(null)} />
       )}
     </div>
   )
