@@ -421,8 +421,13 @@ export function ExpenseModal(props: Props) {
               </ul>
             )}
             {participants.length > 0 && !sumOk && amountCents !== null && (
-              <p className="mt-1 text-[12px] text-rose-600 dark:text-rose-400">
-                {t('expenses.form.sharesSumHint', { sum: fmtMoney(sharesSum, i18n.language), total: fmtMoney(amountCents, i18n.language) })}
+              <p className={`mt-2 rounded-lg px-3 py-2 text-[13px] font-medium ${
+                sharesSum > amountCents ? 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300' : 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300'
+              }`}>
+                {sharesSum > amountCents
+                  ? t('expenses.form.sharesSumOver', { sum: fmtMoney(sharesSum, i18n.language), total: fmtMoney(amountCents, i18n.language), over: fmtMoney(sharesSum - amountCents, i18n.language) })
+                  : t('expenses.form.sharesSumUnder', { sum: fmtMoney(sharesSum, i18n.language), total: fmtMoney(amountCents, i18n.language), under: fmtMoney(amountCents - sharesSum, i18n.language) })
+                }
               </p>
             )}
           </div>
