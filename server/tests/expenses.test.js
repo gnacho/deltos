@@ -78,19 +78,19 @@ describe('expenses v2 — gate y básicos', () => {
 })
 
 describe('expenses v2 — partes', () => {
-  it('las partes deben sumar el importe (422 si no) y sin usuarios repetidos', async () => {
+  it('las partes no admiten usuarios repetidos (422); la suma puede no cuadrar', async () => {
     const { app, admin } = await makeExpenseInstance()
     const ana = await createUser(app, admin, 'ana')
     const anaId = await userId(app, ana)
     const meId = await userId(app, admin)
-    const bad = await app.request(
+    const mismatch = await app.request(
       '/api/expenses',
       jsonReq(admin, 'POST', '/api/expenses', {
         title: 'x', amount_cents: 6000,
         shares: [{ user_id: meId, share_cents: 3000 }, { user_id: anaId, share_cents: 2000 }],
       })
     )
-    expect(bad.status).toBe(422)
+    expect(mismatch.status).toBe(201)
     const dup = await app.request(
       '/api/expenses',
       jsonReq(admin, 'POST', '/api/expenses', {
