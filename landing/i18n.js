@@ -118,6 +118,7 @@ const I18N = {
     "install.r4": "Web Push requiere HTTPS (NPM/Caddy)",
     "about.eyebrow": "Acerca de mí",
     "about.title": "Detrás de Deltos hay una persona",
+    "about.kofi": "Apóyame en Ko-fi",
     "about.p1": "Deltos no nació para publicarse. Lo empecé para organizar un viaje con unos amigos, y se quedó en la cocina de casa: la compra, la reforma, lo del cole. Y lo he usado a diario durante mucho tiempo: es mi herramienta unificada para llevar la vida en un tablero. Lo desarrollo en mi tiempo libre, entre el trabajo y la familia.",
     "about.p2": "Con el tiempo, y de forma consecuente con los principios en los que creo, he decidido liberarlo y compartirlo con la comunidad. No hay ninguna empresa detrás, solo una persona que usa lo que publica. Será gratuito siempre, corre 24/7 en producción en mi casa y cada versión se prueba ahí primero. Si te sirve, me alegro. Si algo falla, quiero enterarme.",
     "footer.tagline": "Tareas de cada día, en un tablero compartido. En tu casa, sin nube.",
@@ -132,6 +133,7 @@ const I18N = {
     "footer.demo": "Prueba",
     "footer.readmeEs": "README en español",
     "footer.readmeEn": "README in English",
+    "footer.kofi": "Apóyame en Ko-fi",
     "footer.rights": "AGPL-3.0 · Hecho en casa, para la vida de casa."
   },
 
@@ -253,6 +255,7 @@ const I18N = {
     "install.r4": "Web Push needs HTTPS (NPM/Caddy)",
     "about.eyebrow": "About me",
     "about.title": "A person is behind Deltos",
+    "about.kofi": "Support me on Ko-fi",
     "about.p1": "Deltos was not built to be published. I started it to organize a trip with friends, and it ended up on the kitchen cork board at home: the groceries, the renovation, the school stuff. And I have used it every day for a long time: it is my unified tool to keep life on a board. I develop it in my spare time, between work and family.",
     "about.p2": "Over time, and consistently with the principles I believe in, I decided to make it free and share it with the community. There is no company behind it, just a person who uses what they publish. It will always be free, it runs 24/7 in production at my home, and every release is tested there first. If it helps you, I am glad. If something breaks, I want to know.",
     "footer.tagline": "Everyday tasks on a shared board. At home, no cloud.",
@@ -267,6 +270,7 @@ const I18N = {
     "footer.demo": "Try it",
     "footer.readmeEs": "README in Spanish",
     "footer.readmeEn": "README in English",
+    "footer.kofi": "Support me on Ko-fi",
     "footer.rights": "AGPL-3.0 · Made at home, for home life."
   }
 };

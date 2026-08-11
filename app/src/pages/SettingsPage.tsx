@@ -924,7 +924,7 @@ function AboutCard({ installState, install }: { installState?: string; install?:
   const tiles: { icon: typeof Github; label: string; href?: string }[] = [
     { icon: Github, label: t('settings.about.code'), href: REPO_URL },
     { icon: FileText, label: t('settings.about.changelog'), href: 'https://deltos.cloudless.club/' },
-    { icon: Heart, label: t('settings.about.kofi') },
+    { icon: Heart, label: t('settings.about.kofi'), href: 'https://ko-fi.com/gnacho' },
     { icon: ShieldCheck, label: t('settings.about.privacy'), href: 'https://cloudless.club/' },
   ];
   const tileCls =
