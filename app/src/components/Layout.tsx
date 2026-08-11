@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useEffect, useState } from 'react';
 import { NavLink, Link, Outlet, useLocation, useNavigate, useParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import {
@@ -330,6 +330,24 @@ export default function Layout() {
     }
   });
   const [boardOpen, setBoardOpen] = useState(false);
+
+  // Cada cambio de ruta resetea el scroll al principio (no hay ScrollRestoration).
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [location.pathname]);
+
+  /* Re-tap del tab activo (o logo): scroll suave arriba. */
+  const reduceMotion = () =>
+    typeof window !== 'undefined' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  const scrollTopIfActive = (to: string) => () => {
+    const active =
+      to === '/' ? location.pathname === '/' : location.pathname.startsWith(to);
+    if (active && window.scrollY > 0) {
+      window.scrollTo({ top: 0, behavior: reduceMotion() ? 'auto' : 'smooth' });
+    }
+  };
 
   const toggleCollapse = () => {
     setCollapsed((prev) => {
@@ -687,7 +705,7 @@ export default function Layout() {
         className="md:hidden fixed top-0 inset-x-0 h-14 bg-surface border-b border-app z-40 flex items-center gap-2 px-3"
         style={{ paddingTop: 'env(safe-area-inset-top)' }}
       >
-        <Link to="/" className="flex items-center gap-2 shrink-0" aria-label={t('nav.goTodo')}>
+        <Link to="/" className="flex items-center gap-2 shrink-0" aria-label={t('nav.goTodo')} onClick={scrollTopIfActive('/')}>
           <LogoMark size={28} />
           <span className="font-display font-bold text-base tracking-tight">
             {t('common.appName')}
@@ -723,6 +741,7 @@ export default function Layout() {
             end
             className={({ isActive }) => bnCls(isActive)}
             aria-label={t('nav.todo')}
+            onClick={scrollTopIfActive('/')}
           >
             <LayoutGrid className="w-5 h-5" aria-hidden="true" />
             <span className="text-[11px] font-medium">{t('nav.todo')}</span>
@@ -731,6 +750,7 @@ export default function Layout() {
             to="/projects"
             className={() => bnCls(isProjectsSection)}
             aria-label={t('nav.projects')}
+            onClick={scrollTopIfActive('/projects')}
           >
             <Folder className="w-5 h-5" aria-hidden="true" />
             <span className="text-[11px] font-medium">{t('nav.projects')}</span>
@@ -740,6 +760,7 @@ export default function Layout() {
               to="/expenses"
               className={({ isActive }) => bnCls(isActive)}
               aria-label={t('nav.expenses')}
+              onClick={scrollTopIfActive('/expenses')}
             >
               <Receipt className="w-5 h-5" aria-hidden="true" />
               <span className="text-[11px] font-medium">{t('nav.expenses')}</span>
@@ -749,6 +770,7 @@ export default function Layout() {
             to="/activity"
             className={({ isActive }) => bnCls(isActive)}
             aria-label={t('nav.activity')}
+            onClick={scrollTopIfActive('/activity')}
           >
             <Clock className="w-5 h-5" aria-hidden="true" />
             <span className="text-[11px] font-medium">{t('nav.activity')}</span>
@@ -757,6 +779,7 @@ export default function Layout() {
             to="/settings"
             className={({ isActive }) => bnCls(isActive)}
             aria-label={t('nav.settings')}
+            onClick={scrollTopIfActive('/settings')}
           >
             <Settings className="w-5 h-5" aria-hidden="true" />
             <span className="text-[11px] font-medium">{t('nav.settings')}</span>
