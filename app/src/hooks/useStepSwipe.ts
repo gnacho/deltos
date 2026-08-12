@@ -74,7 +74,10 @@ export function useStepSwipe<T extends string>(
       if (Math.abs(dx) < SWIPE_X || Math.abs(dx) < Math.abs(dy)) return;
       const i = steps.indexOf(seg);
       if (i === -1) return;
-      const next = dx < 0 ? steps[i - 1] : steps[i + 1];
+      /* El contenido acompaña al dedo: deslizar a la izquierda avanza a la
+         siguiente etapa (el track se mueve a la izquierda), a la derecha
+         retrocede. */
+      const next = dx < 0 ? steps[i + 1] : steps[i - 1];
       if (next) onStep(next);
     };
 

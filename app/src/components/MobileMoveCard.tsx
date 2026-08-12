@@ -173,6 +173,7 @@ export function MobileMoveCard({ id, current, steps, onMove, trackRef, children 
    * donde cae definitivamente) y se ejecuta el move; el contador de la pestaña
    * salta como feedback. */
   const flyTo = (step: string) => {
+    if (raf.current !== null) cancelAnimationFrame(raf.current);
     const c = clone.current;
     const col = document.querySelector<HTMLElement>(`[data-mobile-stage="${step}"]`);
     const tab = document.querySelector<HTMLElement>(`[data-seg="${step}"]`);
@@ -220,6 +221,7 @@ export function MobileMoveCard({ id, current, steps, onMove, trackRef, children 
 
   /** Vuelta elástica del clon al hueco de origen; el track regresa a la etapa. */
   const springBack = () => {
+    if (raf.current !== null) cancelAnimationFrame(raf.current);
     const c = clone.current;
     const o = origin.current;
     clearTarget();
