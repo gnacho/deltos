@@ -6,7 +6,7 @@
  * Actualización: el SW nuevo queda en waiting hasta que la UI manda SKIP_WAITING
  * (botón "Actualizar y recargar" en Ajustes → Acerca de) o se cierran las pestañas.
  */
-const VERSION = 'v2';
+const VERSION = 'v3';
 const STATIC_CACHE = `deltos-static-${VERSION}`;
 const PRECACHE = [
   '/manifest.webmanifest',
