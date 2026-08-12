@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Plus } from 'lucide-react';
+import { Plus, BarChart3 } from 'lucide-react';
 import type { ExpenseStep } from '@/data/types';
 import { useData } from '@/data/data-context';
 import { useSession } from '@/auth/session-context';
@@ -182,33 +182,23 @@ export default function ExpenseBoard() {
   ];
 
   return (
-    <div className="pt-[52px] lg:pt-0">
+    <div>
       <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 pt-5 lg:pt-7">
-        {/* Vista: Tablero | Resumen + Alcance + Nuevo gasto */}
+        {/* Botón "Resumen" (toggle): pulsado = vista resumen; sin pulsar = tablero */}
         <div className="mb-5 flex flex-wrap items-center gap-2">
-          <div
-            role="tablist"
-            aria-label={t('expenses.viewAria')}
-            className="inline-flex items-center gap-1 rounded-full bg-surface2 p-1"
+          <button
+            type="button"
+            aria-pressed={view === 'resumen'}
+            onClick={() => setView(view === 'resumen' ? 'tablero' : 'resumen')}
+            className={`inline-flex items-center gap-1.5 rounded-full px-4 h-9 text-[13px] font-medium transition-colors ${
+              view === 'resumen'
+                ? 'bg-brand/10 text-brand ring-1 ring-brand/40'
+                : 'bg-surface border border-app text-muted hover:bg-surface2 hover:text-text'
+            }`}
           >
-            {(['tablero', 'resumen'] as const).map((v) => {
-              const active = view === v;
-              return (
-                <button
-                  key={v}
-                  type="button"
-                  role="tab"
-                  aria-selected={active}
-                  onClick={() => setView(v)}
-                  className={`rounded-full px-3.5 h-9 text-[13px] font-medium whitespace-nowrap transition-colors ${
-                    active ? 'bg-surface shadow-soft text-text' : 'text-muted hover:text-text'
-                  }`}
-                >
-                  {t(v === 'tablero' ? 'expenses.board' : 'expenses.summary')}
-                </button>
-              );
-            })}
-          </div>
+            <BarChart3 className="w-4 h-4" aria-hidden="true" />
+            {t('expenses.summary')}
+          </button>
 
           {view === 'tablero' && (
             <div
@@ -253,7 +243,10 @@ export default function ExpenseBoard() {
           </div>
         ) : (
           <>
-            <BalanceStrip expenses={expenses} />
+            {/* BalanceStrip en desktop: arriba */}
+            <div className="hidden lg:block mb-5">
+              <BalanceStrip expenses={expenses} />
+            </div>
 
             {/* ============ SEGMENTED CONTROL MÓVIL: justo sobre las tareas ============ */}
             <div data-segbar className="lg:hidden mb-3">
@@ -311,8 +304,11 @@ export default function ExpenseBoard() {
               className="lg:hidden space-y-3 pb-4"
               aria-live="polite"
               aria-label={t('board.listAria')}
+              style={{ touchAction: 'pan-y' }}
               onTouchStart={swipe.onTouchStart}
+              onTouchMove={swipe.onTouchMove}
               onTouchEnd={swipe.onTouchEnd}
+              onTouchCancel={swipe.onTouchEnd}
             >
               {(byStep.get(seg) ?? []).map((exp, i) => (
                 <MobileMoveCard
@@ -334,6 +330,11 @@ export default function ExpenseBoard() {
                   {t('expenses.emptyState', { column: t(`expenseSteps.${seg}`) })}
                 </p>
               )}
+            </div>
+
+            {/* BalanceStrip en móvil: abajo de la lista */}
+            <div className="lg:hidden pb-2">
+              <BalanceStrip expenses={expenses} />
             </div>
 
             {/* Tablero escritorio (lg+): kanban 3 columnas con drag & drop */}

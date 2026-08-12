@@ -10,7 +10,7 @@ import { TaskCard, TaskCardMobile } from '@/components/TaskCard';
 import { MobileMoveCard } from '@/components/MobileMoveCard';
 import { useKanbanDnD } from '@/hooks/useKanbanDnD';
 import { useStepSwipe } from '@/hooks/useStepSwipe';
-import { Filters } from '@/components/Filters';
+import { Filters, FiltersToggleButton } from '@/components/Filters';
 import { emptyFilters, type FilterState } from '@/components/filters-state';
 import { COLUMNS } from '@/lib/constants';
 import { colorOf, COLUMN_ACCENT_RGB } from '@/lib/colors';
@@ -30,6 +30,10 @@ export default function BoardPage() {
   const [scope, setScope] = useState<'all' | 'mine' | 'others'>('all');
   const [seg, setSeg] = useState<ColumnId>('nuevo');
   const [projectActionsOpen, setProjectActionsOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+
+  const activeFilterCount =
+    filters.projects.size + filters.people.size + filters.priorities.size + filters.tags.size;
 
   const boardRef = useRef<HTMLDivElement>(null);
 
@@ -160,7 +164,7 @@ export default function BoardPage() {
   ];
 
   return (
-    <div className="pt-[52px] lg:pt-0">
+    <div>
       <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 pt-5 lg:pt-7">
         {!isTodo && project && canManage && (
           <div className="flex justify-end mb-3">
@@ -176,10 +180,15 @@ export default function BoardPage() {
           </div>
         )}
 
-        {isTodo && <Filters filters={filters} onChange={setFilters} />}
-
-        {/* Alcance: Todas / Mías / De otras + Nueva tarea */}
-        <div className="mb-5 flex flex-wrap items-center gap-2">
+        {/* Móvil: filtros (botón) + alcance en la misma horizontal */}
+        <div className="mb-4 flex items-center gap-2">
+          {isTodo && (
+            <FiltersToggleButton
+              activeCount={filtersOpen ? 0 : activeFilterCount}
+              open={filtersOpen}
+              onClick={() => setFiltersOpen((o) => !o)}
+            />
+          )}
           <div
             role="tablist"
             aria-label={t('board.scopeAria')}
@@ -213,6 +222,15 @@ export default function BoardPage() {
             {t('board.newTask')}
           </button>
         </div>
+
+        {isTodo && (
+          <Filters
+            filters={filters}
+            onChange={setFilters}
+            open={filtersOpen}
+            onToggleOpen={() => setFiltersOpen((o) => !o)}
+          />
+        )}
 
         {/* ============ SEGMENTED CONTROL MÓVIL: justo sobre las tareas ============ */}
         <div
@@ -273,8 +291,11 @@ export default function BoardPage() {
           className="lg:hidden space-y-3 pb-4"
           aria-live="polite"
           aria-label={t('board.listAria')}
+          style={{ touchAction: 'pan-y' }}
           onTouchStart={swipe.onTouchStart}
+          onTouchMove={swipe.onTouchMove}
           onTouchEnd={swipe.onTouchEnd}
+          onTouchCancel={swipe.onTouchEnd}
         >
           {(byColumn.get(seg) ?? []).map((tk, i) => (
             <MobileMoveCard

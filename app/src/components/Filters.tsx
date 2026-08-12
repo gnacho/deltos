@@ -14,6 +14,39 @@ const PR_ICON: Record<Priority, typeof ArrowUp> = {
   baja: ArrowDown,
 };
 
+/** Botón "Filtros" móvil reutilizable (icono + contador activos), para que el
+ *  padre lo ponga en la misma horizontal que el alcance. */
+export function FiltersToggleButton({
+  activeCount,
+  open,
+  onClick,
+}: {
+  activeCount: number;
+  open: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-expanded={open}
+      aria-controls="filters-panel"
+      onClick={onClick}
+      className={`lg:hidden inline-flex items-center gap-1.5 rounded-full border bg-surface px-2.5 py-2 shadow-soft ${
+        activeCount ? 'border-brand/50 text-brand' : 'border-app text-muted hover:bg-surface2'
+      }`}
+    >
+      <Funnel className="w-4 h-4" aria-hidden="true" />
+      {activeCount > 0 && (
+        <span className="tnum text-[11px] font-semibold">{activeCount}</span>
+      )}
+      <ChevronDown
+        className={`w-3.5 h-3.5 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+        aria-hidden="true"
+      />
+    </button>
+  );
+}
+
 function Chip({
   active,
   color,
@@ -47,15 +80,21 @@ export function Filters({
   onChange,
   mineOnly,
   onToggleMine,
+  open: openControlled,
+  onToggleOpen,
 }: {
   filters: FilterState;
   onChange: (f: FilterState) => void;
   mineOnly?: boolean;
   onToggleMine?: () => void;
+  open?: boolean;
+  onToggleOpen?: () => void;
 }) {
   const { t } = useTranslation();
   const data = useData();
-  const [open, setOpen] = useState(false);
+  const [openInternal, setOpenInternal] = useState(false);
+  const open = openControlled ?? openInternal;
+  const toggleOpen = onToggleOpen ?? (() => setOpenInternal((o) => !o));
 
   const projects = data.getProjects();
   const users = data.getUsers();
@@ -160,17 +199,17 @@ export function Filters({
 
   return (
     <div className="mb-6">
-      {/* Botón "Filtros" solo en móvil (<lg): icono + contador, sin texto */}
-      <div className="lg:hidden mb-3 flex items-center gap-2 flex-wrap">
+      {/* Botón "Filtros" solo en móvil (<lg): icono + contador, sin texto.
+          Si el padre controla open/onToggleOpen, el botón lo pone el padre
+          (misma horizontal que el alcance). */}
+      {openControlled === undefined && (
         <button
           type="button"
           aria-expanded={open}
           aria-controls="filters-panel"
-          onClick={() => setOpen((o) => !o)}
-          className={`inline-flex items-center gap-1.5 rounded-full border bg-surface px-2.5 py-2 shadow-soft ${
-            activeCount
-              ? 'border-brand/50 text-brand'
-              : 'border-app text-muted hover:bg-surface2'
+          onClick={toggleOpen}
+          className={`lg:hidden inline-flex items-center gap-1.5 rounded-full border bg-surface px-2.5 py-2 shadow-soft ${
+            activeCount ? 'border-brand/50 text-brand' : 'border-app text-muted hover:bg-surface2'
           }`}
         >
           <Funnel className="w-4 h-4" aria-hidden="true" />
@@ -182,19 +221,7 @@ export function Filters({
             aria-hidden="true"
           />
         </button>
-        {mineOnly !== undefined && onToggleMine && (
-          <button
-            type="button"
-            onClick={onToggleMine}
-            aria-pressed={mineOnly}
-            className={`rounded-full border px-3 h-9 text-[13px] font-medium transition-colors ${
-              mineOnly ? 'border-brand/50 bg-brand/10 text-brand' : 'border-app bg-surface text-muted hover:bg-surface2'
-            }`}
-          >
-            {labelMine}
-          </button>
-        )}
-      </div>
+      )}
 
       <div
         id="filters-panel"

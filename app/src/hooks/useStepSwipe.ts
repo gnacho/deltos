@@ -24,6 +24,15 @@ export function useStepSwipe<T extends string>(
     start.current = { x: t.clientX, y: t.clientY, t: performance.now() };
   };
 
+  const onTouchMove = (e: TouchEvent) => {
+    if (!start.current || e.touches.length === 0) return;
+    const t = e.touches[0];
+    const dx = t.clientX - start.current.x;
+    const dy = t.clientY - start.current.y;
+    /* Gesto claramente vertical (scroll): cancela el posible swipe */
+    if (Math.abs(dy) > Math.abs(dx) * SWIPE_RATIO) start.current = null;
+  };
+
   const onTouchEnd = (e: TouchEvent) => {
     if (!start.current) return;
     const { x, y, t } = start.current;
@@ -40,5 +49,5 @@ export function useStepSwipe<T extends string>(
     if (next) onStep(next);
   };
 
-  return { onTouchStart, onTouchEnd };
+  return { onTouchStart, onTouchMove, onTouchEnd };
 }
