@@ -50,6 +50,29 @@ export default function ExpenseBoard() {
     el.style.transform = `translate3d(-${Math.max(0, segIdx) * 100}%, 0, 0)`;
   }, [segIdx]);
 
+  /* 🔥 RED GLOBAL: cualquier clon/fantasma/velo huérfano del drag móvil se
+     elimina periódicamente. No depende de los flujos internos del componente:
+     garantiza que una tarjeta superpuesta NUNCA quede en pantalla. */
+  useEffect(() => {
+    const sweep = () => {
+      if (document.body.classList.contains('mm-dragging')) return;
+      document
+        .querySelectorAll('.mm-clone:not([data-flying]), .mm-ghost, .mm-dim')
+        .forEach((el) => el.remove());
+    };
+    const iv = window.setInterval(sweep, 1500);
+    const onVisibility = () => {
+      if (document.hidden) sweep();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('blur', onVisibility);
+    return () => {
+      window.clearInterval(iv);
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('blur', onVisibility);
+    };
+  }, []);
+
   const expenses = data.getExpenses();
 
   const visible = useMemo(() => {

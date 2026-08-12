@@ -258,6 +258,9 @@ export function MobileMoveCard({ id, current, steps, onMove, trackRef, children 
     const gr = target.getBoundingClientRect();
     const dx = gr.left + gr.width / 2 - cr.width / 2;
     const dy = gr.top; /* el borde superior del clon cae en el borde del ghost */
+    /* Marcar el clon "en vuelo": el barrendero global de las páginas NO lo
+       tocará hasta que finish/cleanup lo elimine. */
+    c.dataset.flying = '1';
     c.style.transition = 'transform 0.38s cubic-bezier(0.3, 0.7, 0.3, 1), opacity 0.38s ease';
     setCloneTransform(dx, dy, 'rotate(8deg) scale(0.1)');
     c.style.opacity = '0.15';
@@ -289,6 +292,7 @@ export function MobileMoveCard({ id, current, steps, onMove, trackRef, children 
       return;
     }
     resolved.current = true;
+    c.dataset.flying = '1';
     c.style.transition = 'transform 0.32s cubic-bezier(0.34, 1.56, 0.64, 1)';
     setCloneTransform(o.left, o.top, 'rotate(0deg) scale(1)');
     c.addEventListener('transitionend', cleanup, { once: true });
