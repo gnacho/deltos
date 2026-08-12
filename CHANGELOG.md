@@ -14,6 +14,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   secrets (SESSION_SECRET outside the DB), rate limits and body caps, and
   latent bugs. Each finding becomes its own issue/PR.
 
+## [2.6.2] - 2026-08-12
+
+### Added
+
+- **Touch drag and swipe on the mobile board (#136, #137).** On the board and
+  the expense board you can now hold a card and drag it to another stage, or
+  swipe a whole stage to move between columns. Dragging past an edge advances
+  to the next stage live, so you can skip several columns without lifting your
+  finger. Cards are always mounted on a horizontal track, so nothing
+  re-renders mid-drag and the transition animates like switching desktop
+  spaces. The release also brings icon-only task tabs on small screens and a
+  compact board header on mobile.
+
+### Fixed
+
+- **Stuck floating card on repeated drags.** Grabbing the same card twice in a
+  row could leave a phantom clone pinned to the screen. The cleanup now
+  re-attaches its listeners and each gesture removes its own clone, with a
+  watchdog and a global sweep as safety nets.
+
+### Thanks
+
+- **To whoever tested this on a real phone.** Touch gestures do not behave like
+  the synthetic tests: the browser cancels streams, the PWA does not fire what
+  Chrome does, and a passing Playwright run means nothing until the same finger
+  tries it on the device. This feature cost a full day of on-device debugging,
+  instrumented overlays on the phone screen, and patient feedback loop. It is
+  the most expensive feature in the project so far, and it would not have
+  shipped without it.
+
 ## [2.4.0] - 2026-08-09
 
 ### Added
