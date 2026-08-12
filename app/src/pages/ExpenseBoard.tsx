@@ -10,6 +10,7 @@ import { ExpenseModal } from '@/components/ExpenseModal';
 import { BalanceStrip, ExpenseSummary } from '@/components/ExpenseSummary';
 import { MobileMoveCard } from '@/components/MobileMoveCard';
 import { useKanbanDnD } from '@/hooks/useKanbanDnD';
+import { useStepSwipe } from '@/hooks/useStepSwipe';
 import { colorOf } from '@/lib/colors';
 import { announce } from '@/lib/announce';
 
@@ -136,6 +137,12 @@ export default function ExpenseBoard() {
     })();
   };
 
+  const swipe = useStepSwipe<ExpenseStep>(
+    STEPS.map((st) => st.id),
+    seg,
+    setSeg,
+  );
+
   if (!data.ready) {
     if (data.bootstrapError) {
       return (
@@ -176,61 +183,6 @@ export default function ExpenseBoard() {
 
   return (
     <div className="pt-[52px] lg:pt-0">
-      {/* ============ SEGMENTED CONTROL MÓVIL ============ */}
-      <div
-        data-segbar
-        className="lg:hidden fixed top-14 inset-x-0 z-30 border-b border-app px-4 py-2.5"
-        style={{ backgroundColor: 'var(--bg)' }}
-      >
-        <div
-          role="tablist"
-          aria-label={t('board.statesAria')}
-          className="flex items-center gap-1 rounded-full bg-surface2 p-1"
-          onKeyDown={(e) => {
-            if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
-            const b = (e.target as HTMLElement).closest<HTMLElement>('[data-seg]');
-            if (!b) return;
-            e.preventDefault();
-            const tabsEl = Array.from(
-              (e.currentTarget as HTMLElement).querySelectorAll<HTMLElement>('[data-seg]'),
-            );
-            const i = tabsEl.indexOf(b);
-            const next =
-              tabsEl[(i + (e.key === 'ArrowRight' ? 1 : tabsEl.length - 1)) % tabsEl.length];
-            setSeg(next.dataset.seg as ExpenseStep);
-            next.focus();
-          }}
-        >
-          {STEPS.map((st) => {
-            const n = byStep.get(st.id)?.length ?? 0;
-            const active = seg === st.id;
-            return (
-              <button
-                key={st.id}
-                type="button"
-                role="tab"
-                data-seg={st.id}
-                aria-selected={active}
-                aria-label={t('board.segAria', { column: t(`expenseSteps.${st.id}`), count: n })}
-                onClick={() => setSeg(st.id)}
-                className={`flex-1 min-w-0 flex items-center justify-center gap-1.5 rounded-full px-2 h-11 text-[13px] font-medium whitespace-nowrap ${
-                  active ? 'bg-surface shadow-soft' : 'text-muted'
-                }`}
-              >
-                <span
-                  className={`w-2 h-2 rounded-full shrink-0 ${colorOf(st.color).dot}`}
-                  aria-hidden="true"
-                />
-                <span className="truncate">{t(`expenseSteps.${st.id}`)}</span>
-                <span className={`tnum text-[12px] ${active ? 'text-muted' : 'text-faint'}`}>
-                  {n}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
       <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 pt-5 lg:pt-7">
         {/* Vista: Tablero | Resumen + Alcance + Nuevo gasto */}
         <div className="mb-5 flex flex-wrap items-center gap-2">
@@ -303,11 +255,64 @@ export default function ExpenseBoard() {
           <>
             <BalanceStrip expenses={expenses} />
 
+            {/* ============ SEGMENTED CONTROL MÓVIL: justo sobre las tareas ============ */}
+            <div data-segbar className="lg:hidden mb-3">
+              <div
+                role="tablist"
+                aria-label={t('board.statesAria')}
+                className="flex items-center gap-1 rounded-full bg-surface2 p-1"
+                onKeyDown={(e) => {
+                  if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+                  const b = (e.target as HTMLElement).closest<HTMLElement>('[data-seg]');
+                  if (!b) return;
+                  e.preventDefault();
+                  const tabsEl = Array.from(
+                    (e.currentTarget as HTMLElement).querySelectorAll<HTMLElement>('[data-seg]'),
+                  );
+                  const i = tabsEl.indexOf(b);
+                  const next =
+                    tabsEl[(i + (e.key === 'ArrowRight' ? 1 : tabsEl.length - 1)) % tabsEl.length];
+                  setSeg(next.dataset.seg as ExpenseStep);
+                  next.focus();
+                }}
+              >
+                {STEPS.map((st) => {
+                  const n = byStep.get(st.id)?.length ?? 0;
+                  const active = seg === st.id;
+                  return (
+                    <button
+                      key={st.id}
+                      type="button"
+                      role="tab"
+                      data-seg={st.id}
+                      aria-selected={active}
+                      aria-label={t('board.segAria', { column: t(`expenseSteps.${st.id}`), count: n })}
+                      onClick={() => setSeg(st.id)}
+                      className={`flex-1 min-w-0 flex items-center justify-center gap-1.5 rounded-full px-2 h-11 text-[13px] font-medium whitespace-nowrap ${
+                        active ? 'bg-surface shadow-soft' : 'text-muted'
+                      }`}
+                    >
+                      <span
+                        className={`w-2 h-2 rounded-full shrink-0 ${colorOf(st.color).dot}`}
+                        aria-hidden="true"
+                      />
+                      <span className="truncate">{t(`expenseSteps.${st.id}`)}</span>
+                      <span className={`tnum text-[12px] ${active ? 'text-muted' : 'text-faint'}`}>
+                        {n}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             {/* Lista móvil (<lg): un solo estado */}
             <div
               className="lg:hidden space-y-3 pb-4"
               aria-live="polite"
               aria-label={t('board.listAria')}
+              onTouchStart={swipe.onTouchStart}
+              onTouchEnd={swipe.onTouchEnd}
             >
               {(byStep.get(seg) ?? []).map((exp, i) => (
                 <MobileMoveCard

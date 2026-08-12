@@ -271,6 +271,21 @@ export function MobileMoveCard({ id, current, steps, onMove, children }: Props) 
         flyTo(tab, tab.dataset.seg);
         return;
       }
+      /* Soltar junto al borde lateral → etapa vecina (izquierda: anterior, derecha: siguiente) */
+      const EDGE = 48;
+      const idx = steps.indexOf(current);
+      let side: string | null = null;
+      if (t.clientX <= EDGE && idx > 0) side = steps[idx - 1];
+      else if (t.clientX >= window.innerWidth - EDGE && idx < steps.length - 1)
+        side = steps[idx + 1];
+      if (side) {
+        const sideTab = document.querySelector<HTMLElement>(`[data-seg="${side}"]`);
+        if (sideTab) {
+          dbg(`drop en lateral ${t.clientX >= window.innerWidth - EDGE ? 'derecha' : 'izquierda'} → ${side}`);
+          flyTo(sideTab, side);
+          return;
+        }
+      }
       /* Flick hacia arriba → siguiente etapa (las etapas viven arriba) */
       if (last.current.vy < FLICK_VY && dy < FLICK_DY) {
         const next = steps[steps.indexOf(current) + 1];
