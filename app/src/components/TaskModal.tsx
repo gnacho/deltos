@@ -148,8 +148,8 @@ export function TaskModal({
                       : 'border-transparent text-muted hover:text-[var(--text)]'
                   }`}
                 >
-                  <Icon className="w-3.5 h-3.5 lg:w-4 lg:h-4" aria-hidden="true" />
-                  <span>{t(`task.tabs.${id}`)}</span>
+                  <Icon className="w-5 h-5 lg:w-4 lg:h-4" aria-hidden="true" />
+                  <span className="hidden lg:inline">{t(`task.tabs.${id}`)}</span>
                   {n > 0 && (
                     <span className="tnum px-1 lg:px-1.5 py-px rounded-full text-[12px] bg-surface2 text-muted">
                       {n}
