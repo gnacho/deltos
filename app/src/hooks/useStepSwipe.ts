@@ -14,8 +14,10 @@ const EXCLUDED =
   'nav, [data-segbar], [data-col], [role="dialog"], button, a, input, select, textarea';
 
 /**
- * Swipe horizontal sobre una lista móvil para cambiar de etapa (izquierda →
- * siguiente, derecha → anterior).
+ * Swipe horizontal sobre una lista móvil para cambiar de etapa (derecha →
+ * siguiente, izquierda → anterior): la etapa activa es la de la izquierda del
+ * flujo, así que deslizar hacia la derecha avanza (como empujar el contenido
+ * hacia la siguiente etapa).
  *
  * Escucha en `window` en fase CAPTURE con `passive:false`. En cuanto el gesto
  * que empieza fuera de las zonas interactivas es claramente horizontal, llama
@@ -72,7 +74,7 @@ export function useStepSwipe<T extends string>(
       if (Math.abs(dx) < SWIPE_X || Math.abs(dx) < Math.abs(dy)) return;
       const i = steps.indexOf(seg);
       if (i === -1) return;
-      const next = dx < 0 ? steps[i + 1] : steps[i - 1];
+      const next = dx < 0 ? steps[i - 1] : steps[i + 1];
       if (next) onStep(next);
     };
 
