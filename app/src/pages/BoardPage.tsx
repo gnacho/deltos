@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, Navigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { Plus, Settings2 } from 'lucide-react';
@@ -36,6 +36,16 @@ export default function BoardPage() {
     filters.projects.size + filters.people.size + filters.priorities.size + filters.tags.size;
 
   const boardRef = useRef<HTMLDivElement>(null);
+  const mobileTrackRef = useRef<HTMLDivElement>(null);
+
+  /* Posiciona el track móvil sobre la etapa activa con transición (slide). */
+  const segIdx = COLUMNS.findIndex((c) => c.id === seg);
+  useEffect(() => {
+    const el = mobileTrackRef.current;
+    if (!el) return;
+    el.style.transition = 'transform 0.32s cubic-bezier(0.3, 0.7, 0.3, 1)';
+    el.style.transform = `translate3d(-${Math.max(0, segIdx) * 100}%, 0, 0)`;
+  }, [segIdx]);
 
   const tasks = data.getTasks();
   const project = isTodo ? undefined : data.getProject(view);
@@ -287,34 +297,37 @@ export default function BoardPage() {
           </div>
         </div>
 
-        {/* Lista móvil (<lg): un solo estado, tarjetas simplificadas */}
-        <div
-          className="lg:hidden space-y-3 pb-4"
-          aria-live="polite"
-          aria-label={t('board.listAria')}
-        >
-          {(byColumn.get(seg) ?? []).map((tk, i) => (
-            <MobileMoveCard
-              key={tk.id}
-              id={tk.id}
-              current={tk.column}
-              steps={COLUMNS.map((c) => c.id)}
-              onMove={doMoveMobile}
-              onPreviewStep={(step) => setSeg(step as ColumnId)}
-            >
-              <TaskCardMobile
-                task={tk}
-                project={data.getProject(tk.project_id)}
-                index={i}
-                onOpen={(id) => openTask(id)}
-              />
-            </MobileMoveCard>
-          ))}
-          {(byColumn.get(seg) ?? []).length === 0 && (
-            <p className="rounded-2xl border border-dashed border-app px-4 py-8 text-center text-[15px] text-muted">
-              {t('board.emptyState', { column: t(`columns.${seg}`) })}
-            </p>
-          )}
+        {/* Track móvil (<lg): las 3 etapas montadas una al lado de otra; el
+            drag de tarjeta lo desplaza con transform (efecto escritorio). */}
+        <div className="lg:hidden overflow-hidden" aria-live="polite" aria-label={t('board.listAria')}>
+          <div ref={mobileTrackRef} className="flex items-start will-change-transform">
+            {COLUMNS.map((c) => (
+              <div key={c.id} className="w-full shrink-0 space-y-3 pb-4" data-mobile-stage={c.id}>
+                {(byColumn.get(c.id) ?? []).map((tk, i) => (
+                  <MobileMoveCard
+                    key={tk.id}
+                    id={tk.id}
+                    current={tk.column}
+                    steps={COLUMNS.map((col) => col.id)}
+                    onMove={doMoveMobile}
+                    trackRef={mobileTrackRef}
+                  >
+                    <TaskCardMobile
+                      task={tk}
+                      project={data.getProject(tk.project_id)}
+                      index={i}
+                      onOpen={(id) => openTask(id)}
+                    />
+                  </MobileMoveCard>
+                ))}
+                {(byColumn.get(c.id) ?? []).length === 0 && (
+                  <p className="rounded-2xl border border-dashed border-app px-4 py-8 text-center text-[15px] text-muted">
+                    {t('board.emptyState', { column: t(`columns.${c.id}`) })}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* Tablero escritorio (lg+): kanban 3 columnas con drag & drop */}

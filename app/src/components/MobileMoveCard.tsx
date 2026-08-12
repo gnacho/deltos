@@ -1,18 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
+import type { ReactNode, RefObject } from 'react';
 
 const HOLD_MS = 350;
 const SCROLL_SLOP = 12; /* px de movimiento antes del hold → es un scroll */
 const FLICK_VY = -0.55; /* px/ms hacia arriba para contar como lanzamiento */
 const FLICK_DY = -48;
 const CLEANUP_GUARD_MS = 500; /* red de seguridad: nada queda pegado */
-const EDGE = 48; /* px del borde lateral para cambiar de etapa durante el arrastre */
+const EDGE = 48; /* px del borde: cruzar = snap a la etapa vecina */
+const PEEK_ZONE = 72; /* px del borde donde el track empieza a acompañar al dedo */
+const PEEK_MAX = 0.12; /* fracción del ancho que se desplaza el track antes del snap */
 const EDGE_STEP_MS = 420; /* repetición mientras el dedo se mantiene en el borde */
+const SNAP_MS = 300; /* duración del slide entre etapas */
 
 const reducedMotionMQ = window.matchMedia('(prefers-reduced-motion: reduce)');
 
-/* Diagnóstico en pantalla: localStorage.setItem('dnd_debug','1') y recargar.
-   Muestra cada paso del gesto para localizar dónde se rompe en dispositivo real. */
+/* Diagnóstico en pantalla: localStorage.setItem('dnd_debug','1') y recargar. */
 const DBG = (() => {
   try {
     return localStorage.getItem('dnd_debug') === '1';
@@ -41,28 +43,25 @@ interface Props {
   /** Etapas en orden; el flick hacia arriba avanza a la siguiente. */
   steps: string[];
   onMove: (id: string, step: string) => void;
-  /** Cambia la vista de etapa EN VIVO durante el arrastre (la etapa entera
-   * hace swipe mientras la tarjeta sigue al dedo). Si no se pasa, la etapa
-   * destino solo se ilumina en la barra (mm-target). */
-  onPreviewStep?: (step: string) => void;
+  /** Track horizontal que contiene TODAS las etapas (una por cada w-full). El
+   * drag lo desplaza con transform (efecto "cambiar de escritorio"): al llegar
+   * al borde el track acompaña al dedo (peek) y hace snap a la etapa vecina;
+   * si el dedo se mantiene en el borde, sigue avanzando. */
+  trackRef?: RefObject<HTMLDivElement | null>;
   children: ReactNode;
 }
 
 /**
  * Movimiento móvil de tarjetas: mantener pulsado crea un CLON fijo a nivel de
  * body que sigue al dedo por encima del velo y de la barra de etapas. Mientras
- * se arrastra, llegar al borde lateral cambia la etapa de destino EN VIVO
- * (onPreviewStep → la vista hace swipe) y, si el dedo se mantiene en el borde,
- * sigue avanzando cada EDGE_STEP_MS — así se pueden saltar varias etapas de un
- * tirón. Al soltar, el clon vuela hasta la pestaña de la etapa destino y la
- * tarjeta se mueve (onMove); soltar sin destino lo devuelve elástico.
- *
- * El teardown del efecto es NO destructivo si el drag está activo: al cambiar
- * la etapa en vivo la tarjeta original se desmonta (la vista re-renderiza),
- * pero el clon y los listeners de `document` sobreviven y se limpian en el
- * touchend final — así el gesto no muere al hacer swipe de la etapa.
+ * se arrastra, el track de etapas se desplaza siguiendo al dedo cerca del
+ * borde (peek) y hace snap con transición al cruzar el borde — efecto de
+ * "cambiar de escritorio". Mantener el dedo en el borde avanza etapa a etapa
+ * (EDGE_STEP_MS), saltando varias de un tirón. Al soltar, el clon vuela a la
+ * etapa destino y se hace onMove; sin destino, vuelve elástico y el track
+ * regresa a la etapa original.
  */
-export function MobileMoveCard({ id, current, steps, onMove, onPreviewStep, children }: Props) {
+export function MobileMoveCard({ id, current, steps, onMove, trackRef, children }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const timer = useRef<number | null>(null);
   const guard = useRef<number | null>(null);
@@ -74,17 +73,14 @@ export function MobileMoveCard({ id, current, steps, onMove, onPreviewStep, chil
   const grab = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const justDragged = useRef(false);
   const raf = useRef<number | null>(null);
-  /* Etapa "previsualizada" durante el arrastre: empieza en la actual y avanza
-     hacia el borde; al soltar es el destino real del move. */
   const preview = useRef<string | null>(null);
   const edgeDir = useRef<0 | -1 | 1>(0);
   const edgeTimer = useRef<number | null>(null);
-  /* Handlers de document, guardados para poder quitarlos desde cleanup aunque
-     el componente ya se haya desmontado (cambio de etapa en vivo). */
   const handlers = useRef<{
     move: (e: TouchEvent) => void;
     end: (e: TouchEvent) => void;
   } | null>(null);
+  const committing = useRef(false);
   const [dim, setDim] = useState(false);
 
   const cardEl = () => wrapRef.current?.firstElementChild as HTMLElement | null;
@@ -98,6 +94,32 @@ export function MobileMoveCard({ id, current, steps, onMove, onPreviewStep, chil
   const tabUnder = (x: number, y: number): HTMLElement | null => {
     const el = document.elementFromPoint(x, y);
     return el?.closest<HTMLElement>('[data-seg]') ?? null;
+  };
+
+  /** Posición base del track (en %) para una etapa dada. */
+  const trackBase = (step: string) => {
+    const i = steps.indexOf(step);
+    return `${Math.max(0, i) * 100}%`;
+  };
+
+  const trackEl = () => trackRef?.current ?? null;
+
+  /** Desplaza el track sin transición (sigue al dedo). */
+  const trackFollow = (px: number) => {
+    const t = trackEl();
+    if (!t) return;
+    t.style.transition = 'none';
+    t.style.transform = `translate3d(calc(-${trackBase(preview.current ?? current)} + ${px}px), 0, 0)`;
+  };
+
+  /** Snap del track a una etapa con transición (slide). */
+  const trackSnap = (step: string) => {
+    const t = trackEl();
+    if (!t) return;
+    t.style.transition = reducedMotionMQ.matches
+      ? 'none'
+      : `transform ${SNAP_MS}ms cubic-bezier(0.3, 0.7, 0.3, 1)`;
+    t.style.transform = `translate3d(-${trackBase(step)}, 0, 0)`;
   };
 
   /** Limpieza total e idempotente; guard la fuerza aunque falle un transitionend. */
@@ -117,6 +139,7 @@ export function MobileMoveCard({ id, current, steps, onMove, onPreviewStep, chil
     document.body.classList.remove('mm-dragging');
     setDim(false);
     lifted.current = false;
+    committing.current = false;
     start.current = null;
     clone.current?.remove();
     clone.current = null;
@@ -149,6 +172,7 @@ export function MobileMoveCard({ id, current, steps, onMove, onPreviewStep, chil
   /** El clon vuela hasta la pestaña, el contador salta y se ejecuta el move. */
   const flyTo = (tab: HTMLElement, step: string) => {
     const c = clone.current;
+    committing.current = true;
     const commit = () => {
       navigator.vibrate?.(8);
       const count = tab.querySelector('.tnum');
@@ -184,10 +208,10 @@ export function MobileMoveCard({ id, current, steps, onMove, onPreviewStep, chil
       commit();
     };
     c.addEventListener('transitionend', finish, { once: true });
-    window.setTimeout(finish, CLEANUP_GUARD_MS); /* red: si transitionend no llega */
+    window.setTimeout(finish, CLEANUP_GUARD_MS);
   };
 
-  /** Vuelta elástica del clon al hueco de origen. */
+  /** Vuelta elástica del clon al hueco de origen; el track regresa a la etapa. */
   const springBack = () => {
     const c = clone.current;
     const o = origin.current;
@@ -195,6 +219,7 @@ export function MobileMoveCard({ id, current, steps, onMove, onPreviewStep, chil
     document.body.classList.remove('mm-dragging');
     setDim(false);
     lifted.current = false;
+    if (trackEl()) trackSnap(current);
     if (!c || !o || reducedMotionMQ.matches) {
       cleanup();
       return;
@@ -216,8 +241,8 @@ export function MobileMoveCard({ id, current, steps, onMove, onPreviewStep, chil
       }
     };
 
-    /* Avanza la etapa previsualizada una posición hacia el borde en el que
-       está el dedo; si no hay etapa en esa dirección, deja de repetir. */
+    /* Snap a la etapa vecina en la dirección del borde y, si el dedo sigue en
+       el borde, repite cada EDGE_STEP_MS (saltar varias etapas). */
     const stepEdge = () => {
       if (edgeDir.current === 0 || !preview.current) return;
       const i = steps.indexOf(preview.current);
@@ -232,7 +257,7 @@ export function MobileMoveCard({ id, current, steps, onMove, onPreviewStep, chil
       }
       preview.current = next;
       dbg(`edge → ${next}`);
-      onPreviewStep?.(next);
+      trackSnap(next);
       clearTarget();
       const tab = document.querySelector<HTMLElement>(`[data-seg="${next}"]`);
       if (tab) tab.classList.add('mm-target');
@@ -262,13 +287,12 @@ export function MobileMoveCard({ id, current, steps, onMove, onPreviewStep, chil
       const c = card.cloneNode(true) as HTMLElement;
       c.classList.remove('card');
       c.classList.add('mm-clone');
-      c.style.transition = 'none'; /* mata transiciones heredadas por cloneNode */
+      c.style.transition = 'none';
       c.style.animation = 'none';
       c.style.width = `${rect.width}px`;
       c.style.transform = `translate(${rect.left}px, ${rect.top}px) rotate(0deg) scale(1)`;
       document.body.appendChild(c);
       clone.current = c;
-      /* Pop de levantamiento con overshoot; después el clon sigue al dedo sin transición */
       requestAnimationFrame(() => {
         if (!clone.current) return;
         c.style.transition = 'transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1)';
@@ -295,9 +319,6 @@ export function MobileMoveCard({ id, current, steps, onMove, onPreviewStep, chil
       }, HOLD_MS);
     };
 
-    /* Se adjunta a `document` (no al wrap) para que sobreviva al re-render que
-       provoca onPreviewStep (la tarjeta original se desmonta, el clon y el
-       gesto siguen vivos). */
     const onTouchMove = (e: TouchEvent) => {
       if (!start.current) return;
       const t = e.touches[0];
@@ -305,15 +326,13 @@ export function MobileMoveCard({ id, current, steps, onMove, onPreviewStep, chil
       const dy = t.clientY - start.current.y;
       if (!lifted.current) {
         if (Math.hypot(dx, dy) > SCROLL_SLOP) {
-          dbg(
-            `hold cancelado por movimiento (${Math.round(dx)},${Math.round(dy)}) → scroll normal`,
-          );
-          cancelHold(); /* es un scroll normal */
+          dbg(`hold cancelado por movimiento (${Math.round(dx)},${Math.round(dy)}) → scroll`);
+          cancelHold();
           start.current = null;
         }
         return;
       }
-      e.preventDefault(); /* levantada: la página no scrollea */
+      e.preventDefault();
       dbg(
         `move (${Math.round(dx)},${Math.round(dy)}) cancelable=${e.cancelable} prevented=${e.defaultPrevented}`,
       );
@@ -325,11 +344,13 @@ export function MobileMoveCard({ id, current, steps, onMove, onPreviewStep, chil
         if (!origin.current) return;
         setCloneTransform(t.clientX - grab.current.x, t.clientY - grab.current.y);
 
-        /* Borde lateral → etapa en vivo, repetible mientras se mantiene ahí. */
+        const w = trackEl()?.clientWidth ?? 0;
         const inRight = t.clientX >= window.innerWidth - EDGE;
         const inLeft = t.clientX <= EDGE;
         const dir: 0 | -1 | 1 = inRight ? 1 : inLeft ? -1 : 0;
+
         if (dir !== 0 && dir !== edgeDir.current) {
+          /* Cruza el borde → snap a la etapa vecina y repetir mientras esté ahí. */
           edgeDir.current = dir;
           stepEdge();
           if (edgeTimer.current !== null) window.clearInterval(edgeTimer.current);
@@ -337,6 +358,16 @@ export function MobileMoveCard({ id, current, steps, onMove, onPreviewStep, chil
         } else if (dir === 0) {
           stopEdge();
           clearTarget();
+          /* Zona de acercamiento: el track acompaña al dedo (peek) antes del snap. */
+          if (w) {
+            const distRight = window.innerWidth - t.clientX;
+            const distLeft = t.clientX;
+            let peekPx = 0;
+            if (distRight < PEEK_ZONE) peekPx = -((PEEK_ZONE - distRight) / PEEK_ZONE) * w * PEEK_MAX;
+            else if (distLeft < PEEK_ZONE)
+              peekPx = ((PEEK_ZONE - distLeft) / PEEK_ZONE) * w * PEEK_MAX;
+            trackFollow(peekPx);
+          }
           const tab = tabUnder(t.clientX, t.clientY);
           if (tab && tab.dataset.seg !== current) tab.classList.add('mm-target');
         } else {
@@ -374,7 +405,6 @@ export function MobileMoveCard({ id, current, steps, onMove, onPreviewStep, chil
         flyTo(tab, tab.dataset.seg);
         return;
       }
-      /* Soltar junto al borde lateral → etapa vecina (izquierda: anterior, derecha: siguiente) */
       const idx = steps.indexOf(current);
       let side: string | null = null;
       if (t.clientX <= EDGE && idx > 0) side = steps[idx - 1];
@@ -388,7 +418,6 @@ export function MobileMoveCard({ id, current, steps, onMove, onPreviewStep, chil
           return;
         }
       }
-      /* Flick hacia arriba → siguiente etapa (las etapas viven arriba) */
       if (last.current.vy < FLICK_VY && dy < FLICK_DY) {
         const next = steps[steps.indexOf(current) + 1];
         const nextTab = next ? document.querySelector<HTMLElement>(`[data-seg="${next}"]`) : null;
@@ -408,11 +437,7 @@ export function MobileMoveCard({ id, current, steps, onMove, onPreviewStep, chil
 
     return () => {
       cancelHold();
-      /* Si el drag está activo (el componente se desmonta por el swipe de etapa
-         en vivo), NO hacemos limpieza: el clon y los listeners de document
-         sobreviven y el touchend final ejecutará cleanup(). Solo el listener de
-         touchstart del wrap (que ya no existe) se descarta con el desmontaje. */
-      if (!lifted.current) cleanup();
+      cleanup();
       wrap.removeEventListener('touchstart', onTouchStart);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -425,7 +450,6 @@ export function MobileMoveCard({ id, current, steps, onMove, onPreviewStep, chil
         ref={wrapRef}
         className="select-none [-webkit-touch-callout:none]"
         onContextMenu={(e) => {
-          /* El menú contextual nativo (~500ms) interrumpiría el arrastre */
           if (lifted.current || justDragged.current) e.preventDefault();
         }}
         onClickCapture={(e) => {

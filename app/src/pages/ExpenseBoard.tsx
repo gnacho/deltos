@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Plus, BarChart3 } from 'lucide-react';
 import type { ExpenseStep } from '@/data/types';
@@ -39,6 +39,16 @@ export default function ExpenseBoard() {
   const [view, setView] = useState<'tablero' | 'resumen'>('tablero');
 
   const boardRef = useRef<HTMLDivElement>(null);
+  const mobileTrackRef = useRef<HTMLDivElement>(null);
+
+  /* Posiciona el track móvil sobre la etapa activa con transición (slide). */
+  const segIdx = STEPS.findIndex((s) => s.id === seg);
+  useEffect(() => {
+    const el = mobileTrackRef.current;
+    if (!el) return;
+    el.style.transition = 'transform 0.32s cubic-bezier(0.3, 0.7, 0.3, 1)';
+    el.style.transform = `translate3d(-${Math.max(0, segIdx) * 100}%, 0, 0)`;
+  }, [segIdx]);
 
   const expenses = data.getExpenses();
 
@@ -297,33 +307,35 @@ export default function ExpenseBoard() {
               </div>
             </div>
 
-            {/* Lista móvil (<lg): un solo estado */}
-            <div
-              className="lg:hidden space-y-3 pb-4"
-              aria-live="polite"
-              aria-label={t('board.listAria')}
-            >
-              {(byStep.get(seg) ?? []).map((exp, i) => (
-                <MobileMoveCard
-                  key={exp.id}
-                  id={exp.id}
-                  current={exp.step}
-                  steps={STEPS.map((st) => st.id)}
-                  onMove={doMoveMobile}
-                  onPreviewStep={(step) => setSeg(step as ExpenseStep)}
-                >
-                  <ExpenseCardMobile
-                    expense={exp}
-                    index={i}
-                    onOpen={(id) => setDetailExpense({ id })}
-                  />
-                </MobileMoveCard>
-              ))}
-              {(byStep.get(seg) ?? []).length === 0 && (
-                <p className="rounded-2xl border border-dashed border-app px-4 py-8 text-center text-[15px] text-muted">
-                  {t('expenses.emptyState', { column: t(`expenseSteps.${seg}`) })}
-                </p>
-              )}
+            {/* Track móvil (<lg): las 3 etapas montadas una al lado de otra */}
+            <div className="lg:hidden overflow-hidden" aria-live="polite" aria-label={t('board.listAria')}>
+              <div ref={mobileTrackRef} className="flex items-start will-change-transform">
+                {STEPS.map((s) => (
+                  <div key={s.id} className="w-full shrink-0 space-y-3 pb-4" data-mobile-stage={s.id}>
+                    {(byStep.get(s.id) ?? []).map((exp, i) => (
+                      <MobileMoveCard
+                        key={exp.id}
+                        id={exp.id}
+                        current={exp.step}
+                        steps={STEPS.map((st) => st.id)}
+                        onMove={doMoveMobile}
+                        trackRef={mobileTrackRef}
+                      >
+                        <ExpenseCardMobile
+                          expense={exp}
+                          index={i}
+                          onOpen={(id) => setDetailExpense({ id })}
+                        />
+                      </MobileMoveCard>
+                    ))}
+                    {(byStep.get(s.id) ?? []).length === 0 && (
+                      <p className="rounded-2xl border border-dashed border-app px-4 py-8 text-center text-[15px] text-muted">
+                        {t('expenses.emptyState', { column: t(`expenseSteps.${s.id}`) })}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
 
             {/* BalanceStrip en móvil: abajo de la lista */}
