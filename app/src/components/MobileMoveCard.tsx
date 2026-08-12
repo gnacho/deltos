@@ -15,8 +15,14 @@ const DRAG_WATCHDOG_MS = 3000; /* red: si no hay actividad del gesto, cleanup */
 
 const reducedMotionMQ = window.matchMedia('(prefers-reduced-motion: reduce)');
 
-/* Diagnóstico en pantalla: TEMPORALMENTE siempre activo para la medición #137. */
-const DBG = true;
+/* Diagnóstico en pantalla: localStorage.setItem('dnd_debug','1') y recargar. */
+const DBG = (() => {
+  try {
+    return localStorage.getItem('dnd_debug') === '1';
+  } catch {
+    return false;
+  }
+})();
 function dbg(msg: string) {
   if (!DBG) return;
   let el = document.getElementById('dnd-debug');
