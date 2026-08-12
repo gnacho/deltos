@@ -37,7 +37,6 @@ export default function BoardPage() {
     filters.projects.size + filters.people.size + filters.priorities.size + filters.tags.size;
 
   const boardRef = useRef<HTMLDivElement>(null);
-  const listRef = useRef<HTMLDivElement>(null);
 
   const tasks = data.getTasks();
   const project = isTodo ? undefined : data.getProject(view);
@@ -110,7 +109,7 @@ export default function BoardPage() {
     void doMove(id, toCol as ColumnId, null);
   };
 
-  useStepSwipe<ColumnId>(listRef, COLUMNS.map((c) => c.id), seg, setSeg, data.ready);
+  useStepSwipe<ColumnId>(COLUMNS.map((c) => c.id), seg, setSeg, data.ready);
   useSwipeDiag();
 
   if (!data.ready) {
@@ -163,7 +162,7 @@ export default function BoardPage() {
   ];
 
   return (
-    <div>
+    <div className="touch-pan-y min-h-[calc(100dvh-152px)] lg:min-h-0 lg:touch-auto">
       <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 pt-5 lg:pt-7">
         {!isTodo && project && canManage && (
           <div className="flex justify-end mb-3">
@@ -287,7 +286,6 @@ export default function BoardPage() {
 
         {/* Lista móvil (<lg): un solo estado, tarjetas simplificadas */}
         <div
-          ref={listRef}
           className="lg:hidden space-y-3 pb-4"
           aria-live="polite"
           aria-label={t('board.listAria')}

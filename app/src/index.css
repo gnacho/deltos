@@ -403,6 +403,12 @@ html[data-density='compact'] .timeline > li {
 body.mm-dragging [data-segbar] {
   z-index: 70;
 }
+/* Durante el drag, el navegador no debe reclamar el gesto (el contenedor del
+   board lleva touch-action: pan-y para el swipe horizontal de etapa; al arrastrar
+   la tarjeta esto anularía el preventDefault del drag). */
+body.mm-dragging {
+  touch-action: none;
+}
 /* Etapa bajo el dedo: crece y se enciende con el acento */
 [data-seg].mm-target {
   transform: scale(1.12);

@@ -40,7 +40,6 @@ export default function ExpenseBoard() {
   const [view, setView] = useState<'tablero' | 'resumen'>('tablero');
 
   const boardRef = useRef<HTMLDivElement>(null);
-  const listRef = useRef<HTMLDivElement>(null);
 
   const expenses = data.getExpenses();
 
@@ -139,7 +138,7 @@ export default function ExpenseBoard() {
     })();
   };
 
-  useStepSwipe<ExpenseStep>(listRef, STEPS.map((st) => st.id), seg, setSeg, data.ready);
+  useStepSwipe<ExpenseStep>(STEPS.map((st) => st.id), seg, setSeg, data.ready);
   useSwipeDiag();
 
   if (!data.ready) {
@@ -181,7 +180,7 @@ export default function ExpenseBoard() {
   ];
 
   return (
-    <div>
+    <div className="touch-pan-y min-h-[calc(100dvh-152px)] lg:min-h-0 lg:touch-auto">
       <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 pt-5 lg:pt-7">
         {/* Botón "Resumen" (toggle): pulsado = vista resumen; sin pulsar = tablero */}
         <div className="mb-5 flex flex-wrap items-center gap-2">
@@ -300,7 +299,6 @@ export default function ExpenseBoard() {
 
             {/* Lista móvil (<lg): un solo estado */}
             <div
-              ref={listRef}
               className="lg:hidden space-y-3 pb-4"
               aria-live="polite"
               aria-label={t('board.listAria')}
