@@ -13,21 +13,6 @@ const SWIPE_MAX_MS = 450; /* un hold-drag (mover tarjeta, 350ms) dura más → n
 const EXCLUDED =
   'nav, [data-segbar], [data-col], [role="dialog"], button, a, input, select, textarea';
 
-/** Overlay de depuración temporal: muestra en pantalla qué ve el hook. */
-function debug(msg: string) {
-  let el = document.getElementById('swipe-debug');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'swipe-debug';
-    el.style.cssText =
-      'position:fixed;top:200px;left:8px;right:8px;z-index:2147483646;background:rgba(0,0,0,.85);' +
-      'color:#4ade80;font:11px/1.5 monospace;padding:6px 10px;border-radius:8px;' +
-      'pointer-events:none;white-space:pre-wrap';
-    document.body.appendChild(el);
-  }
-  el.textContent = msg;
-}
-
 /**
  * Swipe horizontal sobre una lista móvil para cambiar de etapa (izquierda →
  * siguiente, derecha → anterior).
@@ -49,26 +34,15 @@ export function useStepSwipe<T extends string>(
 
   useEffect(() => {
     if (!active) return;
-    debug('HOOK v6 ACTIVO (zona = contenido, no lista)');
 
     const excluded = (target: EventTarget | null) =>
       target instanceof Element && !!target.closest(EXCLUDED);
 
     const onStart = (e: TouchEvent) => {
-      const excl = excluded(e.target);
-      debug(
-        'touchstart target=' +
-          ((e.target as Element)?.tagName ?? '?') +
-          ' excl=' +
-          excl +
-          ' n=' +
-          e.touches.length,
-      );
-      if (excl) return;
+      if (excluded(e.target)) return;
       if (e.touches.length !== 1) return;
       const t = e.touches[0];
       start.current = { x: t.clientX, y: t.clientY, t: performance.now() };
-      debug('START (' + Math.round(t.clientX) + ',' + Math.round(t.clientY) + ')');
     };
 
     const onMove = (e: TouchEvent) => {
@@ -79,13 +53,9 @@ export function useStepSwipe<T extends string>(
       }
       const t = e.touches[0];
       const dx = t.clientX - start.current.x;
-      const dy = t.clientY - start.current.y;
       /* Nunca cancela por "vertical": la página debe poder scrollear. Solo
          reclama el gesto (preventDefault) cuando hay componente horizontal. */
-      if (Math.abs(dx) > SWIPE_SLOP) {
-        e.preventDefault();
-        debug('MOVE dx=' + Math.round(dx) + ' dy=' + Math.round(dy));
-      }
+      if (Math.abs(dx) > SWIPE_SLOP) e.preventDefault();
     };
 
     const onEnd = (e: TouchEvent) => {
@@ -97,22 +67,13 @@ export function useStepSwipe<T extends string>(
       const dx = ct.clientX - x;
       const dy = ct.clientY - y;
       const ms = performance.now() - t;
-      if (ms > SWIPE_MAX_MS) {
-        debug('END lento ms=' + Math.round(ms));
-        return;
-      }
+      if (ms > SWIPE_MAX_MS) return;
       /* La trayectoria TOTAL decide: dx dominante → swipe */
-      if (Math.abs(dx) < SWIPE_X || Math.abs(dx) < Math.abs(dy)) {
-        debug('END corto dx=' + Math.round(dx) + ' dy=' + Math.round(dy));
-        return;
-      }
+      if (Math.abs(dx) < SWIPE_X || Math.abs(dx) < Math.abs(dy)) return;
       const i = steps.indexOf(seg);
       if (i === -1) return;
       const next = dx < 0 ? steps[i + 1] : steps[i - 1];
-      if (next) {
-        debug('SWIPE→' + String(next));
-        onStep(next);
-      }
+      if (next) onStep(next);
     };
 
     window.addEventListener('touchstart', onStart, { passive: true, capture: true });

@@ -10,7 +10,6 @@ import { TaskCard, TaskCardMobile } from '@/components/TaskCard';
 import { MobileMoveCard } from '@/components/MobileMoveCard';
 import { useKanbanDnD } from '@/hooks/useKanbanDnD';
 import { useStepSwipe } from '@/hooks/useStepSwipe';
-import { useSwipeDiag } from '@/hooks/useSwipeDiag';
 import { Filters, FiltersToggleButton } from '@/components/Filters';
 import { emptyFilters, type FilterState } from '@/components/filters-state';
 import { COLUMNS } from '@/lib/constants';
@@ -110,7 +109,6 @@ export default function BoardPage() {
   };
 
   useStepSwipe<ColumnId>(COLUMNS.map((c) => c.id), seg, setSeg, data.ready);
-  useSwipeDiag();
 
   if (!data.ready) {
     if (data.bootstrapError) {
