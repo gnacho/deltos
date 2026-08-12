@@ -63,7 +63,7 @@ export function useStepSwipe<T extends string>(
 
     const onStart = (e: TouchEvent) => {
       const inL = inList(e.target);
-      debug('touchstart target=' + (e.target && e.target.tagName) + ' inList=' + inL + ' n=' + e.touches.length);
+      debug('touchstart target=' + ((e.target as Element)?.tagName ?? '?') + ' inList=' + inL + ' n=' + e.touches.length);
       if (!inL) return;
       if (e.touches.length !== 1) return;
       const t = e.touches[0];
