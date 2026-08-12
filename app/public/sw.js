@@ -6,7 +6,7 @@
  * Actualización: el SW nuevo queda en waiting hasta que la UI manda SKIP_WAITING
  * (botón "Actualizar y recargar" en Ajustes → Acerca de) o se cierran las pestañas.
  */
-const VERSION = 'v1';
+const VERSION = 'v2';
 const STATIC_CACHE = `deltos-static-${VERSION}`;
 const PRECACHE = [
   '/manifest.webmanifest',
@@ -15,6 +15,7 @@ const PRECACHE = [
 ];
 
 self.addEventListener('install', (event) => {
+  self.skipWaiting(); /* el SW nuevo toma control sin esperar (evita caché vieja) */
   event.waitUntil(caches.open(STATIC_CACHE).then((cache) => cache.addAll(PRECACHE)));
 });
 

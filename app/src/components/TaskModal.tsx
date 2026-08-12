@@ -142,14 +142,14 @@ export function TaskModal({
                   aria-controls={`panel-${id}`}
                   tabIndex={active ? 0 : -1}
                   onClick={() => setTab(id)}
-                  className={`relative flex items-center gap-1 lg:gap-1.5 px-2 lg:px-3 py-2.5 -mb-px border-b-2 text-[12px] lg:text-[13px] font-medium whitespace-nowrap shrink-0 ${
+                  className={`relative flex items-center gap-2 lg:gap-1.5 px-3 lg:px-3 py-3 lg:py-2.5 -mb-px border-b-2 text-[12px] lg:text-[13px] font-medium whitespace-nowrap shrink-0 ${
                     active
                       ? 'border-brand text-brand'
                       : 'border-transparent text-muted hover:text-[var(--text)]'
                   }`}
                 >
-                  <Icon className="w-3.5 h-3.5 lg:w-4 lg:h-4" aria-hidden="true" />
-                  <span>{t(`task.tabs.${id}`)}</span>
+                  <Icon className="w-6 h-6 lg:w-4 lg:h-4" aria-hidden="true" />
+                  <span className="hidden lg:inline">{t(`task.tabs.${id}`)}</span>
                   {n > 0 && (
                     <span className="tnum px-1 lg:px-1.5 py-px rounded-full text-[12px] bg-surface2 text-muted">
                       {n}
