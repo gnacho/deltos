@@ -415,6 +415,14 @@ export function MobileMoveCard({ id, current, steps, onMove, trackRef, children 
         dbg('SAFETY: clon huérfano previo → cleanup');
         cleanup();
       }
+      /* 🔥 Limpieza global INCONDICIONAL al iniciar gesto: eliminar CUALQUIER
+         clon/fantasma/velo residual del DOM (vengan de donde vengan). Un
+         touchstart nuevo nunca es parte de un drag en curso (el drag exige
+         hold de 350ms), así que cualquier .mm-clone presente es residuo. Es la
+         red que cierra el caso "coger la misma tarjeta varias veces seguidas":
+         el residuo del gesto anterior no queda ni 1.5s esperando al barrendero. */
+      document.querySelectorAll('.mm-clone, .mm-ghost, .mm-dim').forEach((el) => el.remove());
+      document.body.classList.remove('mm-dragging');
       const t = e.touches[0];
       start.current = { x: t.clientX, y: t.clientY };
       last.current = { y: t.clientY, t: performance.now(), vy: 0 };
