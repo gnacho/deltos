@@ -169,32 +169,39 @@ export function MobileMoveCard({ id, current, steps, onMove, trackRef, children 
     clone.current.style.transform = `translate(${x}px, ${y}px) ${extra}`;
   };
 
-  /** El clon vuela hasta la pestaña, el contador salta y se ejecuta el move. */
-  const flyTo = (tab: HTMLElement, step: string) => {
+  /** El clon vuela hasta la columna de la etapa destino en el track (el sitio
+   * donde cae definitivamente) y se ejecuta el move; el contador de la pestaña
+   * salta como feedback. */
+  const flyTo = (step: string) => {
     const c = clone.current;
+    const col = document.querySelector<HTMLElement>(`[data-mobile-stage="${step}"]`);
+    const tab = document.querySelector<HTMLElement>(`[data-seg="${step}"]`);
     committing.current = true;
     const commit = () => {
       navigator.vibrate?.(8);
-      const count = tab.querySelector('.tnum');
-      if (count) {
-        count.classList.add('mm-pop');
-        count.addEventListener('animationend', () => count.classList.remove('mm-pop'), {
-          once: true,
-        });
+      if (tab) {
+        const count = tab.querySelector('.tnum');
+        if (count) {
+          count.classList.add('mm-pop');
+          count.addEventListener('animationend', () => count.classList.remove('mm-pop'), {
+            once: true,
+          });
+        }
       }
       onMove(id, step);
     };
-    if (!c || reducedMotionMQ.matches) {
+    if (!c || reducedMotionMQ.matches || !col) {
       cleanup();
       commit();
       return;
     }
+    trackSnap(step);
     clearTarget();
     document.body.classList.remove('mm-dragging');
     setDim(false);
     lifted.current = false;
     const cr = c.getBoundingClientRect();
-    const tr = tab.getBoundingClientRect();
+    const tr = col.getBoundingClientRect();
     const dx = tr.left + tr.width / 2 - cr.width / 2;
     const dy = tr.top + tr.height / 2 - cr.height / 2;
     c.style.transition = 'transform 0.38s cubic-bezier(0.3, 0.7, 0.3, 1), opacity 0.38s ease';
@@ -393,16 +400,13 @@ export function MobileMoveCard({ id, current, steps, onMove, trackRef, children 
 
       /* Etapa previsualizada por el borde (cambió en vivo) → destino real. */
       if (preview.current && preview.current !== current) {
-        const targetTab = document.querySelector<HTMLElement>(`[data-seg="${preview.current}"]`);
-        if (targetTab) {
-          dbg(`drop tras preview ${current}→${preview.current}`);
-          flyTo(targetTab, preview.current);
-          return;
-        }
+        dbg(`drop tras preview ${current}→${preview.current}`);
+        flyTo(preview.current);
+        return;
       }
       if (tab && tab.dataset.seg && tab.dataset.seg !== current) {
         dbg(`drop en etapa ${tab.dataset.seg} → vuelo`);
-        flyTo(tab, tab.dataset.seg);
+        flyTo(tab.dataset.seg);
         return;
       }
       const idx = steps.indexOf(current);
@@ -411,18 +415,14 @@ export function MobileMoveCard({ id, current, steps, onMove, trackRef, children 
       else if (t.clientX >= window.innerWidth - EDGE && idx < steps.length - 1)
         side = steps[idx + 1];
       if (side) {
-        const sideTab = document.querySelector<HTMLElement>(`[data-seg="${side}"]`);
-        if (sideTab) {
-          dbg(`drop en lateral ${t.clientX >= window.innerWidth - EDGE ? 'derecha' : 'izquierda'} → ${side}`);
-          flyTo(sideTab, side);
-          return;
-        }
+        dbg(`drop en lateral ${t.clientX >= window.innerWidth - EDGE ? 'derecha' : 'izquierda'} → ${side}`);
+        flyTo(side);
+        return;
       }
       if (last.current.vy < FLICK_VY && dy < FLICK_DY) {
         const next = steps[steps.indexOf(current) + 1];
-        const nextTab = next ? document.querySelector<HTMLElement>(`[data-seg="${next}"]`) : null;
-        if (next && nextTab) {
-          flyTo(nextTab, next);
+        if (next) {
+          flyTo(next);
           return;
         }
       }
