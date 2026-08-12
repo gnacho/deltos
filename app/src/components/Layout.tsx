@@ -143,8 +143,10 @@ function IconNavLink({
       end={end}
       aria-label={label}
       className={({ isActive }) =>
-        `group relative flex h-10 w-10 items-center justify-center rounded-lg transition-colors ${
-          (active ?? isActive) ? 'bg-surface2 font-medium' : 'text-muted hover:bg-surface2'
+        `group relative flex h-10 w-10 items-center justify-center rounded-lg transition-colors duration-150 ${
+          (active ?? isActive)
+            ? 'bg-brand-soft text-brand font-medium'
+            : 'text-muted hover:bg-hover hover:text-text-primary'
         }`
       }
     >
@@ -387,12 +389,16 @@ export default function Layout() {
       : t(titleKey ?? 'nav.todo');
 
   const sideItemCls = ({ isActive }: { isActive: boolean }) =>
-    `w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm ${
-      isActive ? 'bg-surface2 font-medium' : 'text-muted hover:bg-surface2'
+    `w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition-colors duration-150 ${
+      isActive
+        ? 'bg-brand-soft text-brand font-medium'
+        : 'text-muted hover:bg-hover hover:text-text-primary'
     }`;
 
   const bnCls = (active: boolean) =>
-    `flex flex-col items-center justify-center gap-1 ${active ? 'text-brand' : 'text-faint'}`;
+    `flex flex-col items-center justify-center gap-1 transition-colors duration-150 rounded-lg ${
+      active ? 'text-brand' : 'text-faint hover:bg-hover hover:text-text-primary'
+    }`;
 
   const isProjectsSection = location.pathname.startsWith('/projects') || boardView === 'project';
   const lgMargin = collapsed ? 'lg:pl-16' : 'lg:pl-[232px]';
@@ -557,16 +563,7 @@ export default function Layout() {
           </div>
 
           <nav className="flex-1 overflow-y-auto nice-scroll px-3 pb-3" aria-label={t('nav.main')}>
-            <Link
-              to="/settings"
-              className="flex items-center gap-2.5 rounded-xl px-3 py-2 mb-4 hover:bg-surface2 transition-colors"
-            >
-              <Avatar name={user.username} color={user.color} size="lg" />
-              <div className="min-w-0">
-                <p className="text-sm font-medium leading-tight truncate">{user.username}</p>
-                <p className="text-xs text-faint leading-tight">{t('nav.currentAccount')}</p>
-              </div>
-            </Link>
+
             <div className="space-y-0.5 mb-5">
               <NavLink to="/" end className={sideItemCls}>
                 <span className="text-faint">
@@ -615,8 +612,10 @@ export default function Layout() {
                   <Link
                     key={p.id}
                     to={`/p/${p.id}`}
-                    className={`w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm ${
-                      active ? 'bg-surface2 font-medium' : 'text-muted hover:bg-surface2'
+                    className={`w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition-colors duration-150 ${
+                      active
+                        ? 'bg-brand-soft text-brand font-medium'
+                        : 'text-muted hover:bg-hover hover:text-text-primary'
                     }`}
                     aria-current={active ? 'page' : undefined}
                   >
