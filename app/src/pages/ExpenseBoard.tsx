@@ -131,6 +131,8 @@ export default function ExpenseBoard() {
       try {
         await data.moveExpense(id, toStep, position);
         announce(t('board.movedTo', { title: expense.title, column: t(`expenseSteps.${toStep}`) }));
+        /* Tras el drag, la vista se queda en la etapa de destino */
+        setSeg(toStep as ExpenseStep);
       } catch {
         announce(t('common.error'));
       }

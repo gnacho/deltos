@@ -74,7 +74,7 @@ export default function BoardPage() {
 
   const doMove = async (id: string, toCol: ColumnId, refId: string | null) => {
     const task = data.getTask(id);
-    if (!task) return;
+    if (!task) return false;
     /* Posición = índice en la columna completa (sin filtros), excluyendo la arrastrada */
     const colTasks = tasks
       .filter((tk) => tk.column === toCol && tk.id !== id)
@@ -93,8 +93,10 @@ export default function BoardPage() {
           ? t('board.movedTo', { title: task.title, column: colName })
           : t('board.reordered', { title: task.title, column: colName }),
       );
+      return true;
     } catch {
       announce(t('common.error'));
+      return false;
     }
   };
 
@@ -104,8 +106,11 @@ export default function BoardPage() {
     onMove: (id, toCol, refId) => void doMove(id, toCol, refId),
   });
 
-  const doMoveMobile = (id: string, toCol: string) => {
-    void doMove(id, toCol as ColumnId, null);
+  const doMoveMobile = async (id: string, toCol: string) => {
+    const ok = await doMove(id, toCol as ColumnId, null);
+    /* Tras el drag, la vista debe quedarse en la etapa de destino (si no, la
+       tarjeta se mueve en la BD pero el board sigue mostrando la etapa inicial). */
+    if (ok) setSeg(toCol as ColumnId);
   };
 
   useStepSwipe<ColumnId>(COLUMNS.map((c) => c.id), seg, setSeg, data.ready);
