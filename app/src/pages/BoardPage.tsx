@@ -252,7 +252,7 @@ export default function BoardPage() {
           <button
             type="button"
             onClick={() => openNewTask({ projectId: isTodo ? undefined : view, column: 'nuevo' })}
-            className="ml-auto inline-flex items-center gap-2 rounded-2xl bg-brand text-brandfg px-5 py-2.5 text-[14px] font-semibold hover:brightness-110 shadow-soft"
+            className="ml-auto hidden lg:inline-flex items-center gap-2 rounded-2xl bg-brand text-brandfg px-5 py-2.5 text-[14px] font-semibold hover:brightness-110 shadow-soft"
             aria-label={t('board.newTask')}
           >
             <Plus className="w-5 h-5" aria-hidden="true" />
