@@ -90,6 +90,10 @@ export function MobileMoveCard({ id, current, steps, onMove, trackRef, children 
   /* Watchdog de duración: si el gesto queda colgado (sin touchend/touchcancel,
      p.ej. el sistema lo roba en un plegable) fuerza el cleanup. */
   const watchdog = useRef<number | null>(null);
+  /* Timer del finish pendiente de flyTo: cancelarlo al empezar un gesto nuevo
+     evita que un gesto anterior elimine el clon del gesto activo. */
+  const flyTimer = useRef<number | null>(null);
+  const backDone = useRef(false);
   const [dim, setDim] = useState(false);
 
   const cardEl = () => wrapRef.current?.firstElementChild as HTMLElement | null;
@@ -174,6 +178,11 @@ export function MobileMoveCard({ id, current, steps, onMove, trackRef, children 
       window.clearTimeout(watchdog.current);
       watchdog.current = null;
     }
+    if (flyTimer.current !== null) {
+      window.clearTimeout(flyTimer.current);
+      flyTimer.current = null;
+    }
+    backDone.current = false;
     if (edgeTimer.current !== null) {
       window.clearInterval(edgeTimer.current);
       edgeTimer.current = null;
@@ -205,11 +214,6 @@ export function MobileMoveCard({ id, current, steps, onMove, trackRef, children 
       handlers.current = null;
     }
     cardEl()?.classList.remove('mm-origin');
-  };
-
-  const scheduleCleanup = (ms: number) => {
-    if (guard.current !== null) window.clearTimeout(guard.current);
-    guard.current = window.setTimeout(cleanup, ms);
   };
 
   const setCloneTransform = (x: number, y: number, extra = 'rotate(2deg) scale(1.05)') => {
@@ -270,12 +274,24 @@ export function MobileMoveCard({ id, current, steps, onMove, trackRef, children 
     const finish = () => {
       if (done) return;
       done = true;
+      if (flyTimer.current !== null) {
+        window.clearTimeout(flyTimer.current);
+        flyTimer.current = null;
+      }
       removeGhost();
-      cleanup();
+      /* Elimina SOLO este clon (el del gesto actual). Si otro gesto ya empezó
+         (clone.current apunta a otro clon), no lo toca: la limpieza total solo
+         aplica si seguimos siendo el gesto activo. */
+      c.remove();
+      if (clone.current === c) {
+        cleanup();
+      } else {
+        document.body.classList.remove('mm-dragging');
+      }
       commit();
     };
     c.addEventListener('transitionend', finish, { once: true });
-    window.setTimeout(finish, CLEANUP_GUARD_MS);
+    flyTimer.current = window.setTimeout(finish, CLEANUP_GUARD_MS);
   };
 
   /** Vuelta elástica del clon al hueco de origen; el track regresa a la etapa. */
@@ -297,8 +313,20 @@ export function MobileMoveCard({ id, current, steps, onMove, trackRef, children 
     c.dataset.flying = '1';
     c.style.transition = 'transform 0.32s cubic-bezier(0.34, 1.56, 0.64, 1)';
     setCloneTransform(o.left, o.top, 'rotate(0deg) scale(1)');
-    c.addEventListener('transitionend', cleanup, { once: true });
-    scheduleCleanup(CLEANUP_GUARD_MS);
+    const back = () => {
+      if (backDone.current) return;
+      backDone.current = true;
+      /* Elimina SOLO este clon; si otro gesto ya empezó, no toca su clon. */
+      c.remove();
+      if (clone.current === c) {
+        cleanup();
+      } else {
+        document.body.classList.remove('mm-dragging');
+      }
+    };
+    backDone.current = false;
+    c.addEventListener('transitionend', back, { once: true });
+    window.setTimeout(back, CLEANUP_GUARD_MS);
   };
 
   useEffect(() => {
