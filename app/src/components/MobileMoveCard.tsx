@@ -15,14 +15,8 @@ const DRAG_WATCHDOG_MS = 3000; /* red: si no hay actividad del gesto, cleanup */
 
 const reducedMotionMQ = window.matchMedia('(prefers-reduced-motion: reduce)');
 
-/* Diagnóstico en pantalla: localStorage.setItem('dnd_debug','1') y recargar. */
-const DBG = (() => {
-  try {
-    return localStorage.getItem('dnd_debug') === '1';
-  } catch {
-    return false;
-  }
-})();
+/* Diagnóstico en pantalla: TEMPORALMENTE siempre activo para la medición #137. */
+const DBG = true;
 function dbg(msg: string) {
   if (!DBG) return;
   let el = document.getElementById('dnd-debug');
@@ -407,6 +401,18 @@ export function MobileMoveCard({ id, current, steps, onMove, trackRef, children 
       armWatchdog();
     };
 
+    /** Registra los listeners globales del gesto (touchmove/touchend/cancel).
+     * cleanup() los desregistra; si un touchstart nuevo viene tras un cleanup
+     * (p.ej. coger la misma tarjeta dos veces seguidas), hay que volverlos a
+     * registrar o el gesto nuevo crea el clon pero nunca recibe su touchend. */
+    const attachHandlers = () => {
+      if (handlers.current) return;
+      document.addEventListener('touchmove', onTouchMove, { passive: false, capture: true });
+      document.addEventListener('touchend', onTouchEnd, { passive: true, capture: true });
+      document.addEventListener('touchcancel', onTouchEnd, { passive: true, capture: true });
+      handlers.current = { move: onTouchMove, end: onTouchEnd };
+    };
+
     const onTouchStart = (e: TouchEvent) => {
       if (e.touches.length !== 1) return;
       if (clone.current) {
@@ -423,6 +429,7 @@ export function MobileMoveCard({ id, current, steps, onMove, trackRef, children 
          el residuo del gesto anterior no queda ni 1.5s esperando al barrendero. */
       document.querySelectorAll('.mm-clone, .mm-ghost, .mm-dim').forEach((el) => el.remove());
       document.body.classList.remove('mm-dragging');
+      attachHandlers();
       const t = e.touches[0];
       start.current = { x: t.clientX, y: t.clientY };
       last.current = { y: t.clientY, t: performance.now(), vy: 0 };
@@ -552,10 +559,7 @@ export function MobileMoveCard({ id, current, steps, onMove, trackRef, children 
     };
 
     wrap.addEventListener('touchstart', onTouchStart, { passive: true });
-    document.addEventListener('touchmove', onTouchMove, { passive: false, capture: true });
-    document.addEventListener('touchend', onTouchEnd, { passive: true, capture: true });
-    document.addEventListener('touchcancel', onTouchEnd, { passive: true, capture: true });
-    handlers.current = { move: onTouchMove, end: onTouchEnd };
+    attachHandlers();
 
     return () => {
       cancelHold();
