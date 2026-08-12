@@ -138,7 +138,7 @@ export default function ExpenseBoard() {
     })();
   };
 
-  useStepSwipe<ExpenseStep>(listRef, STEPS.map((st) => st.id), seg, setSeg);
+  useStepSwipe<ExpenseStep>(listRef, STEPS.map((st) => st.id), seg, setSeg, data.ready);
 
   if (!data.ready) {
     if (data.bootstrapError) {

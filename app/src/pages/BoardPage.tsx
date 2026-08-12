@@ -109,7 +109,7 @@ export default function BoardPage() {
     void doMove(id, toCol as ColumnId, null);
   };
 
-  useStepSwipe<ColumnId>(listRef, COLUMNS.map((c) => c.id), seg, setSeg);
+  useStepSwipe<ColumnId>(listRef, COLUMNS.map((c) => c.id), seg, setSeg, data.ready);
 
   if (!data.ready) {
     if (data.bootstrapError) {

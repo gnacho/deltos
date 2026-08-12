@@ -17,14 +17,24 @@ export function useStepSwipe<T extends string>(
   steps: readonly T[],
   seg: T,
   onStep: (s: T) => void,
+  active = true,
 ) {
   const start = useRef<{ x: number; y: number; t: number } | null>(null);
 
   useEffect(() => {
+    if (!active) return;
     const el = ref.current;
     if (!el) return;
 
+    /* Listener en window CAPTURE: con `touch-action: pan-y` en la lista, el
+       navegador se "come" los touchmove del elemento para el scroll vertical
+       nativo (no llegan al contenedor). En capture window sí los vemos antes.
+       Solo cuenta si el gesto empieza DENTRO de la lista (el ref). */
+    const inList = (target: EventTarget | null) =>
+      target instanceof Element && el.contains(target);
+
     const onStart = (e: TouchEvent) => {
+      if (!inList(e.target)) return;
       if (e.touches.length !== 1) return;
       const t = e.touches[0];
       start.current = { x: t.clientX, y: t.clientY, t: performance.now() };
@@ -55,16 +65,16 @@ export function useStepSwipe<T extends string>(
       if (next) onStep(next);
     };
 
-    el.addEventListener('touchstart', onStart, { passive: true });
-    el.addEventListener('touchmove', onMove, { passive: true });
-    el.addEventListener('touchend', onEnd, { passive: true });
-    el.addEventListener('touchcancel', onEnd, { passive: true });
+    window.addEventListener('touchstart', onStart, { passive: true, capture: true });
+    window.addEventListener('touchmove', onMove, { passive: true, capture: true });
+    window.addEventListener('touchend', onEnd, { passive: true, capture: true });
+    window.addEventListener('touchcancel', onEnd, { passive: true, capture: true });
     return () => {
-      el.removeEventListener('touchstart', onStart);
-      el.removeEventListener('touchmove', onMove);
-      el.removeEventListener('touchend', onEnd);
-      el.removeEventListener('touchcancel', onEnd);
+      window.removeEventListener('touchstart', onStart, { capture: true } as EventListenerOptions);
+      window.removeEventListener('touchmove', onMove, { capture: true } as EventListenerOptions);
+      window.removeEventListener('touchend', onEnd, { capture: true } as EventListenerOptions);
+      window.removeEventListener('touchcancel', onEnd, { capture: true } as EventListenerOptions);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ref, steps.join(','), seg]);
+  }, [ref, steps.join(','), seg, active]);
 }
