@@ -28,7 +28,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500&family=Space+Grotesk:wght@400;500;700&family=Caveat:wght@500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=3" />
+  <link rel="stylesheet" href="styles.css?v=8" />
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -317,6 +317,11 @@
             <h3 data-i18n="notes.n11t">Saldar cuentas</h3>
             <p data-i18n="notes.n11p">Un clic para marcar todo como pagado entre dos personas. La app calcula quién debe a quién y te lo resume en un panel.</p>
           </div>
+          <div class="sticky note n12 reveal">
+            <svg viewBox="0 0 24 24" fill="none" stroke="rgb(var(--fg))" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12l4 4 4-4"/></svg>
+            <h3 data-i18n="notes.n12t">Arrastra las tarjetas</h3>
+            <p data-i18n="notes.n12p">En el móvil, mantén pulsada una tarjeta y arrástrala a otra etapa, o desliza la etapa entera para cambiar de columna. Sin soltar el dedo puedes saltar de dos en dos.</p>
+          </div>
         </div>
       </div>
     </section>
@@ -438,11 +443,11 @@
             <h2 class="font-display" data-i18n="club.title">Principios del club cloudless</h2>
             <p class="lead" data-i18n="club.lead">Deltos sigue los tres principios del Club Cloudless: soberanía digital, libre para siempre y de personas, no de empresas. Son comunes a todas las apps del club y viven en un único sitio.</p>
           </div>
+          <a class="btn-primary club-cta" href="https://cloudless.club" target="_blank" rel="noopener">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/><line x1="4" y1="4" x2="20" y2="20"/></svg>
+            <span data-i18n="club.cta">Conocer el club</span>
+          </a>
         </div>
-        <a class="btn-primary club-cta" href="https://cloudless.club" target="_blank" rel="noopener">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/><line x1="4" y1="4" x2="20" y2="20"/></svg>
-          <span data-i18n="club.cta">Conocer el club</span>
-        </a>
       </div>
     </section>
 
@@ -457,9 +462,11 @@
           </div>
         </div>
         <div class="about-body reveal">
-          <p data-i18n="about.p1">Deltos no nació para publicarse. Lo empecé para organizar un viaje con unos amigos, y se quedó en la cocina de casa: la compra, la reforma, lo del cole. Y lo he usado a diario durante mucho tiempo: es mi herramienta unificada para llevar la vida en un tablero. Lo desarrollo en mi tiempo libre, entre el trabajo y la familia.</p>
-          <p data-i18n="about.p2">Con el tiempo, y de forma consecuente con los principios en los que creo, he decidido liberarlo y compartirlo con la comunidad. No hay ninguna empresa detrás, solo una persona que usa lo que publica. Será gratuito siempre, corre 24/7 en producción en mi casa y cada versión se prueba ahí primero. Si te sirve, me alegro. Si algo falla, quiero enterarme.</p>
-          <a class="btn-ghost" href="https://ko-fi.com/gnacho" target="_blank" rel="noopener" data-i18n="about.kofi">Apóyame en Ko-fi</a>
+          <div class="about-text">
+            <p data-i18n="about.p1">Deltos no nació para publicarse. Lo empecé para organizar un viaje con unos amigos, y se quedó en la cocina de casa: la compra, la reforma, lo del cole. Y lo he usado a diario durante mucho tiempo: es mi herramienta unificada para llevar la vida en un tablero. Lo desarrollo en mi tiempo libre, entre el trabajo y la familia.</p>
+            <p data-i18n="about.p2">Con el tiempo, y de forma consecuente con los principios en los que creo, he decidido liberarlo y compartirlo con la comunidad. No hay ninguna empresa detrás, solo una persona que usa lo que publica. Será gratuito siempre, corre 24/7 en producción en mi casa y cada versión se prueba ahí primero. Si te sirve, me alegro. Si algo falla, quiero enterarme.</p>
+          </div>
+          <a class="btn-ghost about-kofi" href="https://ko-fi.com/gnacho" target="_blank" rel="noopener" data-i18n="about.kofi">Apóyame en Ko-fi</a>
         </div>
       </div>
     </section>
@@ -511,7 +518,7 @@
     <p class="lightbox-caption" id="lightboxCaption"></p>
   </div>
 
-  <script src="i18n.js?v=4"></script>
-  <script src="app.js?v=3"></script>
+  <script src="i18n.js?v=5"></script>
+  <script src="app.js?v=5"></script>
 </body>
 </html>

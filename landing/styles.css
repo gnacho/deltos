@@ -393,9 +393,10 @@ h3 { font-size: 1.1rem; font-weight: 700; line-height: 1.4; }
 .note.n9 { background: rgb(var(--sticky-2)); }
 .note.n10 { background: rgb(var(--sticky)); }
 .note.n11 { background: rgb(var(--sticky-3)); }
+.note.n12 { background: rgb(var(--sticky-2)); }
 .note.n1, .note.n4, .note.n7, .note.n10 { transform: rotate(-0.6deg); }
 .note.n2, .note.n5, .note.n8, .note.n11 { transform: rotate(0.5deg); }
-.note.n3, .note.n6, .note.n9 { transform: rotate(-0.3deg); }
+.note.n3, .note.n6, .note.n9, .note.n12 { transform: rotate(-0.3deg); }
 .note:hover { transform: rotate(0deg) translateY(-3px); transition: transform 150ms var(--ease-out); }
 
 /* ============ 03 COMPARATIVA ============ */
@@ -441,6 +442,13 @@ table.cmp thead th {
   color: rgb(var(--muted));
   border-bottom: 1px solid rgb(var(--border));
   white-space: nowrap;
+  text-align: center;
+  padding-left: 0.9rem;
+  padding-right: 0.9rem;
+}
+table.cmp thead th:first-child {
+  text-align: left;
+  padding-left: 0.9rem;
 }
 table.cmp tbody th {
   font-weight: 500;
@@ -469,14 +477,17 @@ table.cmp tbody tr:hover { background: rgb(var(--surface)); }
 
 /* ============ CLUB CLOUDLESS + ACERCA DE MÍ ============ */
 .club-cta { margin-top: 2rem; }
-.about-body { max-width: 52rem; margin-top: 1.5rem; }
-.about-body p { font-size: 1.05rem; color: rgb(var(--muted)); line-height: 1.65; margin-bottom: 1rem; }
-.about-body p:last-child { margin-bottom: 0; }
+#club .sec-head { grid-template-columns: 52px 1fr auto; align-items: center; }
+#club .club-cta { margin-top: 0; align-self: center; justify-self: end; white-space: nowrap; }
+.about-body { max-width: 52rem; margin-top: 1.5rem; display: grid; grid-template-columns: 1fr auto; gap: 2.5rem; align-items: center; }
+.about-text p { font-size: 1.05rem; color: rgb(var(--muted)); line-height: 1.65; margin-bottom: 1rem; }
+.about-text p:last-child { margin-bottom: 0; }
+.about-kofi { white-space: nowrap; }
 
 /* ============ 04 INSTALACIÓN: CORCHO ============ */
 .install-cork { padding: 3rem 0; margin-top: 1rem; }
 .install-cork .cork-bg { border-radius: 0; border: 1px solid rgb(var(--cork-dark)); }
-.install-note-wrap { position: relative; max-width: 640px; margin: 0 auto; padding: 2.5rem 2rem 2rem; text-align: center; }
+.install-note-wrap { position: relative; max-width: 880px; margin: 0 auto; padding: 2.5rem 2rem 2rem; text-align: center; }
 .install-note { font-size: 1.35rem; margin-bottom: 1.1rem; transform: rotate(-2deg); }
 .cmd-card {
   display: flex;
@@ -644,4 +655,7 @@ footer {
   .hero-note { top: -14px; left: 0; font-size: 1rem; }
   .hero-stickies { position: static; margin-top: 1rem; }
   .install-note-wrap { padding: 2rem 1.25rem 1.5rem; }
+  .about-body { grid-template-columns: 1fr; gap: 1.25rem; align-items: start; }
+  #club .club-cta { justify-self: start; }
+  #club .sec-head { grid-template-columns: 1fr; }
 }
