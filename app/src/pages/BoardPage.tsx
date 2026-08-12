@@ -123,7 +123,7 @@ export default function BoardPage() {
     if (ok) setSeg(toCol as ColumnId);
   };
 
-  useStepSwipe<ColumnId>(COLUMNS.map((c) => c.id), seg, setSeg, data.ready);
+  useStepSwipe<ColumnId>(COLUMNS.map((c) => c.id), seg, setSeg, mobileTrackRef, data.ready);
 
   if (!data.ready) {
     if (data.bootstrapError) {

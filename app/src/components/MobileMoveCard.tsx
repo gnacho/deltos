@@ -215,7 +215,7 @@ export function MobileMoveCard({ id, current, steps, onMove, trackRef, children 
       ? cards[cards.length - 1].getBoundingClientRect().bottom + 12
       : colRect.top + 16;
     const dx = tx - cr.width / 2;
-    const dy = ty - cr.height / 2;
+    const dy = ty; /* el borde superior del clon cae en el hueco de inserción */
     c.style.transition = 'transform 0.38s cubic-bezier(0.3, 0.7, 0.3, 1), opacity 0.38s ease';
     setCloneTransform(dx, dy, 'rotate(8deg) scale(0.1)');
     c.style.opacity = '0.15';

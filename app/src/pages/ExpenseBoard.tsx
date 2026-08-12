@@ -149,7 +149,7 @@ export default function ExpenseBoard() {
     })();
   };
 
-  useStepSwipe<ExpenseStep>(STEPS.map((st) => st.id), seg, setSeg, data.ready);
+  useStepSwipe<ExpenseStep>(STEPS.map((st) => st.id), seg, setSeg, mobileTrackRef, data.ready);
 
   if (!data.ready) {
     if (data.bootstrapError) {

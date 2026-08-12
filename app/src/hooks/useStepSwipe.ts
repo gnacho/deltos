@@ -1,44 +1,52 @@
 import { useEffect, useRef } from 'react';
+import type { RefObject } from 'react';
 
 const SWIPE_SLOP = 10; /* px antes de "reclamar" el gesto como swipe horizontal */
-const SWIPE_X = 40; /* px de desplazamiento horizontal mínimo para contar como swipe */
-const SWIPE_MAX_MS = 450; /* un hold-drag (mover tarjeta, 350ms) dura más → no es swipe */
+const SNAP_FRACTION = 0.22; /* fracción del ancho del track para decidir snap */
+const EDGE_RESIST = 0.35; /* resistencia elástica al empujar en la primera/última etapa */
 
 /* Zonas en las que NO se roba el gesto: el swipe solo cambia etapa cuando el
    dedo empieza en la zona "de contenido" (tarjetas, huecos, la página en
-   general) y nunca sobre controles interactivos. Antes el hook exigía
-   `listRef.contains(target)`, lo que dejaba fuera el hueco vacío del board
-   (target=BODY) — por eso el swipe no funcionaba al deslizar en espacios
-   libres. */
+   general) y nunca sobre controles interactivos. */
 const EXCLUDED =
   'nav, [data-segbar], [data-col], [role="dialog"], button, a, input, select, textarea';
 
 /**
- * Swipe horizontal sobre una lista móvil para cambiar de etapa (derecha →
- * siguiente, izquierda → anterior): la etapa activa es la de la izquierda del
- * flujo, así que deslizar hacia la derecha avanza (como empujar el contenido
- * hacia la siguiente etapa).
+ * Swipe horizontal sobre el track de etapas móvil, CONTROLADO por el dedo
+ * (efecto carrusel): mientras se desliza, el track acompaña al dedo 1:1; al
+ * soltar hace snap a la etapa más cercana si supera el umbral (o queda donde
+ * estaba si no). El contenido acompaña al dedo: deslizar a la izquierda avanza
+ * a la siguiente etapa, a la derecha retrocede.
  *
- * Escucha en `window` en fase CAPTURE con `passive:false`. En cuanto el gesto
- * que empieza fuera de las zonas interactivas es claramente horizontal, llama
- * `preventDefault()` para "reclamar" el gesto y evitar que el navegador lo
- * convierta en scroll. El contenedor del board lleva `touch-action: pan-y`
- * (móvil), así el navegador reserva el scroll vertical para sí y entrega los
- * movimientos horizontales a JS.
+ * Escucha en `window` en fase CAPTURE con `passive:false` y reescribe el
+ * transform del `trackRef` directamente (sin re-render → sin lag). Si no se
+ * pasa `trackRef`, cae al comportamiento simple: solo decide el snap al soltar.
  */
 export function useStepSwipe<T extends string>(
   steps: readonly T[],
   seg: T,
   onStep: (s: T) => void,
+  trackRef?: RefObject<HTMLDivElement | null>,
   active = true,
 ) {
   const start = useRef<{ x: number; y: number; t: number } | null>(null);
 
   useEffect(() => {
     if (!active) return;
+    const segIdx = steps.indexOf(seg);
+    const track = trackRef?.current ?? null;
+    const trackWidth = () => track?.clientWidth ?? window.innerWidth;
 
     const excluded = (target: EventTarget | null) =>
       target instanceof Element && !!target.closest(EXCLUDED);
+
+    const setTrack = (dxPct: number, animate: boolean) => {
+      if (!track) return;
+      track.style.transition = animate
+        ? 'transform 0.32s cubic-bezier(0.3, 0.7, 0.3, 1)'
+        : 'none';
+      track.style.transform = `translate3d(calc(-${Math.max(0, segIdx) * 100}% + ${dxPct}%), 0, 0)`;
+    };
 
     const onStart = (e: TouchEvent) => {
       if (excluded(e.target)) return;
@@ -55,9 +63,16 @@ export function useStepSwipe<T extends string>(
       }
       const t = e.touches[0];
       const dx = t.clientX - start.current.x;
-      /* Nunca cancela por "vertical": la página debe poder scrollear. Solo
-         reclama el gesto (preventDefault) cuando hay componente horizontal. */
-      if (Math.abs(dx) > SWIPE_SLOP) e.preventDefault();
+      if (Math.abs(dx) <= SWIPE_SLOP) return;
+      e.preventDefault();
+      if (!track) return;
+      /* Desplazamiento del dedo en % del ancho del track (1:1). Resistencia
+         elástica si se empuja más allá de la primera/última etapa. */
+      let dxPct = (dx / trackWidth()) * 100;
+      if ((segIdx === 0 && dx > 0) || (segIdx === steps.length - 1 && dx < 0)) {
+        dxPct *= EDGE_RESIST;
+      }
+      setTrack(dxPct, false);
     };
 
     const onEnd = (e: TouchEvent) => {
@@ -69,16 +84,26 @@ export function useStepSwipe<T extends string>(
       const dx = ct.clientX - x;
       const dy = ct.clientY - y;
       const ms = performance.now() - t;
-      if (ms > SWIPE_MAX_MS) return;
-      /* La trayectoria TOTAL decide: dx dominante → swipe */
-      if (Math.abs(dx) < SWIPE_X || Math.abs(dx) < Math.abs(dy)) return;
-      const i = steps.indexOf(seg);
-      if (i === -1) return;
-      /* El contenido acompaña al dedo: deslizar a la izquierda avanza a la
-         siguiente etapa (el track se mueve a la izquierda), a la derecha
-         retrocede. */
-      const next = dx < 0 ? steps[i + 1] : steps[i - 1];
-      if (next) onStep(next);
+      if (!track) {
+        if (ms > 450) return;
+        if (Math.abs(dx) < 40 || Math.abs(dx) < Math.abs(dy)) return;
+        const i = segIdx;
+        const next = dx < 0 ? steps[i + 1] : steps[i - 1];
+        if (next) onStep(next);
+        return;
+      }
+      /* Snap: si el desplazamiento supera el umbral, ir a la etapa vecina
+         (ignora la duración: arrastrar lento pero lejos también es válido). */
+      const fraction = dx / trackWidth();
+      let targetIdx = segIdx;
+      if (fraction <= -SNAP_FRACTION) targetIdx = segIdx + 1;
+      else if (fraction >= SNAP_FRACTION) targetIdx = segIdx - 1;
+      targetIdx = Math.max(0, Math.min(steps.length - 1, targetIdx));
+      if (targetIdx !== segIdx) {
+        onStep(steps[targetIdx]);
+      } else {
+        setTrack(0, true); /* vuelve elástico a la etapa actual */
+      }
     };
 
     window.addEventListener('touchstart', onStart, { passive: true, capture: true });
