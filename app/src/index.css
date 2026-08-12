@@ -403,6 +403,13 @@ html[data-density='compact'] .timeline > li {
 body.mm-dragging [data-segbar] {
   z-index: 70;
 }
+/* Tarjeta fantasma en la columna destino: muestra el hueco donde caerá la
+   tarjeta mientras se arrastra (translúcida, sin interacción). */
+.mm-ghost {
+  opacity: 0.35;
+  pointer-events: none;
+  filter: saturate(0.6);
+}
 /* Durante el drag, el navegador no debe reclamar el gesto (el contenedor del
    board lleva touch-action: pan-y para el swipe horizontal de etapa; al arrastrar
    la tarjeta esto anularía el preventDefault del drag). */

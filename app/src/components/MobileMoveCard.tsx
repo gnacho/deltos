@@ -11,6 +11,7 @@ const PEEK_ZONE = 72; /* px del borde donde el track empieza a acompañar al ded
 const PEEK_MAX = 0.12; /* fracción del ancho que se desplaza el track antes del snap */
 const EDGE_STEP_MS = 420; /* repetición mientras el dedo se mantiene en el borde */
 const SNAP_MS = 300; /* duración del slide entre etapas */
+const DRAG_WATCHDOG_MS = 3000; /* red: si no hay actividad del gesto, cleanup */
 
 const reducedMotionMQ = window.matchMedia('(prefers-reduced-motion: reduce)');
 
@@ -83,6 +84,12 @@ export function MobileMoveCard({ id, current, steps, onMove, trackRef, children 
   /* True cuando el gesto ya se resolvió (flyTo/springBack en marcha): el clon
      se limpia solo; la red de seguridad de onTouchEnd no debe pisarlo. */
   const resolved = useRef(false);
+  /* Tarjeta fantasma translúcida en la columna destino: muestra dónde caerá la
+     tarjeta mientras se arrastra; el clon se deposita en ella al soltar. */
+  const ghost = useRef<HTMLElement | null>(null);
+  /* Watchdog de duración: si el gesto queda colgado (sin touchend/touchcancel,
+     p.ej. el sistema lo roba en un plegable) fuerza el cleanup. */
+  const watchdog = useRef<number | null>(null);
   const [dim, setDim] = useState(false);
 
   const cardEl = () => wrapRef.current?.firstElementChild as HTMLElement | null;
@@ -124,11 +131,48 @@ export function MobileMoveCard({ id, current, steps, onMove, trackRef, children 
     t.style.transform = `translate3d(-${trackBase(step)}, 0, 0)`;
   };
 
+  /** Dibuja/actualiza la tarjeta fantasma translúcida al final de la columna de
+   * la etapa destino (el hueco donde caerá la tarjeta al soltar). */
+  const ensureGhost = (step: string) => {
+    const card = cardEl();
+    const col = document.querySelector<HTMLElement>(`[data-mobile-stage="${step}"]`);
+    if (!card || !col) return;
+    if (ghost.current && ghost.current.parentElement === col) return;
+    removeGhost();
+    const g = card.cloneNode(true) as HTMLElement;
+    g.classList.remove('card');
+    g.classList.add('mm-ghost');
+    g.removeAttribute('style');
+    g.setAttribute('aria-hidden', 'true');
+    col.appendChild(g);
+    ghost.current = g;
+  };
+
+  const removeGhost = () => {
+    ghost.current?.remove();
+    ghost.current = null;
+  };
+
+  /** Rearma el watchdog: si el gesto queda sin actividad este tiempo, cleanup. */
+  const armWatchdog = () => {
+    if (watchdog.current !== null) window.clearTimeout(watchdog.current);
+    watchdog.current = window.setTimeout(() => {
+      if (lifted.current && !resolved.current) {
+        dbg('WATCHDOG: gesto colgado → cleanup');
+        cleanup();
+      }
+    }, DRAG_WATCHDOG_MS);
+  };
+
   /** Limpieza total e idempotente; guard la fuerza aunque falle un transitionend. */
   const cleanup = () => {
     if (guard.current !== null) {
       window.clearTimeout(guard.current);
       guard.current = null;
+    }
+    if (watchdog.current !== null) {
+      window.clearTimeout(watchdog.current);
+      watchdog.current = null;
     }
     if (edgeTimer.current !== null) {
       window.clearInterval(edgeTimer.current);
@@ -139,6 +183,7 @@ export function MobileMoveCard({ id, current, steps, onMove, trackRef, children 
     resolved.current = false;
     if (raf.current !== null) cancelAnimationFrame(raf.current);
     clearTarget();
+    removeGhost();
     document.body.classList.remove('mm-dragging');
     setDim(false);
     lifted.current = false;
@@ -205,17 +250,14 @@ export function MobileMoveCard({ id, current, steps, onMove, trackRef, children 
     document.body.classList.remove('mm-dragging');
     setDim(false);
     lifted.current = false;
-    /* Punto de inserción real: el clon aterriza tras la última tarjeta de la
-       columna destino (la nueva tarjeta se añade al final, position=length). */
+    /* El clon se deposita sobre la tarjeta fantasma (mm-ghost) de la columna
+       destino, que marca exactamente el hueco donde caerá la tarjeta. */
+    ensureGhost(step);
     const cr = c.getBoundingClientRect();
-    const colRect = col.getBoundingClientRect();
-    const cards = Array.from(col.querySelectorAll<HTMLElement>(':scope > div'));
-    let tx = colRect.left + colRect.width / 2;
-    let ty = cards.length
-      ? cards[cards.length - 1].getBoundingClientRect().bottom + 12
-      : colRect.top + 16;
-    const dx = tx - cr.width / 2;
-    const dy = ty; /* el borde superior del clon cae en el hueco de inserción */
+    const target = ghost.current ?? col;
+    const gr = target.getBoundingClientRect();
+    const dx = gr.left + gr.width / 2 - cr.width / 2;
+    const dy = gr.top; /* el borde superior del clon cae en el borde del ghost */
     c.style.transition = 'transform 0.38s cubic-bezier(0.3, 0.7, 0.3, 1), opacity 0.38s ease';
     setCloneTransform(dx, dy, 'rotate(8deg) scale(0.1)');
     c.style.opacity = '0.15';
@@ -223,6 +265,7 @@ export function MobileMoveCard({ id, current, steps, onMove, trackRef, children 
     const finish = () => {
       if (done) return;
       done = true;
+      removeGhost();
       cleanup();
       commit();
     };
@@ -236,6 +279,7 @@ export function MobileMoveCard({ id, current, steps, onMove, trackRef, children 
     const c = clone.current;
     const o = origin.current;
     clearTarget();
+    removeGhost();
     document.body.classList.remove('mm-dragging');
     setDim(false);
     lifted.current = false;
@@ -280,6 +324,7 @@ export function MobileMoveCard({ id, current, steps, onMove, trackRef, children 
       dbg(`edge → ${next}`);
       trackSnap(next);
       clearTarget();
+      ensureGhost(next);
       const tab = document.querySelector<HTMLElement>(`[data-seg="${next}"]`);
       if (tab) tab.classList.add('mm-target');
     };
@@ -325,6 +370,7 @@ export function MobileMoveCard({ id, current, steps, onMove, trackRef, children 
       card.classList.add('mm-origin');
       document.body.classList.add('mm-dragging');
       setDim(true);
+      armWatchdog();
     };
 
     const onTouchStart = (e: TouchEvent) => {
@@ -360,6 +406,7 @@ export function MobileMoveCard({ id, current, steps, onMove, trackRef, children 
         return;
       }
       e.preventDefault();
+      armWatchdog();
       dbg(
         `move (${Math.round(dx)},${Math.round(dy)}) cancelable=${e.cancelable} prevented=${e.defaultPrevented}`,
       );
