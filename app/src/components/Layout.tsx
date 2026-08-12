@@ -718,7 +718,7 @@ export default function Layout() {
 
       {/* ============ CONTENIDO ============ */}
       <main
-        className={`${lgMargin} md:pl-16 pt-[68px] md:pt-[calc(56px+16px)] pb-[calc(84px+env(safe-area-inset-bottom))] md:pb-8`}
+        className={`${lgMargin} md:pl-16 pt-[calc(56px+env(safe-area-inset-top))] md:pt-[calc(56px+16px)] pb-[calc(84px+env(safe-area-inset-bottom))] md:pb-8`}
       >
         <PullToRefresh>
           <div className="mx-auto max-w-[1440px] px-4 sm:px-6 lg:px-8">

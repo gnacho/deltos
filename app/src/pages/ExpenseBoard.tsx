@@ -1,6 +1,6 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Plus } from 'lucide-react';
+import { Plus, BarChart3 } from 'lucide-react';
 import type { ExpenseStep } from '@/data/types';
 import { useData } from '@/data/data-context';
 import { useSession } from '@/auth/session-context';
@@ -10,6 +10,7 @@ import { ExpenseModal } from '@/components/ExpenseModal';
 import { BalanceStrip, ExpenseSummary } from '@/components/ExpenseSummary';
 import { MobileMoveCard } from '@/components/MobileMoveCard';
 import { useKanbanDnD } from '@/hooks/useKanbanDnD';
+import { useStepSwipe } from '@/hooks/useStepSwipe';
 import { colorOf } from '@/lib/colors';
 import { announce } from '@/lib/announce';
 
@@ -38,6 +39,39 @@ export default function ExpenseBoard() {
   const [view, setView] = useState<'tablero' | 'resumen'>('tablero');
 
   const boardRef = useRef<HTMLDivElement>(null);
+  const mobileTrackRef = useRef<HTMLDivElement>(null);
+
+  /* Posiciona el track móvil sobre la etapa activa con transición (slide). */
+  const segIdx = STEPS.findIndex((s) => s.id === seg);
+  useEffect(() => {
+    const el = mobileTrackRef.current;
+    if (!el) return;
+    el.style.transition = 'transform 0.32s cubic-bezier(0.3, 0.7, 0.3, 1)';
+    el.style.transform = `translate3d(-${Math.max(0, segIdx) * 100}%, 0, 0)`;
+  }, [segIdx]);
+
+  /* 🔥 RED GLOBAL: cualquier clon/fantasma/velo huérfano del drag móvil se
+     elimina periódicamente. No depende de los flujos internos del componente:
+     garantiza que una tarjeta superpuesta NUNCA quede en pantalla. */
+  useEffect(() => {
+    const sweep = () => {
+      if (document.body.classList.contains('mm-dragging')) return;
+      document
+        .querySelectorAll('.mm-clone:not([data-flying]), .mm-ghost, .mm-dim')
+        .forEach((el) => el.remove());
+    };
+    const iv = window.setInterval(sweep, 1500);
+    const onVisibility = () => {
+      if (document.hidden) sweep();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('blur', onVisibility);
+    return () => {
+      window.clearInterval(iv);
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('blur', onVisibility);
+    };
+  }, []);
 
   const expenses = data.getExpenses();
 
@@ -130,11 +164,15 @@ export default function ExpenseBoard() {
       try {
         await data.moveExpense(id, toStep, position);
         announce(t('board.movedTo', { title: expense.title, column: t(`expenseSteps.${toStep}`) }));
+        /* Tras el drag, la vista se queda en la etapa de destino */
+        setSeg(toStep as ExpenseStep);
       } catch {
         announce(t('common.error'));
       }
     })();
   };
+
+  useStepSwipe<ExpenseStep>(STEPS.map((st) => st.id), seg, setSeg, mobileTrackRef, data.ready);
 
   if (!data.ready) {
     if (data.bootstrapError) {
@@ -175,88 +213,23 @@ export default function ExpenseBoard() {
   ];
 
   return (
-    <div className="pt-[52px] lg:pt-0">
-      {/* ============ SEGMENTED CONTROL MÓVIL ============ */}
-      <div
-        data-segbar
-        className="lg:hidden fixed top-14 inset-x-0 z-30 border-b border-app px-4 py-2.5"
-        style={{ backgroundColor: 'var(--bg)' }}
-      >
-        <div
-          role="tablist"
-          aria-label={t('board.statesAria')}
-          className="flex items-center gap-1 rounded-full bg-surface2 p-1"
-          onKeyDown={(e) => {
-            if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
-            const b = (e.target as HTMLElement).closest<HTMLElement>('[data-seg]');
-            if (!b) return;
-            e.preventDefault();
-            const tabsEl = Array.from(
-              (e.currentTarget as HTMLElement).querySelectorAll<HTMLElement>('[data-seg]'),
-            );
-            const i = tabsEl.indexOf(b);
-            const next =
-              tabsEl[(i + (e.key === 'ArrowRight' ? 1 : tabsEl.length - 1)) % tabsEl.length];
-            setSeg(next.dataset.seg as ExpenseStep);
-            next.focus();
-          }}
-        >
-          {STEPS.map((st) => {
-            const n = byStep.get(st.id)?.length ?? 0;
-            const active = seg === st.id;
-            return (
-              <button
-                key={st.id}
-                type="button"
-                role="tab"
-                data-seg={st.id}
-                aria-selected={active}
-                aria-label={t('board.segAria', { column: t(`expenseSteps.${st.id}`), count: n })}
-                onClick={() => setSeg(st.id)}
-                className={`flex-1 min-w-0 flex items-center justify-center gap-1.5 rounded-full px-2 h-11 text-[13px] font-medium whitespace-nowrap ${
-                  active ? 'bg-surface shadow-soft' : 'text-muted'
-                }`}
-              >
-                <span
-                  className={`w-2 h-2 rounded-full shrink-0 ${colorOf(st.color).dot}`}
-                  aria-hidden="true"
-                />
-                <span className="truncate">{t(`expenseSteps.${st.id}`)}</span>
-                <span className={`tnum text-[12px] ${active ? 'text-muted' : 'text-faint'}`}>
-                  {n}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 pt-5 lg:pt-7">
-        {/* Vista: Tablero | Resumen + Alcance + Nuevo gasto */}
-        <div className="mb-5 flex flex-wrap items-center gap-2">
-          <div
-            role="tablist"
-            aria-label={t('expenses.viewAria')}
-            className="inline-flex items-center gap-1 rounded-full bg-surface2 p-1"
+    <div className="touch-pan-y min-h-[calc(100dvh-152px)] lg:min-h-0 lg:touch-auto">
+      <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 pt-0 lg:pt-7">
+        {/* Botón "Resumen" (toggle): pulsado = vista resumen; sin pulsar = tablero */}
+        <div className="mb-1.5 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            aria-pressed={view === 'resumen'}
+            onClick={() => setView(view === 'resumen' ? 'tablero' : 'resumen')}
+            className={`inline-flex items-center gap-1.5 rounded-full px-4 h-9 text-[13px] font-medium transition-colors ${
+              view === 'resumen'
+                ? 'bg-brand/10 text-brand ring-1 ring-brand/40'
+                : 'bg-surface border border-app text-muted hover:bg-surface2 hover:text-text'
+            }`}
           >
-            {(['tablero', 'resumen'] as const).map((v) => {
-              const active = view === v;
-              return (
-                <button
-                  key={v}
-                  type="button"
-                  role="tab"
-                  aria-selected={active}
-                  onClick={() => setView(v)}
-                  className={`rounded-full px-3.5 h-9 text-[13px] font-medium whitespace-nowrap transition-colors ${
-                    active ? 'bg-surface shadow-soft text-text' : 'text-muted hover:text-text'
-                  }`}
-                >
-                  {t(v === 'tablero' ? 'expenses.board' : 'expenses.summary')}
-                </button>
-              );
-            })}
-          </div>
+            <BarChart3 className="w-4 h-4" aria-hidden="true" />
+            {t('expenses.summary')}
+          </button>
 
           {view === 'tablero' && (
             <div
@@ -287,7 +260,7 @@ export default function ExpenseBoard() {
           <button
             type="button"
             onClick={() => handleOpenNew()}
-            className="ml-auto inline-flex items-center gap-2 rounded-2xl bg-brand text-brandfg px-5 py-2.5 text-[14px] font-semibold hover:brightness-110 shadow-soft"
+            className="ml-auto hidden lg:inline-flex items-center gap-2 rounded-2xl bg-brand text-brandfg px-5 py-2.5 text-[14px] font-semibold hover:brightness-110 shadow-soft"
             aria-label={t('expenses.new')}
           >
             <Plus className="w-5 h-5" aria-hidden="true" />
@@ -301,34 +274,96 @@ export default function ExpenseBoard() {
           </div>
         ) : (
           <>
-            <BalanceStrip expenses={expenses} />
+            {/* BalanceStrip en desktop: arriba */}
+            <div className="hidden lg:block mb-5">
+              <BalanceStrip expenses={expenses} />
+            </div>
 
-            {/* Lista móvil (<lg): un solo estado */}
-            <div
-              className="lg:hidden space-y-3 pb-4"
-              aria-live="polite"
-              aria-label={t('board.listAria')}
-            >
-              {(byStep.get(seg) ?? []).map((exp, i) => (
-                <MobileMoveCard
-                  key={exp.id}
-                  id={exp.id}
-                  current={exp.step}
-                  steps={STEPS.map((st) => st.id)}
-                  onMove={doMoveMobile}
-                >
-                  <ExpenseCardMobile
-                    expense={exp}
-                    index={i}
-                    onOpen={(id) => setDetailExpense({ id })}
-                  />
-                </MobileMoveCard>
-              ))}
-              {(byStep.get(seg) ?? []).length === 0 && (
-                <p className="rounded-2xl border border-dashed border-app px-4 py-8 text-center text-[15px] text-muted">
-                  {t('expenses.emptyState', { column: t(`expenseSteps.${seg}`) })}
-                </p>
-              )}
+            {/* ============ SEGMENTED CONTROL MÓVIL: justo sobre las tareas ============ */}
+            <div data-segbar className="lg:hidden mb-1.5">
+              <div
+                role="tablist"
+                aria-label={t('board.statesAria')}
+                className="flex items-center gap-1 rounded-full bg-surface2 p-1"
+                onKeyDown={(e) => {
+                  if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+                  const b = (e.target as HTMLElement).closest<HTMLElement>('[data-seg]');
+                  if (!b) return;
+                  e.preventDefault();
+                  const tabsEl = Array.from(
+                    (e.currentTarget as HTMLElement).querySelectorAll<HTMLElement>('[data-seg]'),
+                  );
+                  const i = tabsEl.indexOf(b);
+                  const next =
+                    tabsEl[(i + (e.key === 'ArrowRight' ? 1 : tabsEl.length - 1)) % tabsEl.length];
+                  setSeg(next.dataset.seg as ExpenseStep);
+                  next.focus();
+                }}
+              >
+                {STEPS.map((st) => {
+                  const n = byStep.get(st.id)?.length ?? 0;
+                  const active = seg === st.id;
+                  return (
+                    <button
+                      key={st.id}
+                      type="button"
+                      role="tab"
+                      data-seg={st.id}
+                      aria-selected={active}
+                      aria-label={t('board.segAria', { column: t(`expenseSteps.${st.id}`), count: n })}
+                      onClick={() => setSeg(st.id)}
+                      className={`flex-1 min-w-0 flex items-center justify-center gap-1.5 rounded-full px-2 h-11 text-[13px] font-medium whitespace-nowrap ${
+                        active ? 'bg-surface shadow-soft' : 'text-muted'
+                      }`}
+                    >
+                      <span
+                        className={`w-2 h-2 rounded-full shrink-0 ${colorOf(st.color).dot}`}
+                        aria-hidden="true"
+                      />
+                      <span className="truncate">{t(`expenseSteps.${st.id}`)}</span>
+                      <span className={`tnum text-[12px] ${active ? 'text-muted' : 'text-faint'}`}>
+                        {n}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Track móvil (<lg): las 3 etapas montadas una al lado de otra */}
+            <div className="lg:hidden overflow-hidden" aria-live="polite" aria-label={t('board.listAria')}>
+              <div ref={mobileTrackRef} className="flex items-start will-change-transform">
+                {STEPS.map((s) => (
+                  <div key={s.id} className="w-full shrink-0 space-y-3 pb-4" data-mobile-stage={s.id}>
+                    {(byStep.get(s.id) ?? []).map((exp, i) => (
+                      <MobileMoveCard
+                        key={exp.id}
+                        id={exp.id}
+                        current={exp.step}
+                        steps={STEPS.map((st) => st.id)}
+                        onMove={doMoveMobile}
+                        trackRef={mobileTrackRef}
+                      >
+                        <ExpenseCardMobile
+                          expense={exp}
+                          index={i}
+                          onOpen={(id) => setDetailExpense({ id })}
+                        />
+                      </MobileMoveCard>
+                    ))}
+                    {(byStep.get(s.id) ?? []).length === 0 && (
+                      <p className="rounded-2xl border border-dashed border-app px-4 py-8 text-center text-[15px] text-muted">
+                        {t('expenses.emptyState', { column: t(`expenseSteps.${s.id}`) })}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* BalanceStrip en móvil: abajo de la lista */}
+            <div className="lg:hidden pb-2">
+              <BalanceStrip expenses={expenses} />
             </div>
 
             {/* Tablero escritorio (lg+): kanban 3 columnas con drag & drop */}
