@@ -41,23 +41,28 @@ interface Props {
   /** Etapas en orden; el flick hacia arriba avanza a la siguiente. */
   steps: string[];
   onMove: (id: string, step: string) => void;
+  /** Cambia la vista de etapa EN VIVO durante el arrastre (la etapa entera
+   * hace swipe mientras la tarjeta sigue al dedo). Si no se pasa, la etapa
+   * destino solo se ilumina en la barra (mm-target). */
+  onPreviewStep?: (step: string) => void;
   children: ReactNode;
 }
 
 /**
  * Movimiento móvil de tarjetas: mantener pulsado crea un CLON fijo a nivel de
- * body (opaco, inclinado, con sombra) que sigue al dedo por encima del velo y
- * de la barra de etapas ([data-segbar]). Mientras se arrastra, llegar al borde
- * lateral cambia la etapa de destino EN VIVO (la pestaña se ilumina) y, si el
- * dedo se mantiene en el borde, sigue avanzando cada EDGE_STEP_MS — así se
- * pueden saltar varias etapas de un tirón sin soltar. Al soltar, el clon vuela
- * hasta la pestaña de la etapa destino y la tarjeta se mueve (onMove), y la
- * vista la sigue; soltar sin destino lo devuelve elástico. La etapa destino se
- * gestiona internamente (preview) para que el re-render de la vista no
- * desmonte la tarjeta arrastrada; los listeners de move/end viven en
- * `document` para sobrevivir a ese re-render.
+ * body que sigue al dedo por encima del velo y de la barra de etapas. Mientras
+ * se arrastra, llegar al borde lateral cambia la etapa de destino EN VIVO
+ * (onPreviewStep → la vista hace swipe) y, si el dedo se mantiene en el borde,
+ * sigue avanzando cada EDGE_STEP_MS — así se pueden saltar varias etapas de un
+ * tirón. Al soltar, el clon vuela hasta la pestaña de la etapa destino y la
+ * tarjeta se mueve (onMove); soltar sin destino lo devuelve elástico.
+ *
+ * El teardown del efecto es NO destructivo si el drag está activo: al cambiar
+ * la etapa en vivo la tarjeta original se desmonta (la vista re-renderiza),
+ * pero el clon y los listeners de `document` sobreviven y se limpian en el
+ * touchend final — así el gesto no muere al hacer swipe de la etapa.
  */
-export function MobileMoveCard({ id, current, steps, onMove, children }: Props) {
+export function MobileMoveCard({ id, current, steps, onMove, onPreviewStep, children }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const timer = useRef<number | null>(null);
   const guard = useRef<number | null>(null);
@@ -74,6 +79,12 @@ export function MobileMoveCard({ id, current, steps, onMove, children }: Props) 
   const preview = useRef<string | null>(null);
   const edgeDir = useRef<0 | -1 | 1>(0);
   const edgeTimer = useRef<number | null>(null);
+  /* Handlers de document, guardados para poder quitarlos desde cleanup aunque
+     el componente ya se haya desmontado (cambio de etapa en vivo). */
+  const handlers = useRef<{
+    move: (e: TouchEvent) => void;
+    end: (e: TouchEvent) => void;
+  } | null>(null);
   const [dim, setDim] = useState(false);
 
   const cardEl = () => wrapRef.current?.firstElementChild as HTMLElement | null;
@@ -110,6 +121,18 @@ export function MobileMoveCard({ id, current, steps, onMove, children }: Props) 
     clone.current?.remove();
     clone.current = null;
     origin.current = null;
+    if (handlers.current) {
+      document.removeEventListener('touchmove', handlers.current.move, {
+        capture: true,
+      } as EventListenerOptions);
+      document.removeEventListener('touchend', handlers.current.end, {
+        capture: true,
+      } as EventListenerOptions);
+      document.removeEventListener('touchcancel', handlers.current.end, {
+        capture: true,
+      } as EventListenerOptions);
+      handlers.current = null;
+    }
     cardEl()?.classList.remove('mm-origin');
   };
 
@@ -209,6 +232,7 @@ export function MobileMoveCard({ id, current, steps, onMove, children }: Props) 
       }
       preview.current = next;
       dbg(`edge → ${next}`);
+      onPreviewStep?.(next);
       clearTarget();
       const tab = document.querySelector<HTMLElement>(`[data-seg="${next}"]`);
       if (tab) tab.classList.add('mm-target');
@@ -272,8 +296,8 @@ export function MobileMoveCard({ id, current, steps, onMove, children }: Props) 
     };
 
     /* Se adjunta a `document` (no al wrap) para que sobreviva al re-render que
-       provoca onPreview (la tarjeta original se desmonta, el clon y el gesto
-       siguen vivos). */
+       provoca onPreviewStep (la tarjeta original se desmonta, el clon y el
+       gesto siguen vivos). */
     const onTouchMove = (e: TouchEvent) => {
       if (!start.current) return;
       const t = e.touches[0];
@@ -380,13 +404,16 @@ export function MobileMoveCard({ id, current, steps, onMove, children }: Props) 
     document.addEventListener('touchmove', onTouchMove, { passive: false, capture: true });
     document.addEventListener('touchend', onTouchEnd, { passive: true, capture: true });
     document.addEventListener('touchcancel', onTouchEnd, { passive: true, capture: true });
+    handlers.current = { move: onTouchMove, end: onTouchEnd };
+
     return () => {
       cancelHold();
-      cleanup();
+      /* Si el drag está activo (el componente se desmonta por el swipe de etapa
+         en vivo), NO hacemos limpieza: el clon y los listeners de document
+         sobreviven y el touchend final ejecutará cleanup(). Solo el listener de
+         touchstart del wrap (que ya no existe) se descarta con el desmontaje. */
+      if (!lifted.current) cleanup();
       wrap.removeEventListener('touchstart', onTouchStart);
-      document.removeEventListener('touchmove', onTouchMove, { capture: true } as EventListenerOptions);
-      document.removeEventListener('touchend', onTouchEnd, { capture: true } as EventListenerOptions);
-      document.removeEventListener('touchcancel', onTouchEnd, { capture: true } as EventListenerOptions);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, current, steps.join(',')]);

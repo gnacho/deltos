@@ -310,6 +310,7 @@ export default function ExpenseBoard() {
                   current={exp.step}
                   steps={STEPS.map((st) => st.id)}
                   onMove={doMoveMobile}
+                  onPreviewStep={(step) => setSeg(step as ExpenseStep)}
                 >
                   <ExpenseCardMobile
                     expense={exp}

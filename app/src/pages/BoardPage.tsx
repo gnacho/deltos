@@ -300,6 +300,7 @@ export default function BoardPage() {
               current={tk.column}
               steps={COLUMNS.map((c) => c.id)}
               onMove={doMoveMobile}
+              onPreviewStep={(step) => setSeg(step as ColumnId)}
             >
               <TaskCardMobile
                 task={tk}
