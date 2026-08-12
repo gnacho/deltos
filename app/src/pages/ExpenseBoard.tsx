@@ -11,6 +11,7 @@ import { BalanceStrip, ExpenseSummary } from '@/components/ExpenseSummary';
 import { MobileMoveCard } from '@/components/MobileMoveCard';
 import { useKanbanDnD } from '@/hooks/useKanbanDnD';
 import { useStepSwipe } from '@/hooks/useStepSwipe';
+import { useSwipeDiag } from '@/hooks/useSwipeDiag';
 import { colorOf } from '@/lib/colors';
 import { announce } from '@/lib/announce';
 
@@ -139,6 +140,7 @@ export default function ExpenseBoard() {
   };
 
   useStepSwipe<ExpenseStep>(listRef, STEPS.map((st) => st.id), seg, setSeg, data.ready);
+  useSwipeDiag();
 
   if (!data.ready) {
     if (data.bootstrapError) {
@@ -302,7 +304,6 @@ export default function ExpenseBoard() {
               className="lg:hidden space-y-3 pb-4"
               aria-live="polite"
               aria-label={t('board.listAria')}
-              style={{ touchAction: 'pan-y' }}
             >
               {(byStep.get(seg) ?? []).map((exp, i) => (
                 <MobileMoveCard
