@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Installed PWA stayed locked in portrait orientation on tablets: the manifest
+  forced `portrait`; now `any` so the app rotates with the device. Also bump
+  the SW cache version so installed PWAs pick up manifest changes. (#142)
+
 ### Todo
 
 - **Security and robustness audit** (bug-hunting release): review auth and
