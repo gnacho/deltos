@@ -39,6 +39,7 @@ export default function ExpenseBoard() {
   const [view, setView] = useState<'tablero' | 'resumen'>('tablero');
 
   const boardRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
   const expenses = data.getExpenses();
 
@@ -137,11 +138,7 @@ export default function ExpenseBoard() {
     })();
   };
 
-  const swipe = useStepSwipe<ExpenseStep>(
-    STEPS.map((st) => st.id),
-    seg,
-    setSeg,
-  );
+  useStepSwipe<ExpenseStep>(listRef, STEPS.map((st) => st.id), seg, setSeg);
 
   if (!data.ready) {
     if (data.bootstrapError) {
@@ -301,14 +298,11 @@ export default function ExpenseBoard() {
 
             {/* Lista móvil (<lg): un solo estado */}
             <div
+              ref={listRef}
               className="lg:hidden space-y-3 pb-4"
               aria-live="polite"
               aria-label={t('board.listAria')}
               style={{ touchAction: 'pan-y' }}
-              onTouchStart={swipe.onTouchStart}
-              onTouchMove={swipe.onTouchMove}
-              onTouchEnd={swipe.onTouchEnd}
-              onTouchCancel={swipe.onTouchEnd}
             >
               {(byStep.get(seg) ?? []).map((exp, i) => (
                 <MobileMoveCard

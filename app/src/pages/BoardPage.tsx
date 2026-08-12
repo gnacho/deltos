@@ -36,6 +36,7 @@ export default function BoardPage() {
     filters.projects.size + filters.people.size + filters.priorities.size + filters.tags.size;
 
   const boardRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
   const tasks = data.getTasks();
   const project = isTodo ? undefined : data.getProject(view);
@@ -108,11 +109,7 @@ export default function BoardPage() {
     void doMove(id, toCol as ColumnId, null);
   };
 
-  const swipe = useStepSwipe<ColumnId>(
-    COLUMNS.map((c) => c.id),
-    seg,
-    setSeg,
-  );
+  useStepSwipe<ColumnId>(listRef, COLUMNS.map((c) => c.id), seg, setSeg);
 
   if (!data.ready) {
     if (data.bootstrapError) {
@@ -180,15 +177,8 @@ export default function BoardPage() {
           </div>
         )}
 
-        {/* Móvil: filtros (botón) + alcance en la misma horizontal */}
+        {/* Móvil: alcance + filtros (botón detrás) en la misma horizontal */}
         <div className="mb-4 flex items-center gap-2">
-          {isTodo && (
-            <FiltersToggleButton
-              activeCount={filtersOpen ? 0 : activeFilterCount}
-              open={filtersOpen}
-              onClick={() => setFiltersOpen((o) => !o)}
-            />
-          )}
           <div
             role="tablist"
             aria-label={t('board.scopeAria')}
@@ -212,6 +202,13 @@ export default function BoardPage() {
               );
             })}
           </div>
+          {isTodo && (
+            <FiltersToggleButton
+              activeCount={filtersOpen ? 0 : activeFilterCount}
+              open={filtersOpen}
+              onClick={() => setFiltersOpen((o) => !o)}
+            />
+          )}
           <button
             type="button"
             onClick={() => openNewTask({ projectId: isTodo ? undefined : view, column: 'nuevo' })}
@@ -288,14 +285,11 @@ export default function BoardPage() {
 
         {/* Lista móvil (<lg): un solo estado, tarjetas simplificadas */}
         <div
+          ref={listRef}
           className="lg:hidden space-y-3 pb-4"
           aria-live="polite"
           aria-label={t('board.listAria')}
           style={{ touchAction: 'pan-y' }}
-          onTouchStart={swipe.onTouchStart}
-          onTouchMove={swipe.onTouchMove}
-          onTouchEnd={swipe.onTouchEnd}
-          onTouchCancel={swipe.onTouchEnd}
         >
           {(byColumn.get(seg) ?? []).map((tk, i) => (
             <MobileMoveCard
