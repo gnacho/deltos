@@ -6,6 +6,8 @@ const SCROLL_SLOP = 12; /* px de movimiento antes del hold → es un scroll */
 const FLICK_VY = -0.55; /* px/ms hacia arriba para contar como lanzamiento */
 const FLICK_DY = -48;
 const CLEANUP_GUARD_MS = 500; /* red de seguridad: nada queda pegado */
+const EDGE = 48; /* px del borde lateral para cambiar de etapa durante el arrastre */
+const EDGE_STEP_MS = 420; /* repetición mientras el dedo se mantiene en el borde */
 
 const reducedMotionMQ = window.matchMedia('(prefers-reduced-motion: reduce)');
 
@@ -45,11 +47,15 @@ interface Props {
 /**
  * Movimiento móvil de tarjetas: mantener pulsado crea un CLON fijo a nivel de
  * body (opaco, inclinado, con sombra) que sigue al dedo por encima del velo y
- * de la barra de etapas ([data-segbar]); la etapa bajo el dedo ([data-seg]) se
- * enciende con el acento. Al soltar sobre una etapa el clon vuela hasta la
- * pestaña y el contador salta; un flick hacia arriba avanza a la siguiente;
- * soltar sin destino lo devuelve elástico a su sitio. La tarjeta original solo
- * se atenúa (sin z-index): no puede quedar por encima de nada.
+ * de la barra de etapas ([data-segbar]). Mientras se arrastra, llegar al borde
+ * lateral cambia la etapa de destino EN VIVO (la pestaña se ilumina) y, si el
+ * dedo se mantiene en el borde, sigue avanzando cada EDGE_STEP_MS — así se
+ * pueden saltar varias etapas de un tirón sin soltar. Al soltar, el clon vuela
+ * hasta la pestaña de la etapa destino y la tarjeta se mueve (onMove), y la
+ * vista la sigue; soltar sin destino lo devuelve elástico. La etapa destino se
+ * gestiona internamente (preview) para que el re-render de la vista no
+ * desmonte la tarjeta arrastrada; los listeners de move/end viven en
+ * `document` para sobrevivir a ese re-render.
  */
 export function MobileMoveCard({ id, current, steps, onMove, children }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -63,6 +69,11 @@ export function MobileMoveCard({ id, current, steps, onMove, children }: Props) 
   const grab = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const justDragged = useRef(false);
   const raf = useRef<number | null>(null);
+  /* Etapa "previsualizada" durante el arrastre: empieza en la actual y avanza
+     hacia el borde; al soltar es el destino real del move. */
+  const preview = useRef<string | null>(null);
+  const edgeDir = useRef<0 | -1 | 1>(0);
+  const edgeTimer = useRef<number | null>(null);
   const [dim, setDim] = useState(false);
 
   const cardEl = () => wrapRef.current?.firstElementChild as HTMLElement | null;
@@ -84,6 +95,12 @@ export function MobileMoveCard({ id, current, steps, onMove, children }: Props) 
       window.clearTimeout(guard.current);
       guard.current = null;
     }
+    if (edgeTimer.current !== null) {
+      window.clearInterval(edgeTimer.current);
+      edgeTimer.current = null;
+    }
+    edgeDir.current = 0;
+    preview.current = null;
     if (raf.current !== null) cancelAnimationFrame(raf.current);
     clearTarget();
     document.body.classList.remove('mm-dragging');
@@ -176,11 +193,41 @@ export function MobileMoveCard({ id, current, steps, onMove, children }: Props) 
       }
     };
 
+    /* Avanza la etapa previsualizada una posición hacia el borde en el que
+       está el dedo; si no hay etapa en esa dirección, deja de repetir. */
+    const stepEdge = () => {
+      if (edgeDir.current === 0 || !preview.current) return;
+      const i = steps.indexOf(preview.current);
+      if (i === -1) return;
+      const next = edgeDir.current > 0 ? steps[i + 1] : steps[i - 1];
+      if (!next) {
+        if (edgeTimer.current !== null) {
+          window.clearInterval(edgeTimer.current);
+          edgeTimer.current = null;
+        }
+        return;
+      }
+      preview.current = next;
+      dbg(`edge → ${next}`);
+      clearTarget();
+      const tab = document.querySelector<HTMLElement>(`[data-seg="${next}"]`);
+      if (tab) tab.classList.add('mm-target');
+    };
+
+    const stopEdge = () => {
+      edgeDir.current = 0;
+      if (edgeTimer.current !== null) {
+        window.clearInterval(edgeTimer.current);
+        edgeTimer.current = null;
+      }
+    };
+
     const lift = () => {
       const card = cardEl();
       if (!card) return;
       lifted.current = true;
       justDragged.current = true;
+      preview.current = current;
       dbg('LIFT: clon creado, scroll bloqueado a partir de ahora');
       navigator.vibrate?.(12);
       const rect = card.getBoundingClientRect();
@@ -224,6 +271,9 @@ export function MobileMoveCard({ id, current, steps, onMove, children }: Props) 
       }, HOLD_MS);
     };
 
+    /* Se adjunta a `document` (no al wrap) para que sobreviva al re-render que
+       provoca onPreview (la tarjeta original se desmonta, el clon y el gesto
+       siguen vivos). */
     const onTouchMove = (e: TouchEvent) => {
       if (!start.current) return;
       const t = e.touches[0];
@@ -250,15 +300,34 @@ export function MobileMoveCard({ id, current, steps, onMove, children }: Props) 
       raf.current = requestAnimationFrame(() => {
         if (!origin.current) return;
         setCloneTransform(t.clientX - grab.current.x, t.clientY - grab.current.y);
-        clearTarget();
-        const tab = tabUnder(t.clientX, t.clientY);
-        if (tab && tab.dataset.seg !== current) tab.classList.add('mm-target');
+
+        /* Borde lateral → etapa en vivo, repetible mientras se mantiene ahí. */
+        const inRight = t.clientX >= window.innerWidth - EDGE;
+        const inLeft = t.clientX <= EDGE;
+        const dir: 0 | -1 | 1 = inRight ? 1 : inLeft ? -1 : 0;
+        if (dir !== 0 && dir !== edgeDir.current) {
+          edgeDir.current = dir;
+          stepEdge();
+          if (edgeTimer.current !== null) window.clearInterval(edgeTimer.current);
+          edgeTimer.current = window.setInterval(stepEdge, EDGE_STEP_MS);
+        } else if (dir === 0) {
+          stopEdge();
+          clearTarget();
+          const tab = tabUnder(t.clientX, t.clientY);
+          if (tab && tab.dataset.seg !== current) tab.classList.add('mm-target');
+        } else {
+          const tab = document.querySelector<HTMLElement>(
+            `[data-seg="${preview.current ?? current}"]`,
+          );
+          if (tab) tab.classList.add('mm-target');
+        }
       });
     };
 
     const onTouchEnd = (e: TouchEvent) => {
-      dbg(`end type=${e.type} lifted=${lifted.current}`);
+      dbg(`end type=${e.type} lifted=${lifted.current} preview=${preview.current}`);
       cancelHold();
+      stopEdge();
       if (!lifted.current || !start.current) {
         start.current = null;
         return;
@@ -266,13 +335,22 @@ export function MobileMoveCard({ id, current, steps, onMove, children }: Props) 
       const t = e.changedTouches[0];
       const dy = t.clientY - start.current.y;
       const tab = tabUnder(t.clientX, t.clientY);
+
+      /* Etapa previsualizada por el borde (cambió en vivo) → destino real. */
+      if (preview.current && preview.current !== current) {
+        const targetTab = document.querySelector<HTMLElement>(`[data-seg="${preview.current}"]`);
+        if (targetTab) {
+          dbg(`drop tras preview ${current}→${preview.current}`);
+          flyTo(targetTab, preview.current);
+          return;
+        }
+      }
       if (tab && tab.dataset.seg && tab.dataset.seg !== current) {
         dbg(`drop en etapa ${tab.dataset.seg} → vuelo`);
         flyTo(tab, tab.dataset.seg);
         return;
       }
       /* Soltar junto al borde lateral → etapa vecina (izquierda: anterior, derecha: siguiente) */
-      const EDGE = 48;
       const idx = steps.indexOf(current);
       let side: string | null = null;
       if (t.clientX <= EDGE && idx > 0) side = steps[idx - 1];
@@ -298,18 +376,17 @@ export function MobileMoveCard({ id, current, steps, onMove, children }: Props) 
       springBack();
     };
 
-    /* touchmove no pasivo: hay que poder bloquear el scroll al levantar */
     wrap.addEventListener('touchstart', onTouchStart, { passive: true });
-    wrap.addEventListener('touchmove', onTouchMove, { passive: false });
-    wrap.addEventListener('touchend', onTouchEnd, { passive: true });
-    wrap.addEventListener('touchcancel', onTouchEnd, { passive: true });
+    document.addEventListener('touchmove', onTouchMove, { passive: false, capture: true });
+    document.addEventListener('touchend', onTouchEnd, { passive: true, capture: true });
+    document.addEventListener('touchcancel', onTouchEnd, { passive: true, capture: true });
     return () => {
       cancelHold();
       cleanup();
       wrap.removeEventListener('touchstart', onTouchStart);
-      wrap.removeEventListener('touchmove', onTouchMove);
-      wrap.removeEventListener('touchend', onTouchEnd);
-      wrap.removeEventListener('touchcancel', onTouchEnd);
+      document.removeEventListener('touchmove', onTouchMove, { capture: true } as EventListenerOptions);
+      document.removeEventListener('touchend', onTouchEnd, { capture: true } as EventListenerOptions);
+      document.removeEventListener('touchcancel', onTouchEnd, { capture: true } as EventListenerOptions);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, current, steps.join(',')]);
