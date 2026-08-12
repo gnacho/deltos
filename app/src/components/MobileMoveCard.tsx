@@ -80,7 +80,9 @@ export function MobileMoveCard({ id, current, steps, onMove, trackRef, children 
     move: (e: TouchEvent) => void;
     end: (e: TouchEvent) => void;
   } | null>(null);
-  const committing = useRef(false);
+  /* True cuando el gesto ya se resolvió (flyTo/springBack en marcha): el clon
+     se limpia solo; la red de seguridad de onTouchEnd no debe pisarlo. */
+  const resolved = useRef(false);
   const [dim, setDim] = useState(false);
 
   const cardEl = () => wrapRef.current?.firstElementChild as HTMLElement | null;
@@ -134,12 +136,13 @@ export function MobileMoveCard({ id, current, steps, onMove, trackRef, children 
     }
     edgeDir.current = 0;
     preview.current = null;
+    resolved.current = false;
     if (raf.current !== null) cancelAnimationFrame(raf.current);
     clearTarget();
     document.body.classList.remove('mm-dragging');
     setDim(false);
     lifted.current = false;
-    committing.current = false;
+    resolved.current = false;
     start.current = null;
     clone.current?.remove();
     clone.current = null;
@@ -178,7 +181,6 @@ export function MobileMoveCard({ id, current, steps, onMove, trackRef, children 
     const c = clone.current;
     const col = document.querySelector<HTMLElement>(`[data-mobile-stage="${step}"]`);
     const tab = document.querySelector<HTMLElement>(`[data-seg="${step}"]`);
-    committing.current = true;
     const commit = () => {
       navigator.vibrate?.(8);
       if (tab) {
@@ -197,6 +199,7 @@ export function MobileMoveCard({ id, current, steps, onMove, trackRef, children 
       commit();
       return;
     }
+    resolved.current = true;
     trackSnap(step);
     clearTarget();
     document.body.classList.remove('mm-dragging');
@@ -241,6 +244,7 @@ export function MobileMoveCard({ id, current, steps, onMove, trackRef, children 
       cleanup();
       return;
     }
+    resolved.current = true;
     c.style.transition = 'transform 0.32s cubic-bezier(0.34, 1.56, 0.64, 1)';
     setCloneTransform(o.left, o.top, 'rotate(0deg) scale(1)');
     c.addEventListener('transitionend', cleanup, { once: true });
@@ -324,7 +328,13 @@ export function MobileMoveCard({ id, current, steps, onMove, trackRef, children 
     };
 
     const onTouchStart = (e: TouchEvent) => {
-      if (clone.current || e.touches.length !== 1) return;
+      if (e.touches.length !== 1) return;
+      if (clone.current) {
+        /* Red de seguridad: un clon huérfano de un gesto anterior no debe
+           bloquear esta tarjeta; se limpia antes de empezar. */
+        dbg('SAFETY: clon huérfano previo → cleanup');
+        cleanup();
+      }
       const t = e.touches[0];
       start.current = { x: t.clientX, y: t.clientY };
       last.current = { y: t.clientY, t: performance.now(), vy: 0 };
@@ -400,43 +410,56 @@ export function MobileMoveCard({ id, current, steps, onMove, trackRef, children 
       dbg(`end type=${e.type} lifted=${lifted.current} preview=${preview.current}`);
       cancelHold();
       stopEdge();
-      if (!lifted.current || !start.current) {
-        start.current = null;
-        return;
-      }
-      const t = e.changedTouches[0];
-      const dy = t.clientY - start.current.y;
-      const tab = tabUnder(t.clientX, t.clientY);
-
-      /* Etapa previsualizada por el borde (cambió en vivo) → destino real. */
-      if (preview.current && preview.current !== current) {
-        dbg(`drop tras preview ${current}→${preview.current}`);
-        flyTo(preview.current);
-        return;
-      }
-      if (tab && tab.dataset.seg && tab.dataset.seg !== current) {
-        dbg(`drop en etapa ${tab.dataset.seg} → vuelo`);
-        flyTo(tab.dataset.seg);
-        return;
-      }
-      const idx = steps.indexOf(current);
-      let side: string | null = null;
-      if (t.clientX <= EDGE && idx > 0) side = steps[idx - 1];
-      else if (t.clientX >= window.innerWidth - EDGE && idx < steps.length - 1)
-        side = steps[idx + 1];
-      if (side) {
-        dbg(`drop en lateral ${t.clientX >= window.innerWidth - EDGE ? 'derecha' : 'izquierda'} → ${side}`);
-        flyTo(side);
-        return;
-      }
-      if (last.current.vy < FLICK_VY && dy < FLICK_DY) {
-        const next = steps[steps.indexOf(current) + 1];
-        if (next) {
-          flyTo(next);
+      try {
+        if (!lifted.current || !start.current) {
+          start.current = null;
           return;
         }
+        const t = e.changedTouches[0];
+        const dy = t ? t.clientY - start.current.y : 0;
+        const tab = t ? tabUnder(t.clientX, t.clientY) : null;
+
+        /* Etapa previsualizada por el borde (cambió en vivo) → destino real. */
+        if (preview.current && preview.current !== current) {
+          dbg(`drop tras preview ${current}→${preview.current}`);
+          flyTo(preview.current);
+          return;
+        }
+        if (tab && tab.dataset.seg && tab.dataset.seg !== current) {
+          dbg(`drop en etapa ${tab.dataset.seg} → vuelo`);
+          flyTo(tab.dataset.seg);
+          return;
+        }
+        if (t) {
+          const idx = steps.indexOf(current);
+          let side: string | null = null;
+          if (t.clientX <= EDGE && idx > 0) side = steps[idx - 1];
+          else if (t.clientX >= window.innerWidth - EDGE && idx < steps.length - 1)
+            side = steps[idx + 1];
+          if (side) {
+            dbg(`drop en lateral ${t.clientX >= window.innerWidth - EDGE ? 'derecha' : 'izquierda'} → ${side}`);
+            flyTo(side);
+            return;
+          }
+        }
+        if (last.current.vy < FLICK_VY && dy < FLICK_DY) {
+          const next = steps[steps.indexOf(current) + 1];
+          if (next) {
+            flyTo(next);
+            return;
+          }
+        }
+        springBack();
+      } finally {
+        /* RED DE SEGURIDAD ABSOLUTA: si por cualquier excepción (p.ej. un
+           touchcancel sin changedTouches en WKWebView) no se resolvió el gesto
+           ni se limpió, forzamos la limpieza aquí. Así el clon NUNCA puede
+           quedar pegado en la pantalla ni los listeners de document huérfanos. */
+        if (lifted.current && !resolved.current) {
+          dbg('SAFETY: gesto sin resolver → cleanup forzado');
+          cleanup();
+        }
       }
-      springBack();
     };
 
     wrap.addEventListener('touchstart', onTouchStart, { passive: true });
