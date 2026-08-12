@@ -261,9 +261,11 @@ export function MobileMoveCard({ id, current, steps, onMove, trackRef, children 
     /* Marcar el clon "en vuelo": el barrendero global de las páginas NO lo
        tocará hasta que finish/cleanup lo elimine. */
     c.dataset.flying = '1';
-    c.style.transition = 'transform 0.38s cubic-bezier(0.3, 0.7, 0.3, 1), opacity 0.38s ease';
-    setCloneTransform(dx, dy, 'rotate(8deg) scale(0.1)');
-    c.style.opacity = '0.15';
+    /* Misma animación de caída que springBack (bounce elástico, aterrizar
+       plano): el clon cae sobre el ghost como si hubiera caído en el hueco de
+       origen. */
+    c.style.transition = 'transform 0.32s cubic-bezier(0.34, 1.56, 0.64, 1)';
+    setCloneTransform(dx, dy, 'rotate(0deg) scale(1)');
     let done = false;
     const finish = () => {
       if (done) return;
