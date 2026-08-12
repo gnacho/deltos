@@ -191,9 +191,9 @@ export default function ExpenseBoard() {
 
   return (
     <div className="touch-pan-y min-h-[calc(100dvh-152px)] lg:min-h-0 lg:touch-auto">
-      <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 pt-5 lg:pt-7">
+      <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 pt-3 lg:pt-7">
         {/* Botón "Resumen" (toggle): pulsado = vista resumen; sin pulsar = tablero */}
-        <div className="mb-5 flex flex-wrap items-center gap-2">
+        <div className="mb-2 flex flex-wrap items-center gap-2">
           <button
             type="button"
             aria-pressed={view === 'resumen'}
@@ -257,7 +257,7 @@ export default function ExpenseBoard() {
             </div>
 
             {/* ============ SEGMENTED CONTROL MÓVIL: justo sobre las tareas ============ */}
-            <div data-segbar className="lg:hidden mb-3">
+            <div data-segbar className="lg:hidden mb-2">
               <div
                 role="tablist"
                 aria-label={t('board.statesAria')}

@@ -5,11 +5,14 @@ const SWIPE_SLOP = 10; /* px antes de "reclamar" el gesto como swipe horizontal 
 const SNAP_FRACTION = 0.22; /* fracción del ancho del track para decidir snap */
 const EDGE_RESIST = 0.35; /* resistencia elástica al empujar en la primera/última etapa */
 
-/* Zonas en las que NO se roba el gesto: el swipe solo cambia etapa cuando el
-   dedo empieza en la zona "de contenido" (tarjetas, huecos, la página en
-   general) y nunca sobre controles interactivos. */
-const EXCLUDED =
-  'nav, [data-segbar], [data-col], [role="dialog"], button, a, input, select, textarea';
+/* Zonas en las que NO se roba el gesto: el swipe cambia de etapa cuando el dedo
+   empieza en la zona de contenido (tarjetas, huecos, la página en general) y
+   nunca sobre la barra de etapas, el nav, modales o el board de escritorio.
+   NOTA: botones/inputs NO se excluyen a propósito — la mayoría de los toques
+   sobre una tarjeta caen en sus elementos interactivos interiores, y el swipe
+   debe funcionar encima de las tarjetas. El tap intacto: el hook solo reclama
+   (preventDefault + snap) cuando hay desplazamiento horizontal. */
+const EXCLUDED = 'nav, [data-segbar], [data-col], [role="dialog"]';
 
 /**
  * Swipe horizontal sobre el track de etapas móvil, CONTROLADO por el dedo

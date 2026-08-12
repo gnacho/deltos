@@ -128,7 +128,7 @@ export default function BoardPage() {
   if (!data.ready) {
     if (data.bootstrapError) {
       return (
-        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 pt-5 lg:pt-7">
+      <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 pt-3 lg:pt-7">
           <div className="rounded-2xl bg-surface border border-app shadow-soft p-8 text-center max-w-md mx-auto">
             <p className="text-[15px] font-medium mb-1">{t('common.error')}</p>
             <p className="text-sm text-muted mb-4">{data.bootstrapError}</p>
@@ -192,7 +192,7 @@ export default function BoardPage() {
         )}
 
         {/* Móvil: alcance + filtros (botón detrás) en la misma horizontal */}
-        <div className="mb-4 flex items-center gap-2">
+        <div className="mb-2 flex items-center gap-2">
           <div
             role="tablist"
             aria-label={t('board.scopeAria')}
@@ -246,7 +246,7 @@ export default function BoardPage() {
         {/* ============ SEGMENTED CONTROL MÓVIL: justo sobre las tareas ============ */}
         <div
           data-segbar
-          className="lg:hidden mb-3"
+          className="lg:hidden mb-2"
         >
           <div
             role="tablist"
