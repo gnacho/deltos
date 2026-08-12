@@ -169,8 +169,9 @@ export function MobileMoveCard({ id, current, steps, onMove, trackRef, children 
     clone.current.style.transform = `translate(${x}px, ${y}px) ${extra}`;
   };
 
-  /** El clon vuela hasta la columna de la etapa destino en el track (el sitio
-   * donde cae definitivamente) y se ejecuta el move; el contador de la pestaña
+  /** El clon vuela hasta el punto de inserción real de la tarjeta en la
+   * columna de la etapa destino (tras la última tarjeta de esa columna, que es
+   * donde la inserta onMove) y se ejecuta el move; el contador de la pestaña
    * salta como feedback. */
   const flyTo = (step: string) => {
     if (raf.current !== null) cancelAnimationFrame(raf.current);
@@ -201,10 +202,17 @@ export function MobileMoveCard({ id, current, steps, onMove, trackRef, children 
     document.body.classList.remove('mm-dragging');
     setDim(false);
     lifted.current = false;
+    /* Punto de inserción real: el clon aterriza tras la última tarjeta de la
+       columna destino (la nueva tarjeta se añade al final, position=length). */
     const cr = c.getBoundingClientRect();
-    const tr = col.getBoundingClientRect();
-    const dx = tr.left + tr.width / 2 - cr.width / 2;
-    const dy = tr.top + tr.height / 2 - cr.height / 2;
+    const colRect = col.getBoundingClientRect();
+    const cards = Array.from(col.querySelectorAll<HTMLElement>(':scope > div'));
+    let tx = colRect.left + colRect.width / 2;
+    let ty = cards.length
+      ? cards[cards.length - 1].getBoundingClientRect().bottom + 12
+      : colRect.top + 16;
+    const dx = tx - cr.width / 2;
+    const dy = ty - cr.height / 2;
     c.style.transition = 'transform 0.38s cubic-bezier(0.3, 0.7, 0.3, 1), opacity 0.38s ease';
     setCloneTransform(dx, dy, 'rotate(8deg) scale(0.1)');
     c.style.opacity = '0.15';
