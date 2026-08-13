@@ -14,6 +14,7 @@ const BoardPage = lazyRetry(() => import('@/pages/BoardPage'));
 const ExpenseBoard = lazyRetry(() => import('@/pages/ExpenseBoard'));
 const ProjectsPage = lazyRetry(() => import('@/pages/ProjectsPage'));
 const ActivityPage = lazyRetry(() => import('@/pages/ActivityPage'));
+const SummaryPage = lazyRetry(() => import('@/pages/SummaryPage'));
 const SettingsPage = lazyRetry(() => import('@/pages/SettingsPage'));
 const InvitePage = lazyRetry(() => import('@/pages/InvitePage'));
 
@@ -68,6 +69,16 @@ function ProtectedRoutes() {
                 <ErrorBoundary>
                   <Suspense fallback={<RouteFallback />}>
                     <ActivityPage />
+                  </Suspense>
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="summary"
+              element={
+                <ErrorBoundary>
+                  <Suspense fallback={<RouteFallback />}>
+                    <SummaryPage />
                   </Suspense>
                 </ErrorBoundary>
               }
