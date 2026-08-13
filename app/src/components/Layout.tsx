@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import {
   LayoutGrid,
   Folder,
-  Clock,
+  ListTodo,
   Settings,
   Sun,
   Moon,
@@ -308,7 +308,7 @@ function DemoBanner() {
 const TITLE_KEYS: [RegExp, string][] = [
   [/^\/$/, 'nav.todo'],
   [/^\/projects/, 'nav.projects'],
-  [/^\/activity/, 'nav.activity'],
+  [/^\/summary/, 'nav.summary'],
   [/^\/expenses/, 'nav.expenses'],
   [/^\/settings/, 'nav.settings'],
 ];
@@ -507,8 +507,8 @@ export default function Layout() {
             <IconNavLink to="/" end label={t('nav.todo')}>
               <LayoutGrid className="w-[18px] h-[18px]" aria-hidden="true" />
             </IconNavLink>
-            <IconNavLink to="/activity" label={t('nav.activity')}>
-              <Clock className="w-[18px] h-[18px]" aria-hidden="true" />
+            <IconNavLink to="/summary" label={t('nav.summary')}>
+              <ListTodo className="w-[18px] h-[18px]" aria-hidden="true" />
             </IconNavLink>
             {showExpenses && (
               <IconNavLink to="/expenses" label={t('nav.expenses')}>
@@ -572,11 +572,11 @@ export default function Layout() {
                 <span className="flex-1 text-left">{t('nav.todo')}</span>
                 <span className="tnum text-xs text-faint">{openAll}</span>
               </NavLink>
-              <NavLink to="/activity" className={sideItemCls}>
+              <NavLink to="/summary" className={sideItemCls}>
                 <span className="text-faint">
-                  <Clock className="w-4 h-4" aria-hidden="true" />
+                  <ListTodo className="w-4 h-4" aria-hidden="true" />
                 </span>
-                <span className="flex-1 text-left">{t('nav.activity')}</span>
+                <span className="flex-1 text-left">{t('nav.summary')}</span>
               </NavLink>
               {showExpenses && (
                 <NavLink to="/expenses" className={sideItemCls}>
@@ -669,8 +669,8 @@ export default function Layout() {
           <IconNavLink to="/projects" label={t('nav.projects')} active={isProjectsSection}>
             <Folder className="w-[18px] h-[18px]" aria-hidden="true" />
           </IconNavLink>
-          <IconNavLink to="/activity" label={t('nav.activity')}>
-            <Clock className="w-[18px] h-[18px]" aria-hidden="true" />
+          <IconNavLink to="/summary" label={t('nav.summary')}>
+            <ListTodo className="w-[18px] h-[18px]" aria-hidden="true" />
           </IconNavLink>
           {showExpenses && (
             <IconNavLink to="/expenses" label={t('nav.expenses')}>
@@ -766,13 +766,13 @@ export default function Layout() {
             </NavLink>
           )}
           <NavLink
-            to="/activity"
+            to="/summary"
             className={({ isActive }) => bnCls(isActive)}
-            aria-label={t('nav.activity')}
-            onClick={scrollTopIfActive('/activity')}
+            aria-label={t('nav.summary')}
+            onClick={scrollTopIfActive('/summary')}
           >
-            <Clock className="w-5 h-5" aria-hidden="true" />
-            <span className="text-[11px] font-medium">{t('nav.activity')}</span>
+            <ListTodo className="w-5 h-5" aria-hidden="true" />
+            <span className="text-[11px] font-medium">{t('nav.summary')}</span>
           </NavLink>
           <NavLink
             to="/settings"

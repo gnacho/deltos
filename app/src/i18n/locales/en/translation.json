@@ -39,7 +39,8 @@
     "boardSelect": "Projects",
     "collapse": "Collapse menu",
     "expand": "Expand menu",
-    "expenses": "Expenses"
+    "expenses": "Expenses",
+    "summary": "Summary"
   },
   "columns": {
     "nuevo": "New",
@@ -652,5 +653,21 @@
     "title": "Something went wrong",
     "desc": "The app hit an unexpected error. Reloading usually fixes it.",
     "reload": "Reload"
+  },
+  "summary": {
+    "title": "Summary",
+    "subtitle": "What needs doing and what needs paying, by urgency.",
+    "tabs.reminders": "Reminders",
+    "tabs.activity": "Activity",
+    "tasks.heading": "Tasks",
+    "tasks.empty": "No pending tasks. All caught up.",
+    "tasks.overdue": "Overdue",
+    "tasks.today": "Due today",
+    "tasks.upcoming": "Upcoming",
+    "tasks.highPriority": "High priority",
+    "expenses.heading": "Expenses",
+    "expenses.empty": "No pending expenses.",
+    "expenses.youOwe": "You owe",
+    "expenses.owedToYou": "Owed to you"
   }
 }
