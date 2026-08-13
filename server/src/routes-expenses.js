@@ -98,16 +98,22 @@ function writeShares(db, expenseId, shares, payerId) {
   }
 }
 
-/* Ciclo de vida derivado de las partes (spec issue #55):
-   nuevo = sin reparto declarado · en-curso = repartido con deudores pendientes
-   · hecho = todas las partes pagadas. El move manual puede forzar cualquier
-   columna; esto solo aplica al crear/editar/pagar partes. */
-function resolveStep(db, expenseId, payerId, requestedStep) {
+/* Ciclo de vida derivado de las partes e invitaciones (spec issue #113):
+   nuevo = sin reparto declarado · en-curso (Repartido) = reparto con deudores
+   pendientes · hecho (Pagado) = todas las partes e invitaciones pagadas.
+   El move manual puede forzar cualquier columna; esto solo aplica al
+   crear/editar/pagar partes o invitaciones. */
+export function resolveStep(db, expenseId, payerId, requestedStep) {
   const shares = db.prepare(
     'SELECT COUNT(*) AS n, SUM(CASE WHEN user_id != ? AND paid = 0 THEN 1 ELSE 0 END) AS pending FROM expense_shares WHERE expense_id = ?'
   ).get(payerId, expenseId)
-  if (shares.n === 0) return requestedStep /* sin reparto declarado: no se toca */
-  if ((shares.pending ?? 0) === 0) return 'hecho'
+  const invites = db.prepare(
+    'SELECT COUNT(*) AS n, SUM(CASE WHEN paid = 0 THEN 1 ELSE 0 END) AS pending FROM expense_invites WHERE expense_id = ?'
+  ).get(expenseId)
+  const declared = (shares.n ?? 0) + (invites.n ?? 0)
+  if (declared === 0) return requestedStep /* sin reparto declarado: no se toca */
+  const pending = (shares.pending ?? 0) + (invites.pending ?? 0)
+  if (pending === 0) return 'hecho'
   return requestedStep === 'nuevo' || requestedStep === 'hecho' ? 'en-curso' : requestedStep
 }
 

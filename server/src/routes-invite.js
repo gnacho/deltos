@@ -4,6 +4,7 @@ import { zValidator } from '@hono/zod-validator';
 import { logger } from './logger.js';
 import { httpError } from './errors.js';
 import { ERROR_CODES } from './error-codes.js';
+import { resolveStep } from './routes-expenses.js';
 
 const log = logger.child({ component: 'invite' });
 
@@ -54,7 +55,15 @@ export function registerInviteRoutes(app, { prod }) {
       'INSERT INTO expense_invites (id, expense_id, token_hash, token, invite_name, share_cents, paid, notes, created_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)'
     ).run(id, expenseId, tokenHash, token, invite_name, share_cents, notes, now);
 
-    log.info('invite_created', { expense_id: expenseId, invite_id: id, actor: user.id });
+    /* Auto-transición (#113): un reparto con invitaciones pendientes es
+       "Repartido" (en-curso); si todo está pagado, "Pagado" (hecho). */
+    const cur = prod.prepare('SELECT step, payer_id FROM expenses WHERE id = ?').get(expenseId);
+    const newStep = resolveStep(prod, expenseId, cur.payer_id, cur.step);
+    if (newStep !== cur.step) {
+      prod.prepare('UPDATE expenses SET step = ?, updated_at = ? WHERE id = ?').run(newStep, now, expenseId);
+    }
+
+    log.info('invite_created', { expense_id: expenseId, invite_id: id, actor: user.id, step: newStep });
 
     return c.json({
       invite: {
@@ -154,22 +163,15 @@ app.put('/api/invite/:token/pay', zValidator('json', paySchema), (c) => {
     'UPDATE expense_invites SET paid = 1, payment_method = ? WHERE id = ?'
   ).run(payment_method || null, invite.id);
 
-  // Auto-transición: si todas las partes + invitaciones están pagadas → Pagado
-  const pending = prod.prepare(
-    `SELECT (SELECT COUNT(*) FROM expense_shares WHERE expense_id = ? AND user_id != (SELECT payer_id FROM expenses WHERE id = ?) AND paid = 0)
-          + (SELECT COUNT(*) FROM expense_invites WHERE expense_id = ? AND paid = 0) AS total`
-  ).get(invite.expense_id, invite.expense_id, invite.expense_id);
-  if ((pending?.total ?? 0) === 0) {
-    prod.prepare('UPDATE expenses SET step = ?, updated_at = ? WHERE id = ?').run('hecho', Date.now(), invite.expense_id);
-  } else {
-    // Si hay pendientes y el gasto está en 'nuevo', pasarlo a 'en-curso' (Repartido)
-    const exp = prod.prepare('SELECT step FROM expenses WHERE id = ?').get(invite.expense_id);
-    if (exp && exp.step === 'nuevo') {
-      prod.prepare('UPDATE expenses SET step = ?, updated_at = ? WHERE id = ?').run('en-curso', Date.now(), invite.expense_id);
-    }
+  // Auto-transición (#113): si todas las partes + invitaciones están pagadas → Pagado;
+  // si quedan pendientes y está en Nuevo → Repartido.
+  const exp = prod.prepare('SELECT step, payer_id FROM expenses WHERE id = ?').get(invite.expense_id);
+  const newStep = resolveStep(prod, invite.expense_id, exp.payer_id, exp.step);
+  if (newStep !== exp.step) {
+    prod.prepare('UPDATE expenses SET step = ?, updated_at = ? WHERE id = ?').run(newStep, Date.now(), invite.expense_id);
   }
 
-  log.info('invite_paid', { invite_id: invite.id, expense_id: invite.expense_id, payment_method });
+  log.info('invite_paid', { invite_id: invite.id, expense_id: invite.expense_id, payment_method, step: newStep });
 
   return c.json({ ok: true });
 });
@@ -195,5 +197,41 @@ app.post('/api/invite/:token/comments', zValidator('json', inviteCommentSchema),
   log.info('invite_comment', { invite_id: invite.id, expense_id: invite.expense_id });
 
   return c.json({ ok: true }, 201);
+});
+
+// DELETE /api/invite/:id — revocar invitación (autenticado)
+app.delete('/api/invite/:id', (c) => {
+  const user = c.get('user');
+  if (!user) httpError(401, ERROR_CODES.AUTH_REQUIRED);
+  const inviteId = c.req.param('id');
+  const invite = prod.prepare(
+    'SELECT i.id, i.expense_id FROM expense_invites i JOIN expenses e ON e.id = i.expense_id WHERE i.id = ?'
+  ).get(inviteId);
+  if (!invite) httpError(404, ERROR_CODES.EXPENSE_NOT_FOUND);
+
+  const expense = prod.prepare(
+    'SELECT created_by, payer_id, step FROM expenses WHERE id = ? AND deleted_at IS NULL'
+  ).get(invite.expense_id);
+  if (!expense) httpError(404, ERROR_CODES.EXPENSE_NOT_FOUND);
+
+  prod.prepare('DELETE FROM expense_invites WHERE id = ?').run(inviteId);
+
+  /* Recomputar la fase: si al revocar ya no queda reparto declarado (ni shares
+     ni invites), vuelve a "Nuevo"; si queda reparto, se resuelve normalmente. */
+  const remaining = prod.prepare(
+    `SELECT (SELECT COUNT(*) FROM expense_shares WHERE expense_id = ?)
+          + (SELECT COUNT(*) FROM expense_invites WHERE expense_id = ?) AS n`
+  ).get(invite.expense_id, invite.expense_id);
+  const newStep =
+    (remaining?.n ?? 0) === 0
+      ? 'nuevo'
+      : resolveStep(prod, invite.expense_id, expense.payer_id, expense.step);
+  if (newStep !== expense.step) {
+    prod.prepare('UPDATE expenses SET step = ?, updated_at = ? WHERE id = ?').run(newStep, Date.now(), invite.expense_id);
+  }
+
+  log.info('invite_revoked', { invite_id: inviteId, expense_id: invite.expense_id, actor: user.id, step: newStep });
+
+  return c.json({ ok: true });
 });
 }
