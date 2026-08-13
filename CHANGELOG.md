@@ -7,18 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-
-- Installed PWA stayed locked in portrait orientation on tablets: the manifest
-  forced `portrait`; now `any` so the app rotates with the device. Also bump
-  the SW cache version so installed PWAs pick up manifest changes. (#142)
-
 ### Todo
 
 - **Security and robustness audit** (bug-hunting release): review auth and
   sessions, CSRF token, HTTP security headers, path traversal,
   secrets (SESSION_SECRET outside the DB), rate limits and body caps, and
   latent bugs. Each finding becomes its own issue/PR.
+
+## [2.6.4] - 2026-08-13
+
+### Added
+
+- **Summary screen with reminders (#144).** The "Activity" entry in the main
+  navigation is now **Summary**, a screen that surfaces what needs doing and
+  what needs paying, ordered by urgency. It has two tabs:
+  - **Reminders**: open tasks grouped by urgency (overdue, due today, next 7
+    days, then no-date high-priority ones), sorted by due date then priority,
+    plus the expenses where you owe unpaid shares and where others owe you
+    unpaid shares on expenses you paid, with the pending amount of each.
+  - **Activity**: the previous global activity feed, extracted into a reusable
+    `ActivityFeed` component and still available at the `/activity` route.
+
+## [2.6.3] - 2026-08-13
+
+### Fixed
+
+- Installed PWA stayed locked in portrait orientation on tablets: the manifest
+  forced `portrait`; now `any` so the app rotates with the device. Also bump
+  the SW cache version so installed PWAs pick up manifest changes. (#142)
 
 ## [2.6.2] - 2026-08-12
 
