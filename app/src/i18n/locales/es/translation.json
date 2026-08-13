@@ -39,7 +39,8 @@
     "boardSelect": "Proyectos",
     "collapse": "Plegar menú",
     "expand": "Desplegar menú",
-    "expenses": "Gastos"
+    "expenses": "Gastos",
+    "summary": "Resumen"
   },
   "columns": {
     "nuevo": "Nuevo",
@@ -652,5 +653,21 @@
     "title": "Algo no ha ido bien",
     "desc": "La aplicación ha encontrado un error inesperado. Recargar suele solucionarlo.",
     "reload": "Recargar"
+  },
+  "summary": {
+    "title": "Resumen",
+    "subtitle": "Lo que hay que hacer y lo que hay que pagar, por urgencia.",
+    "tabs.reminders": "Recordatorios",
+    "tabs.activity": "Actividad",
+    "tasks.heading": "Tareas",
+    "tasks.empty": "Sin tareas pendientes. Todo al día.",
+    "tasks.overdue": "Vencidas",
+    "tasks.today": "Vencen hoy",
+    "tasks.upcoming": "Próximas",
+    "tasks.highPriority": "Prioridad alta",
+    "expenses.heading": "Gastos",
+    "expenses.empty": "Sin gastos pendientes.",
+    "expenses.youOwe": "Debes",
+    "expenses.owedToYou": "Te deben"
   }
 }
