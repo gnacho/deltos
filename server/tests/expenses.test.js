@@ -251,3 +251,104 @@ describe('expenses v2 — papelera y export', () => {
     expect(dump).toHaveProperty('expenses')
   })
 })
+
+describe('expenses v2 — fases con invitaciones (#113)', () => {
+  async function createInvite(app, session, expenseId, shareCents) {
+    const res = await app.request(
+      '/api/invite/create',
+      jsonReq(session, 'POST', '/api/invite/create', {
+        invite_name: 'Ana ext',
+        share_cents: shareCents,
+        expense_id: expenseId,
+        notes: '',
+      })
+    )
+    expect(res.status).toBe(201)
+    return (await res.json()).invite
+  }
+
+  it('crear invite en un gasto sin reparto → auto-transición a en-curso (Repartido)', async () => {
+    const { app, admin, prod } = await makeExpenseInstance()
+    const meId = await userId(app, admin)
+    const exp = await createExpense(app, admin) // step nuevo
+    await createInvite(app, admin, exp.id, 3000)
+    const upd = prod.prepare('SELECT step FROM expenses WHERE id = ?').get(exp.id)
+    expect(upd.step).toBe('en-curso')
+    const ana = await createUser(app, admin, 'ana')
+    await createExpense(app, admin, {
+      title: 'Con parte',
+      shares: [{ user_id: meId, share_cents: 3000 }, { user_id: (await userId(app, ana)), share_cents: 3000 }],
+    })
+  })
+
+  it('pagar la última parte con invites pendientes → NO pasa a hecho (sigue Repartido)', async () => {
+    const { app, admin, prod } = await makeExpenseInstance()
+    const ana = await createUser(app, admin, 'ana')
+    const meId = await userId(app, admin)
+    const anaId = await userId(app, ana)
+    const exp = await createExpense(app, admin, {
+      shares: [{ user_id: meId, share_cents: 3000 }, { user_id: anaId, share_cents: 3000 }],
+    })
+    await createInvite(app, admin, exp.id, 2000)
+    // ana paga su parte; queda el invite pendiente → no puede pasar a hecho
+    await app.request(
+      `/api/expenses/${exp.id}/my-share`,
+      jsonReq(ana, 'PUT', `/api/expenses/${exp.id}/my-share`, { paid: true })
+    )
+    expect(prod.prepare('SELECT step FROM expenses WHERE id = ?').get(exp.id).step).toBe('en-curso')
+  })
+
+  it('pagar el invite cuando todo lo demás está pagado → hecho (Pagado)', async () => {
+    const { app, admin, prod } = await makeExpenseInstance()
+    const ana = await createUser(app, admin, 'ana')
+    const meId = await userId(app, admin)
+    const anaId = await userId(app, ana)
+    const exp = await createExpense(app, admin, {
+      shares: [{ user_id: meId, share_cents: 3000 }, { user_id: anaId, share_cents: 3000 }],
+    })
+    const inv = await createInvite(app, admin, exp.id, 2000)
+    await app.request(
+      `/api/expenses/${exp.id}/my-share`,
+      jsonReq(ana, 'PUT', `/api/expenses/${exp.id}/my-share`, { paid: true })
+    )
+    // el pagador ya nace pagado; al pagar el invite → todo pagado → hecho
+    const pay = await app.request(
+      `/api/invite/${inv.token}/pay`,
+      { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) }
+    )
+    expect(pay.status).toBe(200)
+    expect(prod.prepare('SELECT step FROM expenses WHERE id = ?').get(exp.id).step).toBe('hecho')
+  })
+
+  it('revocar el último invite sin shares → vuelve a nuevo; con shares se mantiene Repartido', async () => {
+    const { app, admin, prod } = await makeExpenseInstance()
+    const ana = await createUser(app, admin, 'ana')
+    const meId = await userId(app, admin)
+    const anaId = await userId(app, ana)
+    // caso 1: solo invite → revocar → nuevo
+    const solo = await createExpense(app, admin)
+    const inv1 = await createInvite(app, admin, solo.id, 3000)
+    const rev1 = await app.request(`/api/invite/${inv1.id}`, jsonReq(admin, 'DELETE', `/api/invite/${inv1.id}`))
+    expect(rev1.status).toBe(200)
+    expect(prod.prepare('SELECT step FROM expenses WHERE id = ?').get(solo.id).step).toBe('nuevo')
+    // caso 2: share pendiente + invite → revocar invite → sigue en-curso
+    const conShare = await createExpense(app, admin, {
+      shares: [{ user_id: meId, share_cents: 3000 }, { user_id: anaId, share_cents: 3000 }],
+    })
+    const inv2 = await createInvite(app, admin, conShare.id, 2000)
+    await app.request(`/api/invite/${inv2.id}`, jsonReq(admin, 'DELETE', `/api/invite/${inv2.id}`))
+    expect(prod.prepare('SELECT step FROM expenses WHERE id = ?').get(conShare.id).step).toBe('en-curso')
+  })
+
+  it('crear invite sin auth → 401; revocar invite inexistente → 404', async () => {
+    const { app, admin } = await makeExpenseInstance()
+    const exp = await createExpense(app, admin)
+    const anon = await app.request(
+      '/api/invite/create',
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ invite_name: 'x', share_cents: 100, expense_id: exp.id, notes: '' }) }
+    )
+    expect(anon.status).toBe(401)
+    const bad = await app.request(`/api/invite/no-existe`, jsonReq(admin, 'DELETE', `/api/invite/no-existe`))
+    expect(bad.status).toBe(404)
+  })
+})

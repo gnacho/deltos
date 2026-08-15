@@ -13,7 +13,8 @@
     "create": "Crear",
     "none": "Sin especificar",
     "demoBadge": "DEMO",
-    "confirm": "Confirmar"
+    "confirm": "Confirmar",
+    "done": "Listo"
   },
   "login": {
     "title": "Entra en Deltos",
@@ -260,7 +261,9 @@
       "noCategory": "Sin categoría",
       "method": "Método de pago",
       "step": "Etapa",
-      "title": "Concepto"
+      "title": "Concepto",
+      "createdTitle": "Gasto creado",
+      "createdHint": "El gasto ya está registrado. Invita por enlace a quien deba pagar su parte:"
     },
     "openCount_one": "{{count}} gasto abierto",
     "openCount_other": "{{count}} gastos abiertos",
