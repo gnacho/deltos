@@ -14,6 +14,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   secrets (SESSION_SECRET outside the DB), rate limits and body caps, and
   latent bugs. Each finding becomes its own issue/PR.
 
+## [2.6.5] - 2026-08-15
+
+### Added
+
+- **Mobile slide transition between views (#146).** On phones, switching
+  sections through the bottom navigation now slides the content in the
+  direction of travel (forward/back based on nav order) while the header and
+  bottom nav stay fixed. Built on the View Transitions API with a fallback to
+  plain navigation where unsupported; respects `prefers-reduced-motion` and
+  the in-app reduce-motion toggle. Re-tapping the active tab keeps the
+  scroll-to-top behavior without a transition.
+- **Automatic expense stage transitions and invites (#113 #128).** Creating an
+  invite moves the expense from "New" to "In progress"; paying the last share
+  (or last invite) completes it, and revoking invites reopens it. Invites can
+  also be created from the create-expense flow, with a warning when shares
+  plus invites exceed the total.
+
 ## [2.6.4] - 2026-08-13
 
 ### Added
