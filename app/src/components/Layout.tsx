@@ -1,4 +1,5 @@
 import { useMemo, useEffect, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { NavLink, Link, Outlet, useLocation, useNavigate, useParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import {
@@ -42,6 +43,20 @@ import { VersionFooter } from '@/components/VersionFooter';
  */
 
 const COLLAPSED_KEY = 'deltos-sidebar-collapsed';
+
+/** Rutas del bottom-nav móvil en orden (para la dirección del deslizamiento). */
+const BOTTOM_NAV_ORDER = ['/', '/projects', '/expenses', '/summary', '/settings'];
+
+function isActivePath(pathname: string, to: string): boolean {
+  if (to === '/') return pathname === '/';
+  if (to === '/projects') return pathname.startsWith('/projects') || pathname.startsWith('/p/');
+  return pathname.startsWith(to);
+}
+
+/** Índice del item de navegación (para la dirección del deslizamiento móvil). */
+function navIndex(items: string[], path: string): number {
+  return items.findIndex((to) => isActivePath(path, to));
+}
 
 function ThemeTogglePill() {
   const { t } = useTranslation();
@@ -348,6 +363,35 @@ export default function Layout() {
       to === '/' ? location.pathname === '/' : location.pathname.startsWith(to);
     if (active && window.scrollY > 0) {
       window.scrollTo({ top: 0, behavior: reduceMotion() ? 'auto' : 'smooth' });
+    }
+  };
+
+  /* Navegación móvil: el modo declarativo (BrowserRouter) no soporta la prop
+   * viewTransition de react-router (solo RouterProvider), así que interceptamos
+   * el click y envolvemos la navegación en document.startViewTransition (con
+   * flushSync, igual que hace react-router internamente). La dirección del
+   * deslizamiento se marca en <html data-nav-dir> antes del snapshot. */
+  const handleMobileNav = (to: string) => (event: React.MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault();
+    const from = navIndex(BOTTOM_NAV_ORDER, location.pathname);
+    const target = navIndex(BOTTOM_NAV_ORDER, to);
+    if (target !== -1 && from !== target) {
+      try {
+        document.documentElement.dataset.navDir =
+          from === -1 || target > from ? 'forward' : 'back';
+      } catch {
+        /* sin dataset */
+      }
+      scrollTopIfActive(to)();
+      const doNavigate = () => navigate(to);
+      if (typeof document.startViewTransition === 'function') {
+        document.startViewTransition(() => flushSync(doNavigate));
+      } else {
+        doNavigate();
+      }
+    } else {
+      scrollTopIfActive(to)();
+      navigate(to, { replace: true });
     }
   };
 
@@ -701,7 +745,7 @@ export default function Layout() {
 
       {/* ============ HEADER MÓVIL (<md) ============ */}
       <header
-        className="md:hidden fixed top-0 inset-x-0 h-14 bg-surface border-b border-app z-40 flex items-center gap-2 px-3"
+        className="md:hidden fixed top-0 inset-x-0 h-14 bg-surface border-b border-app z-40 flex items-center gap-2 px-3 [view-transition-name:deltos-header]"
         style={{ paddingTop: 'env(safe-area-inset-top)' }}
       >
         <Link to="/" className="flex items-center gap-2 shrink-0" aria-label={t('nav.goTodo')} onClick={scrollTopIfActive('/')}>
@@ -718,7 +762,7 @@ export default function Layout() {
 
       {/* ============ CONTENIDO ============ */}
       <main
-        className={`${lgMargin} md:pl-16 pt-[calc(56px+env(safe-area-inset-top))] md:pt-[calc(56px+16px)] pb-[calc(84px+env(safe-area-inset-bottom))] md:pb-8`}
+        className={`${lgMargin} md:pl-16 pt-[calc(56px+env(safe-area-inset-top))] md:pt-[calc(56px+16px)] pb-[calc(84px+env(safe-area-inset-bottom))] md:pb-8 [view-transition-name:deltos-content]`}
       >
         <PullToRefresh>
           <div className="mx-auto max-w-[1440px] px-4 sm:px-6 lg:px-8">
@@ -731,7 +775,7 @@ export default function Layout() {
 
       {/* ============ BOTTOM NAV MÓVIL (<md) ============ */}
       <nav
-        className="bottom-nav md:hidden fixed bottom-0 inset-x-0 z-40 bg-surface border-t border-app"
+        className="bottom-nav md:hidden fixed bottom-0 inset-x-0 z-40 bg-surface border-t border-app [view-transition-name:deltos-nav]"
         aria-label={t('nav.main')}
       >
         <div className="h-16 grid grid-cols-5">
@@ -740,7 +784,7 @@ export default function Layout() {
             end
             className={({ isActive }) => bnCls(isActive)}
             aria-label={t('nav.todo')}
-            onClick={scrollTopIfActive('/')}
+            onClick={handleMobileNav('/')}
           >
             <LayoutGrid className="w-5 h-5" aria-hidden="true" />
             <span className="text-[11px] font-medium">{t('nav.todo')}</span>
@@ -749,7 +793,7 @@ export default function Layout() {
             to="/projects"
             className={() => bnCls(isProjectsSection)}
             aria-label={t('nav.projects')}
-            onClick={scrollTopIfActive('/projects')}
+            onClick={handleMobileNav('/projects')}
           >
             <Folder className="w-5 h-5" aria-hidden="true" />
             <span className="text-[11px] font-medium">{t('nav.projects')}</span>
@@ -759,7 +803,7 @@ export default function Layout() {
               to="/expenses"
               className={({ isActive }) => bnCls(isActive)}
               aria-label={t('nav.expenses')}
-              onClick={scrollTopIfActive('/expenses')}
+              onClick={handleMobileNav('/expenses')}
             >
               <Receipt className="w-5 h-5" aria-hidden="true" />
               <span className="text-[11px] font-medium">{t('nav.expenses')}</span>
@@ -769,7 +813,7 @@ export default function Layout() {
             to="/summary"
             className={({ isActive }) => bnCls(isActive)}
             aria-label={t('nav.summary')}
-            onClick={scrollTopIfActive('/summary')}
+            onClick={handleMobileNav('/summary')}
           >
             <ListTodo className="w-5 h-5" aria-hidden="true" />
             <span className="text-[11px] font-medium">{t('nav.summary')}</span>
@@ -778,7 +822,7 @@ export default function Layout() {
             to="/settings"
             className={({ isActive }) => bnCls(isActive)}
             aria-label={t('nav.settings')}
-            onClick={scrollTopIfActive('/settings')}
+            onClick={handleMobileNav('/settings')}
           >
             <Settings className="w-5 h-5" aria-hidden="true" />
             <span className="text-[11px] font-medium">{t('nav.settings')}</span>
