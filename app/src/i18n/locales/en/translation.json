@@ -13,7 +13,8 @@
     "create": "Create",
     "none": "Not set",
     "demoBadge": "DEMO",
-    "confirm": "Confirm"
+    "confirm": "Confirm",
+    "done": "Done"
   },
   "login": {
     "title": "Sign in to Deltos",
@@ -260,7 +261,9 @@
       "noCategory": "No category",
       "method": "Payment method",
       "step": "Stage",
-      "title": "Title"
+      "title": "Title",
+      "createdTitle": "Expense created",
+      "createdHint": "The expense is saved. Share the link with anyone who still has to pay their share:"
     },
     "openCount_one": "{{count}} open expense",
     "openCount_other": "{{count}} open expenses",

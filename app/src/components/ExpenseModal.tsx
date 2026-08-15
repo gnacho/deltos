@@ -5,6 +5,7 @@ import { useData } from '@/data/data-context';
 import { useSession } from '@/auth/session-context';
 import type { Expense, ExpenseStep, PaymentMethod } from '@/data/types';
 import { Avatar } from '@/components/Avatar';
+import { ExpenseInvitePanel } from '@/components/ExpenseInvitePanel';
 import { colorOf } from '@/lib/colors';
 import { fmtMoney } from '@/lib/format';
 import { apiErrorText } from '@/lib/errors';
@@ -75,6 +76,8 @@ export function ExpenseModal(props: Props) {
   const [saving, setSaving] = useState(false);
   const [deleteArmed, setDeleteArmed] = useState(false);
   const [projectOpen, setProjectOpen] = useState(false);
+  /** Tras crear (solo modo create): id del gasto recién creado → vista de invitación. */
+  const [createdId, setCreatedId] = useState<string | null>(null);
 
   const amountCents = toCents(amountStr);
   const participants = useMemo(() => [...shareStr.keys()], [shareStr]);
@@ -155,9 +158,14 @@ export function ExpenseModal(props: Props) {
       })),
     };
     try {
-      if (isEdit && expense) await data.updateExpense(expense.id, payload);
-      else await data.createExpense(payload);
-      onClose();
+      if (isEdit && expense) {
+        await data.updateExpense(expense.id, payload);
+        onClose();
+      } else {
+        const created = await data.createExpense(payload);
+        setCreatedId(created.id);
+        setSaving(false);
+      }
     } catch (e) {
       setError(apiErrorText(e, t('common.error')));
       setSaving(false);
@@ -185,6 +193,59 @@ export function ExpenseModal(props: Props) {
         ? 'bg-brand text-brandfg border-brand'
         : 'bg-surface text-muted border-app hover:text-text'
     }`;
+
+  /* Modo create + gasto ya creado: invitar por enlace a participantes externos
+     antes de cerrar (#128). */
+  if (createdId && !isEdit) {
+    return (
+      <div
+        className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="expense-form-title"
+      >
+        <div
+          className="absolute inset-0 bg-black/45 backdrop-blur-[2px]"
+          onClick={onClose}
+          aria-hidden="true"
+        />
+        <div className="relative w-full sm:max-w-xl bg-surface rounded-t-2xl sm:rounded-2xl border border-app shadow-2xl max-h-[92vh] overflow-hidden flex flex-col">
+          <div className="shrink-0 z-10 bg-surface/95 backdrop-blur border-b border-app px-5 py-4 flex items-center gap-3">
+            <h2 id="expense-form-title" className="font-display font-bold text-[18px] tracking-tight flex-1">
+              {t('expenses.form.createdTitle')}
+            </h2>
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-10 h-10 rounded-lg text-muted hover:bg-surface2 flex items-center justify-center"
+              aria-label={t('common.close')}
+            >
+              <X className="w-5 h-5" aria-hidden="true" />
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto nice-scroll px-5 py-5">
+            <p className="text-[14px] text-muted mb-4">{t('expenses.form.createdHint')}</p>
+            <ExpenseInvitePanel
+              expenseId={createdId}
+              amountCents={amountCents ?? 0}
+              sharesCents={sharesSum}
+            />
+          </div>
+
+          <div className="px-5 py-4 border-t border-app">
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-full h-12 rounded-xl bg-brand text-brandfg text-[15px] font-semibold hover:brightness-110 shadow-soft"
+            >
+              {t('common.done')}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div

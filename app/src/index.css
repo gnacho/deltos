@@ -455,3 +455,78 @@ body.mm-dragging {
     animation: none;
   }
 }
+
+/* Transición móvil entre vistas: el contenido (<main>) se desliza y el shell
+ * (header móvil + bottom nav) permanece estático. Se capturan como grupos de
+ * view-transition PROPIO (deltos-header/deltos-nav) para no depender de cómo el
+ * navegador capture el grupo root con position:fixed (falla en dispositivos). */
+@media (max-width: 767px) {
+  main {
+    view-transition-name: deltos-content;
+  }
+  /* El shell queda estático: anulamos las 4 animaciones UA de cada grupo
+   * (group/image-pair arrancan en opacity 0 en la hoja UA del navegador). */
+  ::view-transition-group(root),
+  ::view-transition-image-pair(root),
+  ::view-transition-old(root),
+  ::view-transition-new(root),
+  ::view-transition-group(deltos-header),
+  ::view-transition-image-pair(deltos-header),
+  ::view-transition-old(deltos-header),
+  ::view-transition-new(deltos-header),
+  ::view-transition-group(deltos-nav),
+  ::view-transition-image-pair(deltos-nav),
+  ::view-transition-old(deltos-nav),
+  ::view-transition-new(deltos-nav) {
+    animation: none;
+  }
+  html[data-nav-dir='forward']::view-transition-old(deltos-content) {
+    animation: deltos-vt-out-left 0.3s ease-in-out both;
+  }
+  html[data-nav-dir='forward']::view-transition-new(deltos-content) {
+    animation: deltos-vt-in-right 0.3s ease-in-out both;
+  }
+  html[data-nav-dir='back']::view-transition-old(deltos-content) {
+    animation: deltos-vt-out-right 0.3s ease-in-out both;
+  }
+  html[data-nav-dir='back']::view-transition-new(deltos-content) {
+    animation: deltos-vt-in-left 0.3s ease-in-out both;
+  }
+}
+
+@keyframes deltos-vt-out-left {
+  to {
+    transform: translateX(-24%);
+    opacity: 0.7;
+  }
+}
+@keyframes deltos-vt-in-right {
+  from {
+    transform: translateX(24%);
+    opacity: 0.7;
+  }
+}
+@keyframes deltos-vt-out-right {
+  to {
+    transform: translateX(24%);
+    opacity: 0.7;
+  }
+}
+@keyframes deltos-vt-in-left {
+  from {
+    transform: translateX(-24%);
+    opacity: 0.7;
+  }
+}
+
+/* Reducir animaciones para las view transitions (SO + switch de Ajustes) */
+html.reduce-motion::view-transition-old(*),
+html.reduce-motion::view-transition-new(*) {
+  animation: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}
