@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, User, ChevronDown } from 'lucide-react';
+import i18n from '@/i18n';
+import { X, User, ChevronDown, Wand2 } from 'lucide-react';
 import { z } from 'zod';
 import type { ColumnId, Priority } from '@/data/types';
 import { useData } from '@/data/data-context';
@@ -49,6 +50,13 @@ export function NewTaskModal({
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [projectOpen, setProjectOpen] = useState(false);
+  const [parsing, setParsing] = useState(false);
+  const [suggested, setSuggested] = useState<{
+    due_date?: string | null;
+    recurrence?: TaskRecurrence | null;
+    cleanedTitle?: string;
+  } | null>(null);
+  const lang: 'es' | 'en' = i18n.language?.startsWith('en') ? 'en' : 'es';
 
   const titleRef = useRef<HTMLInputElement>(null);
   const lastFocus = useRef<Element | null>(null);
@@ -72,6 +80,28 @@ export function NewTaskModal({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Parseo automático del título en lenguaje natural (debounce). Solo sugiere
+  // cuando el usuario aún no ha fijado due_date/recurrence a mano.
+  useEffect(() => {
+    if (!title.trim() || dueDate || recurrence) {
+      setSuggested(null);
+      return;
+    }
+    setParsing(true);
+    const id = window.setTimeout(async () => {
+      try {
+        const res = await data.parseTaskText(title.trim(), lang);
+        setSuggested(res.parsed && res.cleanedTitle ? res : null);
+      } catch {
+        setSuggested(null);
+      } finally {
+        setParsing(false);
+      }
+    }, 450);
+    return () => window.clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [title, dueDate, recurrence, lang]);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -152,6 +182,51 @@ export function NewTaskModal({
               placeholder={t('newTask.titlePlaceholder')}
               className="w-full bg-surface2 border border-app rounded-xl px-3.5 py-2.5 text-[15px] font-medium outline-none focus:border-brand"
             />
+            {parsing && (
+              <p className="text-[12px] text-faint mt-1.5 flex items-center gap-1">
+                <Wand2 className="w-3 h-3" aria-hidden="true" />
+                {t('newTask.parsing')}
+              </p>
+            )}
+            {!parsing && suggested && !dueDate && !recurrence && (
+              <div className="mt-2 rounded-xl border border-brand/30 bg-brand/5 px-3 py-2.5">
+                <div className="flex items-start justify-between gap-3">
+                  <p className="text-[13px] text-muted leading-snug">
+                    {t('newTask.suggestion', {
+                      summary: [
+                        suggested.due_date && t('newTask.suggestionDue', { date: suggested.due_date }),
+                        suggested.recurrence && t(`task.recurrenceFreq.${suggested.recurrence.freq}`),
+                      ]
+                        .filter(Boolean)
+                        .join(' · '),
+                    })}
+                  </p>
+                  <div className="flex shrink-0 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTitle(suggested.cleanedTitle ?? title);
+                        setDueDate(suggested.due_date ?? '');
+                        if (suggested.recurrence) setRecurrence(suggested.recurrence);
+                        setSuggested(null);
+                      }}
+                      className="inline-flex items-center gap-1 rounded-lg bg-brand px-2.5 py-1.5 text-[12px] font-semibold text-brandfg hover:brightness-110"
+                    >
+                      <Wand2 className="w-3 h-3" aria-hidden="true" />
+                      {t('newTask.applySuggestion')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSuggested(null)}
+                      aria-label={t('common.close')}
+                      className="w-7 h-7 rounded-lg text-faint hover:bg-surface2 flex items-center justify-center"
+                    >
+                      <X className="w-4 h-4" aria-hidden="true" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           <div>

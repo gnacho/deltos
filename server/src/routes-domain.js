@@ -20,6 +20,7 @@ import { decodeCursor, keysetPage } from './pagination.js'
 import { logger } from './logger.js'
 import { isBackupTimerActive } from './backup.js'
 import { normalizeRecurrence, serializeRecurrence, computeNextDue, todayLocal } from './recurrence.js'
+import { parseTaskText } from './nlp.js'
 
 const log = logger.child({ component: 'domain' })
 
@@ -115,6 +116,11 @@ const taskPatchSchema = z
 const moveSchema = z.object({
   column: columnSchema,
   position: z.number().int().min(0).max(100000),
+})
+
+const parseSchema = z.object({
+  text: z.string().min(1).max(200),
+  lang: z.enum(['es', 'en']).default('es'),
 })
 
 const commentSchema = z.object({
@@ -534,6 +540,14 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
   })
 
   // --- Tareas ---
+  // Parseo de lenguaje natural: dado un texto, sugiere due_date/recurrence.
+  app.post('/api/tasks/parse', zValidator('json', parseSchema, validationHook), (c) => {
+    const { text, lang } = c.req.valid('json')
+    const result = parseTaskText(text, lang)
+    if (!result) return c.json({ parsed: false })
+    return c.json({ parsed: true, ...result })
+  })
+
   app.post('/api/tasks', zValidator('json', taskCreateSchema, validationHook), (c) => {
     const db = c.get('db')
     const user = c.get('user')

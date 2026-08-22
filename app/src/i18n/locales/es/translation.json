@@ -368,7 +368,11 @@
     "column": "Columna",
     "create": "Crear tarea",
     "creating": "Creando…",
-    "error": "No se ha podido crear la tarea"
+    "error": "No se ha podido crear la tarea",
+    "parsing": "Detectando fecha o repetición…",
+    "suggestion": "Detectado: {{summary}}",
+    "suggestionDue": "vence el {{date}}",
+    "applySuggestion": "Aplicar"
   },
   "projects": {
     "subtitle": "Elige un proyecto para abrir su tablero",
