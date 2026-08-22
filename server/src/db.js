@@ -182,6 +182,20 @@ CREATE INDEX IF NOT EXISTS idx_sessions_expiry ON sessions(expires_at);
 CREATE INDEX IF NOT EXISTS idx_push_subs_user ON push_subscriptions(user_id);
 CREATE INDEX IF NOT EXISTS idx_notification_queue_user ON notification_queue(user_id, tipo);
 
+-- Subtareas de una tarea. Anidables: parent_id NULL = nivel 1 (hija directa
+-- de la tarea), no NULL = sub-subtarea. Al completar una tarea recurrente, las
+-- subtareas se copian a la nueva instancia con done=0 (reset automático).
+CREATE TABLE IF NOT EXISTS task_subtasks (
+  id TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  parent_id TEXT REFERENCES task_subtasks(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  done INTEGER NOT NULL DEFAULT 0,
+  position INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_subtasks_task ON task_subtasks(task_id, position);
+
 -- Audit log de acciones admin (quién hizo qué, cuándo, sobre quién/quién).
 CREATE TABLE IF NOT EXISTS admin_audit (
   id TEXT PRIMARY KEY,

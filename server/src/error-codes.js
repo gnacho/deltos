@@ -43,6 +43,7 @@ export const ERROR_CODES = {
   LABEL_NOT_FOUND: 'LABEL_NOT_FOUND',
   LABEL_NAME_TAKEN: 'LABEL_NAME_TAKEN', // 409, labels.name UNIQUE
   TASK_NOT_FOUND: 'TASK_NOT_FOUND',
+  SUBTASK_NOT_FOUND: 'SUBTASK_NOT_FOUND',
   EXPENSE_NOT_FOUND: 'EXPENSE_NOT_FOUND',
   ASSIGNEE_NOT_FOUND: 'ASSIGNEE_NOT_FOUND',
   ATTACHMENT_NOT_FOUND: 'ATTACHMENT_NOT_FOUND',
@@ -97,6 +98,7 @@ export const ERROR_MESSAGES_ES = {
   [ERROR_CODES.LABEL_NOT_FOUND]: 'Etiqueta no encontrada',
   [ERROR_CODES.LABEL_NAME_TAKEN]: 'Ya existe una etiqueta con ese nombre',
   [ERROR_CODES.TASK_NOT_FOUND]: 'Tarea no encontrada',
+  [ERROR_CODES.SUBTASK_NOT_FOUND]: 'Subtarea no encontrada',
   [ERROR_CODES.EXPENSE_NOT_FOUND]: 'Gasto no encontrado',
   [ERROR_CODES.ASSIGNEE_NOT_FOUND]: 'Usuario asignado no encontrado',
   [ERROR_CODES.ATTACHMENT_NOT_FOUND]: 'Adjunto no encontrado',

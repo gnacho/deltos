@@ -127,6 +127,18 @@ const commentSchema = z.object({
   body: z.string().min(1).max(2000),
 })
 
+const subtaskSchema = z.object({
+  title: z.string().min(1).max(200),
+  parent_id: z.string().max(64).nullable().optional(),
+})
+
+const subtaskPatchSchema = z
+  .object({
+    title: z.string().min(1).max(200),
+    done: z.boolean(),
+  })
+  .partial()
+
 const userCreateSchema = z.object({
   username: z.string().min(1).max(50),
   password: z.string().min(10, 'la contraseña inicial debe tener al menos 10 caracteres').max(100),
@@ -303,10 +315,30 @@ function createRecurringInstance(db, doneTask, actorId) {
       serializeRecurrence(rec), groupId
     )
     replaceTaskLabels(db, id, getTaskLabelIds(db, doneTask.id))
+    copySubtasksWithReset(db, doneTask.id, id)
     addEvent(db, id, actorId, 'created')
   })
   create()
   return hydrateTasks(db, 't.id = ?', [id])[0]
+}
+
+// Copia las subtareas de la tarea completada a la nueva instancia recurrente,
+// con done=0 (reset automático) y preservando el anidamiento (parent_id).
+function copySubtasksWithReset(db, fromTaskId, toTaskId) {
+  const subs = db
+    .prepare('SELECT id, parent_id, title, position FROM task_subtasks WHERE task_id = ? ORDER BY position')
+    .all(fromTaskId)
+  if (subs.length === 0) return
+  const now = Date.now()
+  const idMap = new Map()
+  const ins = db.prepare(
+    'INSERT INTO task_subtasks (id, task_id, parent_id, title, done, position, created_at) VALUES (?, ?, ?, ?, 0, ?, ?)'
+  )
+  for (const s of subs) {
+    const newId = crypto.randomUUID()
+    idMap.set(s.id, newId)
+    ins.run(newId, toTaskId, s.parent_id ? (idMap.get(s.parent_id) ?? null) : null, s.title, s.position, now)
+  }
 }
 
 function getTaskLabelIds(db, taskId) {
@@ -779,7 +811,82 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
       )
       .all(hydrated.id)
       .map((e) => ({ ...e, data: JSON.parse(e.data || '{}') }))
-    return c.json({ task: hydrated, attachments, comments, activity })
+    const subtasks = db
+      .prepare('SELECT id, parent_id, title, done, position FROM task_subtasks WHERE task_id = ? ORDER BY position')
+      .all(hydrated.id)
+    return c.json({ task: hydrated, attachments, comments, activity, subtasks })
+  })
+
+  // --- Subtareas ---
+  app.post(
+    '/api/tasks/:id/subtasks',
+    zValidator('param', idParamSchema, validationHook),
+    zValidator('json', subtaskSchema, validationHook),
+    (c) => {
+      const db = c.get('db')
+      const user = c.get('user')
+      const task = getTask(db, c.req.valid('param').id)
+      if (!task) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
+      requireMember(db, user.id, task.project_id)
+      const data = c.req.valid('json')
+      if (data.parent_id) {
+        const parent = db.prepare('SELECT id FROM task_subtasks WHERE id = ? AND task_id = ?').get(data.parent_id, task.id)
+        if (!parent) httpError(404, ERROR_CODES.SUBTASK_NOT_FOUND)
+      }
+      const id = crypto.randomUUID()
+      const now = Date.now()
+      const pos = db
+        .prepare('SELECT COALESCE(MAX(position) + 1, 0) AS p FROM task_subtasks WHERE task_id = ? AND parent_id IS ?')
+        .get(task.id, data.parent_id ?? null).p
+      db.prepare(
+        'INSERT INTO task_subtasks (id, task_id, parent_id, title, done, position, created_at) VALUES (?, ?, ?, ?, 0, ?, ?)'
+      ).run(id, task.id, data.parent_id ?? null, data.title, pos, now)
+      db.prepare('UPDATE tasks SET updated_at = ? WHERE id = ?').run(now, task.id)
+      hub.broadcast('tasks')
+      return c.json({ subtask: db.prepare('SELECT id, parent_id, title, done, position FROM task_subtasks WHERE id = ?').get(id) }, 201)
+    }
+  )
+
+  app.patch(
+    '/api/subtasks/:id',
+    zValidator('param', idParamSchema, validationHook),
+    zValidator('json', subtaskPatchSchema, validationHook),
+    (c) => {
+      const db = c.get('db')
+      const user = c.get('user')
+      const sub = db.prepare(
+        'SELECT s.*, t.project_id FROM task_subtasks s JOIN tasks t ON t.id = s.task_id WHERE s.id = ?'
+      ).get(c.req.valid('param').id)
+      if (!sub) httpError(404, ERROR_CODES.SUBTASK_NOT_FOUND)
+      requireMember(db, user.id, sub.project_id)
+      const data = c.req.valid('json')
+      const now = Date.now()
+      if (data.title !== undefined) {
+        db.prepare('UPDATE task_subtasks SET title = ? WHERE id = ?').run(data.title, sub.id)
+      }
+      if (data.done !== undefined && data.done !== !!sub.done) {
+        db.prepare('UPDATE task_subtasks SET done = ? WHERE id = ?').run(data.done ? 1 : 0, sub.id)
+      }
+      db.prepare('UPDATE tasks SET updated_at = ? WHERE id = ?').run(now, sub.task_id)
+      hub.broadcast('tasks')
+      return c.json({ subtask: db.prepare('SELECT id, parent_id, title, done, position FROM task_subtasks WHERE id = ?').get(sub.id) })
+    }
+  )
+
+  app.delete('/api/subtasks/:id', zValidator('param', idParamSchema, validationHook), (c) => {
+    const db = c.get('db')
+    const user = c.get('user')
+    const sub = db.prepare(
+      'SELECT s.*, t.project_id FROM task_subtasks s JOIN tasks t ON t.id = s.task_id WHERE s.id = ?'
+    ).get(c.req.valid('param').id)
+    if (!sub) httpError(404, ERROR_CODES.SUBTASK_NOT_FOUND)
+    requireMember(db, user.id, sub.project_id)
+    const { changes } = db.prepare('DELETE FROM task_subtasks WHERE id = ?').run(sub.id)
+    if (changes) {
+      db.prepare('UPDATE tasks SET updated_at = ? WHERE id = ?').run(Date.now(), sub.task_id)
+    }
+    hub.broadcast('tasks')
+    return c.body(null, 204)
   })
 
   // --- Comentarios ---

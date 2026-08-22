@@ -10,6 +10,7 @@ import { Avatar } from '@/components/Avatar';
 import { announce } from '@/lib/announce';
 import { ArrowUp, ArrowRight, ArrowDown, ChevronDown, User } from 'lucide-react';
 import { RecurrenceField } from '@/components/task/RecurrenceField';
+import { SubtaskList } from '@/components/task/SubtaskList';
 import type { TaskRecurrence } from '@/data/types';
 
 const titleSchema = z.string().trim().min(1).max(200);
@@ -366,6 +367,8 @@ export function DetailsTab({ detail, onClose }: { detail: TaskDetail; onClose: (
           )}
         </div>
       </div>
+
+      <SubtaskList taskId={task.id} subtasks={detail.subtasks ?? []} />
 
       <section>
         <h3 className="font-display font-semibold text-[14px] mb-2">{t('task.description')}</h3>
