@@ -9,7 +9,7 @@ import {
   type DataApi,
   type UpdateProjectInput,
 } from './data-context';
-import type { Bootstrap, Expense, ExpenseDetail, ExpenseInput, ExpensePatch, Label, Project, ProjectMember, Task, TaskDetail, TaskPatch } from './types';
+import type { Bootstrap, Expense, ExpenseDetail, ExpenseInput, ExpensePatch, Label, Project, ProjectMember, Task, TaskDetail, TaskPatch, TaskRecurrence } from './types';
 
 /**
  * Capa de datos desacoplada (contrato síncrono):
@@ -193,6 +193,18 @@ export function DataProvider({ children }: { children: ReactNode }) {
       if (detailCache.current.has(id)) await fetchDetail(id);
     },
     [fetchBootstrap, fetchDetail],
+  );
+
+  const parseTaskText = useCallback(
+    async (text: string, lang: 'es' | 'en') => {
+      return apiPost<{
+        parsed: boolean;
+        due_date?: string | null;
+        recurrence?: TaskRecurrence | null;
+        cleanedTitle?: string;
+      }>('/api/tasks/parse', { text, lang });
+    },
+    [],
   );
 
   const moveTask = useCallback(
@@ -437,6 +449,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       patchTask,
       moveTask,
       deleteTask,
+      parseTaskText,
       addComment,
       uploadAttachment,
       createProject,

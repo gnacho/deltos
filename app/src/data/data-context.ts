@@ -56,6 +56,12 @@ export interface DataApi {
   patchTask: (id: string, patch: TaskPatch) => Promise<void>;
   moveTask: (id: string, column: string, position: number) => Promise<void>;
   deleteTask: (id: string) => Promise<void>;
+  parseTaskText: (text: string, lang: 'es' | 'en') => Promise<{
+    parsed: boolean;
+    due_date?: string | null;
+    recurrence?: TaskRecurrence | null;
+    cleanedTitle?: string;
+  }>;
   addComment: (id: string, body: string) => Promise<void>;
   uploadAttachment: (id: string, file: File) => Promise<void>;
   createProject: (input: CreateProjectInput) => Promise<Project>;

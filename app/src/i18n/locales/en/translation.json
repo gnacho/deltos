@@ -368,7 +368,11 @@
     "column": "Column",
     "create": "Create task",
     "creating": "Creating…",
-    "error": "Could not create the task"
+    "error": "Could not create the task",
+    "parsing": "Detecting due date or repeat…",
+    "suggestion": "Detected: {{summary}}",
+    "suggestionDue": "due {{date}}",
+    "applySuggestion": "Apply"
   },
   "projects": {
     "subtitle": "Pick a project to open its board",
