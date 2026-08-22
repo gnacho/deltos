@@ -31,12 +31,21 @@ function isMember(db, userId, projectId) {
 }
 
 // Middleware: exige Authorization: Bearer <token> con hash en kv.
+// Comparación en tiempo constante del hash SHA-256 (issue #171).
 export function requireHaToken(prod) {
   return async (c, next) => {
     const header = c.req.header('authorization') || ''
     const token = header.startsWith('Bearer ') ? header.slice(7).trim() : ''
     const expected = kvGet(prod, HA_TOKEN_KEY)
-    if (!token || !expected || sha256(token) !== expected) {
+    if (!token || !expected) {
+      httpError(401, ERROR_CODES.AUTH_REQUIRED)
+    }
+    const givenHash = Buffer.from(sha256(token), 'hex')
+    const expectedHash = Buffer.from(expected, 'hex')
+    if (
+      givenHash.length !== expectedHash.length ||
+      !crypto.timingSafeEqual(givenHash, expectedHash)
+    ) {
       httpError(401, ERROR_CODES.AUTH_REQUIRED)
     }
     await next()
