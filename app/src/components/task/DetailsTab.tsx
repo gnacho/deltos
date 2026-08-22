@@ -9,6 +9,8 @@ import { colorOf } from '@/lib/colors';
 import { Avatar } from '@/components/Avatar';
 import { announce } from '@/lib/announce';
 import { ArrowUp, ArrowRight, ArrowDown, ChevronDown, User } from 'lucide-react';
+import { RecurrenceField } from '@/components/task/RecurrenceField';
+import type { TaskRecurrence } from '@/data/types';
 
 const titleSchema = z.string().trim().min(1).max(200);
 
@@ -35,11 +37,13 @@ export function DetailsTab({ detail, onClose }: { detail: TaskDetail; onClose: (
   const [deleteArmed, setDeleteArmed] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [projectOpen, setProjectOpen] = useState(false);
+  const [recurrence, setRecurrence] = useState<TaskRecurrence | null>(task.recurrence);
   const deleteTimer = useRef<number | null>(null);
 
   /* Sincroniza campos si la tarea cambia por SSE/refresco */
   useEffect(() => setTitle(task.title), [task.title]);
   useEffect(() => setDescription(task.description), [task.description]);
+  useEffect(() => setRecurrence(task.recurrence), [task.recurrence]);
   useEffect(
     () => () => {
       if (deleteTimer.current !== null) window.clearTimeout(deleteTimer.current);
@@ -312,6 +316,17 @@ export function DetailsTab({ detail, onClose }: { detail: TaskDetail; onClose: (
             value={task.due_date ?? ''}
             onChange={(e) => void patch({ due_date: e.target.value || null })}
             className="w-full bg-surface2 border border-app rounded-xl px-3 py-2 text-[14px] outline-none focus:border-brand"
+          />
+        </div>
+
+        <div className="col-span-2">
+          <RecurrenceField
+            value={recurrence}
+            onChange={(r) => {
+              setRecurrence(r);
+              void patch({ recurrence: r });
+            }}
+            idPrefix="dt"
           />
         </div>
 

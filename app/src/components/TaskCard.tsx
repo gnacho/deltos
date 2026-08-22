@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { MessageCircle, Paperclip } from 'lucide-react';
+import { MessageCircle, Paperclip, Repeat } from 'lucide-react';
 import type { ColumnId, Project, Task } from '@/data/types';
 import { colorOf } from '@/lib/colors';
 import { Avatar } from '@/components/Avatar';
@@ -17,6 +17,7 @@ interface CardProps {
 
 /** Tarjeta desktop (completa): etiquetas, prioridad, vencimiento, contadores, avatar. */
 export function TaskCard({ task, project, index, onOpen }: CardProps) {
+  const { t } = useTranslation();
   const done = task.column === 'hecho';
   const delay = Math.min(index, 10) * 40;
   return (
@@ -49,10 +50,18 @@ export function TaskCard({ task, project, index, onOpen }: CardProps) {
       >
         {task.title}
       </h3>
-      {(task.priority || task.due_date) && (
+      {(task.priority || task.due_date || task.recurrence) && (
         <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
           {task.priority && <PriorityBadge priority={task.priority} />}
           <DueBadge due={task.due_date} />
+          {task.recurrence && (
+            <span
+              className="inline-flex items-center gap-1 text-[11px] font-medium text-muted"
+              title={t('task.recurrence')}
+            >
+              <Repeat className="w-3.5 h-3.5" aria-hidden="true" />
+            </span>
+          )}
         </div>
       )}
       <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-app">
@@ -147,6 +156,11 @@ export function TaskCardMobile({ task, project, index, onOpen, onMove }: CardPro
           {task.priority && (
             <span className="text-[12px]">
               <PriorityBadge priority={task.priority} big />
+            </span>
+          )}
+          {task.recurrence && (
+            <span className="text-[12px] text-muted" title={t('task.recurrence')}>
+              <Repeat className="w-4 h-4" aria-hidden="true" />
             </span>
           )}
         </div>

@@ -85,7 +85,9 @@ CREATE TABLE IF NOT EXISTS tasks (
   created_by TEXT REFERENCES users(id),
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
-  deleted_at INTEGER
+  deleted_at INTEGER,
+  recurrence TEXT,  -- JSON: {freq, interval, weekdays?, mode} o NULL
+  recurrence_group_id TEXT  -- id de la primera instancia de la serie recurrente
 );
 
 CREATE TABLE IF NOT EXISTS task_labels (
@@ -338,6 +340,14 @@ export function migrateSchema(db) {
   if (!taskCols.includes('deleted_at')) {
     db.exec('ALTER TABLE tasks ADD COLUMN deleted_at INTEGER')
     log.info('schema_migrated', { table: 'tasks', column: 'deleted_at' })
+  }
+  if (!taskCols.includes('recurrence')) {
+    db.exec('ALTER TABLE tasks ADD COLUMN recurrence TEXT')
+    log.info('schema_migrated', { table: 'tasks', column: 'recurrence' })
+  }
+  if (!taskCols.includes('recurrence_group_id')) {
+    db.exec('ALTER TABLE tasks ADD COLUMN recurrence_group_id TEXT')
+    log.info('schema_migrated', { table: 'tasks', column: 'recurrence_group_id' })
   }
   // Project membership: owner_id en projects + backfill de project_members.
   // Los proyectos existentes (creados antes de esta feature) no tenían

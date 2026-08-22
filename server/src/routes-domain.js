@@ -19,6 +19,7 @@ import { ERROR_CODES } from './error-codes.js'
 import { decodeCursor, keysetPage } from './pagination.js'
 import { logger } from './logger.js'
 import { isBackupTimerActive } from './backup.js'
+import { normalizeRecurrence, serializeRecurrence, computeNextDue, todayLocal } from './recurrence.js'
 
 const log = logger.child({ component: 'domain' })
 
@@ -77,6 +78,15 @@ const labelPatchSchema = z.object({
   color: colorSchema.optional(),
 })
 
+const recurrenceSchema = z
+  .object({
+    freq: z.enum(['daily', 'weekly', 'monthly']),
+    interval: z.number().int().min(1).max(999).default(1),
+    weekdays: z.array(z.number().int().min(0).max(6)).max(7).nullish(),
+    mode: z.enum(['due', 'completion']).default('due'),
+  })
+  .nullable()
+
 const taskCreateSchema = z.object({
   project_id: z.string().min(1).max(64),
   title: z.string().min(1).max(200),
@@ -86,6 +96,7 @@ const taskCreateSchema = z.object({
   due_date: dateSchema.nullable().optional(),
   assignee_id: z.string().max(64).nullable().optional(),
   labels: z.array(z.string().max(64)).max(20).default([]),
+  recurrence: recurrenceSchema.nullable().optional(),
 })
 
 const taskPatchSchema = z
@@ -97,6 +108,7 @@ const taskPatchSchema = z
     assignee_id: z.string().max(64).nullable(),
     labels: z.array(z.string().max(64)).max(20),
     project_id: z.string().min(1).max(64),
+    recurrence: recurrenceSchema.nullable(),
   })
   .partial()
 
@@ -238,6 +250,8 @@ function hydrateTasks(db, whereSql = '', params = []) {
     position: t.position,
     priority: t.priority,
     due_date: t.due_date,
+    recurrence: t.recurrence ? JSON.parse(t.recurrence) : null,
+    recurrence_group_id: t.recurrence_group_id,
     assignee_id: t.assignee_id,
     assignee: t.assignee_id
       ? { id: t.assignee_id, username: t.assignee_username, color: t.assignee_color }
@@ -258,6 +272,39 @@ function replaceTaskLabels(db, taskId, labelIds) {
 
 function getTask(db, id) {
   return db.prepare('SELECT * FROM tasks WHERE id = ? AND deleted_at IS NULL').get(id)
+}
+
+// Crea la siguiente instancia de una tarea recurrente al completarse.
+// Devuelve la tarea hidratada nueva o null si no se pudo (no debería).
+function createRecurringInstance(db, doneTask, actorId) {
+  const rec = normalizeRecurrence(JSON.parse(doneTask.recurrence))
+  if (!rec) return null
+  const nextDue = computeNextDue(db, doneTask, todayLocal())
+  if (!nextDue) return null
+  const id = crypto.randomUUID()
+  const now = Date.now()
+  const pos = db
+    .prepare('SELECT COALESCE(MAX(position) + 1, 0) AS p FROM tasks WHERE "column" = ?')
+    .get('nuevo').p
+  const groupId = doneTask.recurrence_group_id || doneTask.id
+  const create = db.transaction(() => {
+    db.prepare(
+      `INSERT INTO tasks (id, project_id, title, description, "column", position, priority, due_date, assignee_id, created_by, created_at, updated_at, recurrence, recurrence_group_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      id, doneTask.project_id, doneTask.title, doneTask.description, 'nuevo', pos,
+      doneTask.priority ?? null, nextDue, doneTask.assignee_id ?? null, actorId, now, now,
+      serializeRecurrence(rec), groupId
+    )
+    replaceTaskLabels(db, id, getTaskLabelIds(db, doneTask.id))
+    addEvent(db, id, actorId, 'created')
+  })
+  create()
+  return hydrateTasks(db, 't.id = ?', [id])[0]
+}
+
+function getTaskLabelIds(db, taskId) {
+  return db.prepare('SELECT label_id FROM task_labels WHERE task_id = ?').all(taskId).map((r) => r.label_id)
 }
 
 // Borra de disco los adjuntos de una tarea (mejor esfuerzo)
@@ -510,13 +557,15 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
     const pos = db
       .prepare('SELECT COALESCE(MAX(position) + 1, 0) AS p FROM tasks WHERE "column" = ?')
       .get(data.column).p
+    const rec = data.recurrence != null ? normalizeRecurrence(data.recurrence) : null
     const create = db.transaction(() => {
       db.prepare(
-        `INSERT INTO tasks (id, project_id, title, description, "column", position, priority, due_date, assignee_id, created_by, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO tasks (id, project_id, title, description, "column", position, priority, due_date, assignee_id, created_by, created_at, updated_at, recurrence, recurrence_group_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).run(
         id, data.project_id, data.title, data.description, data.column, pos,
-        data.priority ?? null, data.due_date ?? null, data.assignee_id ?? null, user.id, now, now
+        data.priority ?? null, data.due_date ?? null, data.assignee_id ?? null, user.id, now, now,
+        rec ? serializeRecurrence(rec) : null, rec ? id : null
       )
       replaceTaskLabels(db, id, data.labels)
       addEvent(db, id, user.id, 'created')
@@ -587,6 +636,21 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
           addEvent(db, task.id, user.id, 'assigned', { from: task.assignee_id, to: data.assignee_id })
         }
         if (data.labels !== undefined) replaceTaskLabels(db, task.id, data.labels)
+        if (data.recurrence !== undefined) {
+          const prevRec = task.recurrence ? JSON.parse(task.recurrence) : null
+          const newRec = data.recurrence != null ? normalizeRecurrence(data.recurrence) : null
+          const recChanged = JSON.stringify(prevRec) !== JSON.stringify(newRec)
+          if (recChanged) {
+            db.prepare('UPDATE tasks SET recurrence = ? WHERE id = ?')
+              .run(newRec ? serializeRecurrence(newRec) : null, task.id)
+            if (newRec) {
+              // Cambiar/activar recurrencia inicia una serie nueva (grupo propio).
+              db.prepare('UPDATE tasks SET recurrence_group_id = ? WHERE id = ?').run(task.id, task.id)
+            } else {
+              db.prepare('UPDATE tasks SET recurrence_group_id = NULL WHERE id = ?').run(task.id)
+            }
+          }
+        }
         db.prepare('UPDATE tasks SET updated_at = ? WHERE id = ?').run(now, task.id)
       })
       update()
@@ -643,6 +707,12 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
         return true
       })
       move()
+      // Recurrencia: al completar (mover a 'hecho') y si la tarea es recurrente,
+      // se crea la siguiente instancia en 'nuevo' con la próxima fecha.
+      let recurred = null
+      if (fromCol !== 'hecho' && toCol === 'hecho' && task.recurrence) {
+        recurred = createRecurringInstance(db, task, user.id)
+      }
       hub.broadcast('tasks')
       notifyInterested(db, c.get('demo'), task, user.id, 'tarea_movida', { usuario: user.username, titulo: task.title, columna: toCol })
       return c.json({ task: hydrateTasks(db, 't.id = ?', [task.id])[0] })
