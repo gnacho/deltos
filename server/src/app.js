@@ -17,6 +17,7 @@ import { registerDomainRoutes } from './routes-domain.js'
 import { registerExpenseRoutes } from './routes-expenses.js'
 import { registerPushRoutes } from './routes-push.js'
 import { registerInviteRoutes } from './routes-invite.js'
+import { registerHaRoutes } from './routes-ha.js'
 import { registerHealth } from './health.js'
 import { wideEvent } from './wide-event.js'
 import { httpError, onError, validationHook } from './errors.js'
@@ -290,6 +291,7 @@ export function createApp(ctx) {
   registerPushRoutes(app)
   registerHealth(app, { prod, demo })
   registerInviteRoutes(app, { prod })
+  registerHaRoutes(app, { prod })
 
   // --- Estáticos + SPA fallback (excluyendo /api/* y /assets/*) ---
   // Caché (canon webapp-shell/actualizaciones): assets con hash = immutable;

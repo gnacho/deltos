@@ -113,6 +113,7 @@ export function requireAuth(ctx) {
     // para saber si debe mostrar el botón "Entrar como demo".
     const isPublic =
       PUBLIC_PATHS.has(path) ||
+      path.startsWith('/api/ha/tasks') ||
       (path.startsWith('/api/invite/') &&
         (c.req.method === 'GET' || c.req.method === 'PUT' || (c.req.method === 'POST' && path.endsWith('/comments')))) ||
       (path === '/api/settings/demo' && c.req.method === 'GET')
