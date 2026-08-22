@@ -7,12 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Todo
+## [2.6.11] - 2026-08-23
 
-- **Security and robustness audit** (bug-hunting release): review auth and
-  sessions, CSRF token, HTTP security headers, path traversal,
-  secrets (SESSION_SECRET outside the DB), rate limits and body caps, and
-  latent bugs. Each finding becomes its own issue/PR.
+### Security
+
+- **Expense invite tokens are stored hashed only (#166).** The capability
+  token is returned once at creation and only its SHA-256 hash is persisted;
+  the plaintext column and the token retrieval endpoint are gone (a migration
+  clears previously stored plaintext tokens), and the frontend drops the
+  per-invite copy button (copying happens at creation).
+- **Login rate limit can no longer be bypassed by spoofed X-Forwarded-For
+  (#167).** The client IP for the login lockout now comes from the socket by
+  default; the X-Forwarded-For header is only honored when `TRUSTED_PROXY` is
+  configured and the direct peer matches it.
+- **Session signing secret moves out of the database (#168).** `SESSION_SECRET`
+  is now required from the environment in production (config validation); the
+  automatic persistence in the database kv store remains as a development
+  fallback only.
+- **Task attachments respect project membership (#169).** `GET
+  /api/attachments/:id` requires the requester to be a member of the task's
+  project (404 to avoid revealing existence).
+- **Home Assistant API routes respect project membership (#170).** The bearer
+  token can only create tasks in projects of the configured user and only
+  complete tasks in those projects.
+- **HA token hash is compared in constant time (#171).** `crypto.timingSafeEqual`
+  replaces the plain string comparison.
+
+### Fixed
+
+- **Profile update with `expenses_enabled` crashed with a SQLite bind error
+  (#172).** The boolean is now coerced to 1/0 before binding.
+
+### Changed
+
+- **gitleaks ignore for test fixture credentials.** Add `.gitleaksignore` for
+  the plaintext test password in `server/tests/auth.test.js` (not a production
+  secret); the repo had no gitleaks ignore or CI scan yet.
 
 ## [2.6.9] - 2026-08-22
 
