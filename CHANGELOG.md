@@ -14,6 +14,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   secrets (SESSION_SECRET outside the DB), rate limits and body caps, and
   latent bugs. Each finding becomes its own issue/PR.
 
+## [2.6.9] - 2026-08-22
+
+### Changed
+
+- **Narrower project edit panel on desktop (#163).** The inline edit panel on
+  the Projects page now spans about 2/3 of the usable width on large screens
+  instead of the full grid.
+- **Save button fits its content (#163).** The "Save changes" button in the
+  project form no longer stretches across the whole form; it now sizes to its
+  content.
+
 ## [2.6.7] - 2026-08-22
 
 ### Added
