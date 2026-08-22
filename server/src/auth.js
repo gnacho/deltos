@@ -166,7 +166,8 @@ export function updateUser(db, id, updates) {
   for (const key of ['display_name', 'email', 'phone', 'language', 'color', 'expenses_enabled']) {
     if (updates[key] !== undefined) {
       fields.push(`${key} = ?`)
-      values.push(updates[key])
+      // SQLite no acepta booleans: coerción explícita a 1/0 (bug #172).
+      values.push(key === 'expenses_enabled' ? (updates[key] ? 1 : 0) : updates[key])
     }
   }
   if (fields.length === 0) return null
