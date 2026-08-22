@@ -14,6 +14,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   secrets (SESSION_SECRET outside the DB), rate limits and body caps, and
   latent bugs. Each finding becomes its own issue/PR.
 
+## [2.6.6] - 2026-08-22
+
+### Added
+
+- **Task recurrence with adaptive scheduling (#154).** Tasks can now repeat
+  (daily, weekly or monthly, with optional specific weekdays). A recurrence
+  config is set in the create and detail modals: frequency, interval, days of
+  the week and how the next date is computed. Two modes are available:
+  - **From due date:** constant cadence, the next instance is scheduled from
+    the previous due date (e.g. always on a fixed weekday).
+  - **Adaptive:** the next instance is scheduled from the real completion date
+    using the median of the actual completion intervals of the series, falling
+    back to the configured interval when there is no history yet.
+  When a recurring task is moved to done, the next instance is created
+  automatically in the To-do column with its computed due date, keeping the
+  completed instance in history. Recurring tasks show a repeat badge on cards.
+
 ## [2.6.5] - 2026-08-15
 
 ### Added
