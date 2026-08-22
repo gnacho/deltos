@@ -993,8 +993,15 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
 
   app.get('/api/attachments/:id', zValidator('param', idParamSchema, validationHook), (c) => {
     const db = c.get('db')
+    const user = c.get('user')
     const att = db.prepare('SELECT * FROM attachments WHERE id = ?').get(c.req.valid('param').id)
     if (!att) httpError(404, ERROR_CODES.ATTACHMENT_NOT_FOUND)
+    // Membresía: el adjunto pertenece a una tarea de un proyecto; solo los
+    // miembros pueden descargarlo (issue #169). 404 para no revelar existencia.
+    const task = db.prepare('SELECT project_id FROM tasks WHERE id = ?').get(att.task_id)
+    if (!task || !isMember(db, user.id, task.project_id)) {
+      httpError(404, ERROR_CODES.ATTACHMENT_NOT_FOUND)
+    }
     const filePath = path.join(uploadsDir, path.basename(att.stored_name))
     if (!fs.existsSync(filePath)) httpError(404, ERROR_CODES.ATTACHMENT_FILE_MISSING)
     c.header('Content-Type', att.mime || 'application/octet-stream')
