@@ -228,6 +228,33 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [fetchBootstrap],
   );
 
+  const addSubtask = useCallback(
+    async (taskId: string, title: string, parentId?: string | null): Promise<void> => {
+      await apiPost(`/api/tasks/${encodeURIComponent(taskId)}/subtasks`, {
+        title,
+        ...(parentId ? { parent_id: parentId } : {}),
+      });
+      await fetchDetail(taskId);
+    },
+    [fetchDetail],
+  );
+
+  const updateSubtask = useCallback(
+    async (taskId: string, subtaskId: string, patch: { title?: string; done?: boolean }): Promise<void> => {
+      await apiPatch(`/api/subtasks/${encodeURIComponent(subtaskId)}`, patch);
+      await Promise.all([fetchBootstrap(), fetchDetail(taskId)]);
+    },
+    [fetchBootstrap, fetchDetail],
+  );
+
+  const deleteSubtask = useCallback(
+    async (taskId: string, subtaskId: string): Promise<void> => {
+      await apiDelete(`/api/subtasks/${encodeURIComponent(subtaskId)}`);
+      await Promise.all([fetchBootstrap(), fetchDetail(taskId)]);
+    },
+    [fetchBootstrap, fetchDetail],
+  );
+
   const addComment = useCallback(
     async (id: string, body: string): Promise<void> => {
       await apiPost(`/api/tasks/${encodeURIComponent(id)}/comments`, { body });
@@ -450,6 +477,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
       moveTask,
       deleteTask,
       parseTaskText,
+      addSubtask,
+      updateSubtask,
+      deleteSubtask,
       addComment,
       uploadAttachment,
       createProject,
