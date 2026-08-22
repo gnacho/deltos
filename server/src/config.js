@@ -25,6 +25,10 @@ const envSchema = z.object({
   AUTH_PASS: z.string().min(6).optional(),
   // 'true' solo detrás de HTTPS (reverse proxy). En dev (http://localhost) debe ser false.
   COOKIE_SECURE: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
+  // IP del reverse proxy de confianza (si lo hay). El rate-limit de login y las
+  // decisiones por IP solo confían en X-Forwarded-For cuando el peer directo
+  // coincide con esta IP; sin ella, X-Forwarded-For se ignora (anti-spoofing).
+  TRUSTED_PROXY: z.string().min(1).optional(),
   MAX_SSE_CLIENTS: z.coerce.number().int().min(1).max(200).default(20),
   MAX_UPLOAD_MB: z.coerce.number().int().min(1).max(100).default(10),
   // Web Push (VAPID): las tres o ninguna. Sin ellas el push queda DESACTIVADO

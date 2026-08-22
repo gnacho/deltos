@@ -208,12 +208,18 @@ export async function ensureBootstrapAdmin(db, username, password) {
 
 // --- Rate-limit de login en SQLite (persiste tras reinicios) --------------
 
+// IP del cliente para rate-limit/decisiones por IP. Por defecto se usa la IP
+// del socket (peer directo): X-Forwarded-For lo puede falsificar cualquiera, y
+// confiarlo sin validar permite saltarse el bloqueo de login (issue #167).
+// SOLO si TRUSTED_PROXY está configurado y el peer directo coincide con él se
+// toma el primer valor de X-Forwarded-For (cliente real tras el proxy).
 function clientIp(c) {
-  return (
-    c.req.header('x-forwarded-for')?.split(',')[0].trim() ||
-    c.env?.incoming?.socket?.remoteAddress ||
-    'unknown'
-  )
+  const peer = c.env?.incoming?.socket?.remoteAddress || 'unknown'
+  const trusted = process.env.TRUSTED_PROXY
+  if (trusted && peer === trusted) {
+    return c.req.header('x-forwarded-for')?.split(',')[0].trim() || peer
+  }
+  return peer
 }
 
 export function loginRateLimited(db, c) {
