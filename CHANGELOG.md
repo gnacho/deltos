@@ -14,6 +14,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   secrets (SESSION_SECRET outside the DB), rate limits and body caps, and
   latent bugs. Each finding becomes its own issue/PR.
 
+## [2.6.7] - 2026-08-22
+
+### Added
+
+- **Natural language task creation (#152).** When creating a task, typing the
+  title triggers a debounced parse that detects a due date and/or a recurrence
+  from the text (Spanish and English), suggesting to fill the fields: "change
+  the water filter every 6 months", "take the trash out every Monday and
+  Tuesday", "review the car tomorrow", "pay the bill in 3 days". The temporal
+  part is stripped from the title. Deterministic parser, no LLM.
+- **Subtasks with automatic reset (#153).** Tasks can have nestable subtasks.
+  Subtasks are added, toggled, edited inline and deleted from the task detail.
+  When a recurring task is moved to done, its subtasks are copied to the next
+  instance with done=0 (automatic reset), preserving nesting.
+- **Home Assistant integration (#155).** Exposes tasks to Home Assistant over a
+  REST API with a revocable bearer token, consumed natively by HA via a REST
+  sensor (pending count) and rest_command (create/complete) - no custom HACS
+  integration. Admin panel in Settings to generate/revoke the token and pick
+  the user for the list.
+
+### Fixed
+
+- **Home Assistant panel i18n keys (#155).** The panel keys were nested under
+  `settings.admin.ha.*` but referenced as `settings.ha.*`, so i18next showed
+  the raw key instead of the label.
+
 ## [2.6.6] - 2026-08-22
 
 ### Added
