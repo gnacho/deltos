@@ -52,8 +52,8 @@ export function registerInviteRoutes(app, { prod }) {
     const now = Date.now();
 
     prod.prepare(
-      'INSERT INTO expense_invites (id, expense_id, token_hash, token, invite_name, share_cents, paid, notes, created_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)'
-    ).run(id, expenseId, tokenHash, token, invite_name, share_cents, notes, now);
+      'INSERT INTO expense_invites (id, expense_id, token_hash, invite_name, share_cents, paid, notes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(id, expenseId, tokenHash, invite_name, share_cents, 0, notes, now);
 
     /* Auto-transición (#113): un reparto con invitaciones pendientes es
        "Repartido" (en-curso); si todo está pagado, "Pagado" (hecho). */
@@ -77,20 +77,6 @@ export function registerInviteRoutes(app, { prod }) {
         url: `${c.req.header('origin') || ''}/invite/${token}`,
       },
     }, 201);
-  });
-
-  // GET /api/invite/:id/link — recuperar enlace de invitación (autenticado)
-  app.get('/api/invite/:id/link', (c) => {
-    const user = c.get('user');
-    if (!user) httpError(401, ERROR_CODES.AUTH_REQUIRED);
-    const inviteId = c.req.param('id');
-    const invite = prod.prepare(
-      'SELECT i.id, i.token, i.expense_id, e.created_by FROM expense_invites i JOIN expenses e ON e.id = i.expense_id WHERE i.id = ?'
-    ).get(inviteId);
-    if (!invite || !invite.token) httpError(404, ERROR_CODES.EXPENSE_NOT_FOUND);
-    return c.json({
-      url: `${c.req.header('origin') || ''}/invite/${encodeURIComponent(invite.token)}`,
-    });
   });
 
   // GET /api/invite/:token — ver gasto y parte (público, sin auth)

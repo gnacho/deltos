@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Link } from 'lucide-react';
+import { X } from 'lucide-react';
 import { getCsrfToken } from '@/data/api-client';
 import { announce } from '@/lib/announce';
 import { fmtMoney } from '@/lib/format';
@@ -136,22 +136,6 @@ export function ExpenseInvitePanel({ expenseId, amountCents, sharesCents = 0 }: 
                   {t('expenses.pending')}
                 </span>
               )}
-              <button
-                type="button"
-                onClick={async () => {
-                  try {
-                    const res = await fetch(`/api/invite/${encodeURIComponent(inv.id)}/link`, { credentials: 'same-origin' });
-                    if (!res.ok) return;
-                    const { url } = await res.json();
-                    await navigator.clipboard.writeText(url);
-                    announce(t('invite.linkCopied'));
-                  } catch { /* ignore */ }
-                }}
-                className="w-7 h-7 rounded-lg text-muted hover:bg-surface2 hover:text-brand flex items-center justify-center"
-                title={t('invite.copyLink')}
-              >
-                <Link className="w-3.5 h-3.5" aria-hidden="true" />
-              </button>
               <button
                 type="button"
                 onClick={() => void handleRevokeInvite(inv.id)}

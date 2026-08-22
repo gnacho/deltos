@@ -430,6 +430,14 @@ export function migrateSchema(db) {
     db.exec('ALTER TABLE expense_invites ADD COLUMN token TEXT')
     log.info('schema_migrated', { table: 'expense_invites', column: 'token' })
   }
+  // security: los tokens de invitación NUNCA se guardan en claro (solo hash).
+  // Limpia cualquier token en claro que exista de versiones anteriores.
+  const { changes: clearedTokens } = db
+    .prepare('UPDATE expense_invites SET token = NULL WHERE token IS NOT NULL')
+    .run()
+  if (clearedTokens > 0) {
+    log.info('invite_plaintext_tokens_cleared', { rows: clearedTokens })
+  }
   const exCommentCols = db.prepare('PRAGMA table_info(expense_comments)').all().map((c) => c.name)
   if (!exCommentCols.includes('author_name')) {
     db.exec('ALTER TABLE expense_comments ADD COLUMN author_name TEXT')
