@@ -1,7 +1,7 @@
 // attachments.test.js — subida multipart (límite 10 MB), descarga con
 // content-type y evento 'attachment'.
 import { describe, it, expect } from 'vitest'
-import { makeInstance, loginAdmin, jsonReq } from './helpers.js'
+import { makeInstance, loginAdmin, loginUser, jsonReq } from './helpers.js'
 
 describe('adjuntos', () => {
   it('sube, registra evento y descarga con content-type', async () => {
@@ -89,6 +89,42 @@ describe('adjuntos', () => {
     })
     expect(res.status).toBe(415)
     expect((await res.json()).error.code).toBe('UPLOAD_INVALID_MIME')
+  })
+
+  it('un usuario no miembro del proyecto no puede descargar el adjunto (IDOR #169)', async () => {
+    const { app } = await makeInstance({ seedDemoData: false })
+    const auth = await loginAdmin(app)
+    // segundo usuario (no miembro de ningún proyecto del admin)
+    await app.request(
+      '/api/auth/register',
+      jsonReq(auth, 'POST', '', { username: 'jordi', password: 'jordi1234567' })
+    )
+    const jordi = await loginUser(app, 'jordi', 'jordi1234567')
+
+    const project = (
+      await (await app.request('/api/projects', jsonReq(auth, 'POST', '', { name: 'Casa' }))).json()
+    ).project
+    const task = (
+      await (
+        await app.request('/api/tasks', jsonReq(auth, 'POST', '', { project_id: project.id, title: 'Con adjunto' }))
+      ).json()
+    ).task
+    const form = new FormData()
+    form.append('file', new File(['contenido de prueba'], 'nota.txt', { type: 'text/plain' }))
+    const up = await app.request(`/api/tasks/${task.id}/attachments`, {
+      method: 'POST',
+      headers: { cookie: auth.cookie, 'x-csrf-token': auth.csrfToken },
+      body: form,
+    })
+    expect(up.status).toBe(201)
+    const { attachment } = await up.json()
+
+    // el miembro (admin) sí descarga
+    const ok = await app.request(`/api/attachments/${attachment.id}`, { headers: { cookie: auth.cookie } })
+    expect(ok.status).toBe(200)
+    // el no-miembro (jordi) recibe 404, no el fichero
+    const denied = await app.request(`/api/attachments/${attachment.id}`, { headers: { cookie: jordi.cookie } })
+    expect(denied.status).toBe(404)
   })
 
   it('los adjuntos sembrados en demo se descargan', async () => {
