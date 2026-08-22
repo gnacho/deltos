@@ -14,15 +14,18 @@ export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000 // 30 días
 export const COOKIE_NAME = 'deltos_session'
 const LOCK_MS = 5 * 60 * 1000 // 5 min de bloqueo tras 5 intentos fallidos
 
-// Secret HMAC: env SESSION_SECRET o autogenerado persistido en kv
-// (así la cookie sobrevive reinicios).
+// Secret HMAC: env SESSION_SECRET o autogenerado persistido en kv (solo dev).
+// En producción SESSION_SECRET es obligatorio (config.js valida); el fallback
+// a kv queda como comodidad de desarrollo (issue #168).
 export function getSecret(prodDb, envSecret) {
   if (envSecret) return envSecret
   let secret = kvGet(prodDb, 'session_secret')
   if (!secret) {
     secret = crypto.randomBytes(32).toString('hex')
     kvSet(prodDb, 'session_secret', secret)
-    log.info('session_secret_generated')
+    log.warn('session_secret_generated', { reason: 'no_env_secret', stored: 'kv_fallback' })
+  } else {
+    log.warn('session_secret_from_kv', { reason: 'no_env_secret', stored: 'kv_fallback' })
   }
   return secret
 }
