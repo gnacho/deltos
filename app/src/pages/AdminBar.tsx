@@ -6,6 +6,7 @@ import {
   Download,
   ExternalLink,
   HardDrive,
+  Home,
   KeyRound,
   RefreshCw,
   Shield,
@@ -566,6 +567,120 @@ function UsersPanel() {
   );
 }
 
+/* ---------- Home Assistant ---------- */
+function HaPanel() {
+  const { t } = useTranslation();
+  const [status, setStatus] = useState<{ enabled: boolean; username: string | null } | null>(null);
+  const [username, setUsername] = useState('');
+  const [token, setToken] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = async () => {
+    try {
+      const s = await apiFetch<{ enabled: boolean; username: string | null }>('/api/ha/status');
+      setStatus(s);
+      setUsername(s.username ?? '');
+      setError(null);
+    } catch (err) {
+      setError(apiErrorText(err, t('settings.ha.error')));
+    }
+  };
+
+  useEffect(() => {
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const generate = async () => {
+    setBusy(true);
+    setError(null);
+    setToken(null);
+    try {
+      const res = await apiPost<{ token: string; username: string | null }>('/api/ha/token', {
+        username: username.trim() || undefined,
+      });
+      setToken(res.token);
+      setStatus({ enabled: true, username: res.username });
+    } catch (err) {
+      setError(apiErrorText(err, t('settings.ha.error')));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const revoke = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await apiDelete('/api/ha/token');
+      setStatus({ enabled: false, username: null });
+      setToken(null);
+    } catch (err) {
+      setError(apiErrorText(err, t('settings.ha.error')));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <label htmlFor="ha-username" className="text-[13px] text-muted">
+          {t('settings.ha.usernameLabel')}
+        </label>
+        <input
+          id="ha-username"
+          type="text"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          placeholder="nacho"
+          className="bg-surface2 border border-app rounded-lg px-3 py-2 text-[14px] outline-none focus:border-brand w-40"
+        />
+        {status?.enabled ? (
+          <button
+            type="button"
+            onClick={() => void revoke()}
+            disabled={busy}
+            className="h-9 rounded-lg border border-rose-300 px-3 text-[13px] font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-60 dark:text-rose-300 dark:border-rose-500/40 dark:hover:bg-rose-500/10"
+          >
+            {t('settings.ha.revoke')}
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => void generate()}
+            disabled={busy}
+            className="h-9 rounded-lg bg-brand px-3 text-[13px] font-semibold text-brandfg hover:brightness-110 disabled:opacity-60"
+          >
+            {busy ? t('settings.ha.generating') : t('settings.ha.generate')}
+          </button>
+        )}
+      </div>
+
+      {status?.enabled && !token && (
+        <p className="text-[13px] text-ok">{t('settings.ha.enabled')}</p>
+      )}
+
+      {token && (
+        <div className="rounded-xl border border-app bg-surface2 p-3">
+          <p className="text-[12px] font-semibold uppercase tracking-wide text-faint mb-1">
+            {t('settings.ha.tokenLabel')}
+          </p>
+          <code className="block break-all text-[13px] font-mono select-all">{token}</code>
+          <p className="text-[12px] text-faint mt-1.5">{t('settings.ha.tokenHint')}</p>
+        </div>
+      )}
+
+      {error && (
+        <p role="alert" className="text-[13px] text-rose-600 dark:text-rose-400">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
 /* ---------- Barra de administración ---------- */
 export default function AdminBar() {
   const { t } = useTranslation();
@@ -573,6 +688,7 @@ export default function AdminBar() {
   const upd = useAppUpdate(pkg.version, REPO_URL);
   const [showBackups, setShowBackups] = useState(false);
   const [showUsers, setShowUsers] = useState(false);
+  const [showHa, setShowHa] = useState(false);
 
   /* Publica el resultado del check en el store para que el ribbon global lo
      muestre: release nueva → ribbon; al día / error → sin ribbon. */
@@ -655,6 +771,24 @@ export default function AdminBar() {
           />
         </button>
 
+        <button
+          type="button"
+          aria-label={t('settings.ha.title')}
+          aria-expanded={showHa}
+          onClick={() => setShowHa((v) => !v)}
+          className={[
+            'inline-flex h-9 items-center gap-1.5 rounded-xl border px-3 text-[13px] font-medium transition-colors shrink-0',
+            showHa ? activeBtnCls : inactiveBtnCls,
+          ].join(' ')}
+        >
+          <Home className="w-4 h-4 shrink-0" aria-hidden="true" />
+          <span className="hidden sm:inline">{t('settings.ha.title')}</span>
+          <ChevronDown
+            className={`w-3.5 h-3.5 shrink-0 transition-transform ${showHa ? 'rotate-180' : ''}`}
+            aria-hidden="true"
+          />
+        </button>
+
         <div className="ml-auto">
           <DemoToggle />
         </div>
@@ -662,6 +796,11 @@ export default function AdminBar() {
 
       {/* Paneles desplegados */}
       <BackupsPanel expanded={showBackups} />
+      {showHa && (
+        <div className="mt-4 border-t border-app pt-4">
+          <HaPanel />
+        </div>
+      )}
       {showUsers && (
         <div className="mt-4 border-t border-app pt-4">
           <UsersPanel />

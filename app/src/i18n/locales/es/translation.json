@@ -524,6 +524,17 @@
       },
       "update": {
         "upToDateShort": "Estás en la última versión"
+      },
+      "ha": {
+        "title": "Home Assistant",
+        "usernameLabel": "Usuario para la lista",
+        "generate": "Generar token",
+        "generating": "Generando…",
+        "revoke": "Revocar token",
+        "enabled": "Integración activada",
+        "tokenLabel": "Token (muéstralo una vez)",
+        "tokenHint": "Copia el token y úsalo como Bearer en la integración REST de Home Assistant. Si lo pierdes, genera uno nuevo (revoca el anterior).",
+        "error": "No se pudo gestionar la integración con Home Assistant"
       }
     },
     "about": {
