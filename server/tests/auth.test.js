@@ -55,6 +55,26 @@ describe('auth', () => {
     expect(body.error.code).toBe('AUTH_RATE_LIMITED')
   })
 
+  it('rate-limit: X-Forwarded-For NO se confía por defecto (anti-spoofing #167)', async () => {
+    const { app } = await makeInstance()
+    const attempt = (password, xff) =>
+      app.request('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(xff ? { 'X-Forwarded-For': xff } : {}),
+        },
+        body: JSON.stringify({ username: 'admin', password }),
+      })
+    // 5 fallos con X-Forwarded-For DISTINTO en cada uno: el bloqueo por IP del
+    // socket debe aplicarse igualmente (la cabecera se ignora sin TRUSTED_PROXY).
+    for (let i = 0; i < 5; i++) {
+      expect((await attempt('mal', `203.0.113.${i}`)).status).toBe(401)
+    }
+    const blocked = await attempt('admin1234567', '203.0.113.99')
+    expect(blocked.status).toBe(429)
+  })
+
   it('rota la sesión al hacer login de nuevo (la anterior muere)', async () => {
     const { app } = await makeInstance()
     const auth1 = await loginAdmin(app)
