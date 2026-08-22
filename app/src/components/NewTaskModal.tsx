@@ -12,6 +12,8 @@ import { ProjectIcon } from '@/components/ProjectIcon';
 import { apiErrorText } from '@/lib/errors';
 import { Avatar } from '@/components/Avatar';
 import { ArrowUp, ArrowRight, ArrowDown } from 'lucide-react';
+import { RecurrenceField } from '@/components/task/RecurrenceField';
+import type { TaskRecurrence } from '@/data/types';
 
 const schema = z.object({
   title: z.string().trim().min(1).max(200),
@@ -41,6 +43,7 @@ export function NewTaskModal({
   const [column, setColumn] = useState<ColumnId>(defaults.column ?? 'nuevo');
   const [priority, setPriority] = useState<Priority | null>(null);
   const [dueDate, setDueDate] = useState('');
+  const [recurrence, setRecurrence] = useState<TaskRecurrence | null>(null);
   const [assigneeId, setAssigneeId] = useState<string | null>(null);
   const [labelIds, setLabelIds] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
@@ -88,6 +91,7 @@ export function NewTaskModal({
         due_date: dueDate || null,
         assignee_id: assigneeId,
         labels: [...labelIds],
+        recurrence,
       });
       onClose();
     } catch (err) {
@@ -288,6 +292,12 @@ export function NewTaskModal({
               />
             </div>
           </div>
+
+          <RecurrenceField
+            value={recurrence}
+            onChange={setRecurrence}
+            idPrefix="nt"
+          />
 
           <div>
             <p className="text-[12px] font-semibold tracking-wide uppercase text-faint mb-1.5">

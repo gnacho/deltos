@@ -59,6 +59,13 @@ export interface TaskAssignee {
   color: string;
 }
 
+export interface TaskRecurrence {
+  freq: 'daily' | 'weekly' | 'monthly';
+  interval: number;
+  weekdays: number[] | null;
+  mode: 'due' | 'completion';
+}
+
 export interface Task {
   id: string;
   project_id: string;
@@ -68,6 +75,8 @@ export interface Task {
   position: number;
   priority: Priority | null;
   due_date: string | null; // YYYY-MM-DD
+  recurrence: TaskRecurrence | null;
+  recurrence_group_id: string | null;
   assignee_id: string | null;
   assignee: TaskAssignee | null;
   created_by: string;
@@ -164,6 +173,7 @@ export interface TaskPatch {
   assignee_id?: string | null;
   labels?: string[];
   project_id?: string;
+  recurrence?: TaskRecurrence | null;
 }
 
 export interface ExpenseShare {
