@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import type { BoardUser, Label, Project, Task, TaskDetail, TaskPatch, Expense, ExpenseInput, ExpensePatch, ExpenseDetail } from './types';
+import type { BoardUser, Label, Project, Task, TaskDetail, TaskPatch, TaskRecurrence, Expense, ExpenseInput, ExpensePatch, ExpenseDetail } from './types';
 
 export type ConnectionStatus = 'connected' | 'reconnecting';
 
@@ -12,6 +12,7 @@ export interface CreateTaskInput {
   due_date?: string | null;
   assignee_id?: string | null;
   labels?: string[];
+  recurrence?: TaskRecurrence | null;
 }
 
 export interface CreateProjectInput {
