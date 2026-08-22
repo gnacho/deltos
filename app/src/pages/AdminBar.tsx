@@ -583,7 +583,7 @@ function HaPanel() {
       setUsername(s.username ?? '');
       setError(null);
     } catch (err) {
-      setError(apiErrorText(err, t('settings.ha.error')));
+      setError(apiErrorText(err, t('settings.admin.ha.error')));
     }
   };
 
@@ -603,7 +603,7 @@ function HaPanel() {
       setToken(res.token);
       setStatus({ enabled: true, username: res.username });
     } catch (err) {
-      setError(apiErrorText(err, t('settings.ha.error')));
+      setError(apiErrorText(err, t('settings.admin.ha.error')));
     } finally {
       setBusy(false);
     }
@@ -617,7 +617,7 @@ function HaPanel() {
       setStatus({ enabled: false, username: null });
       setToken(null);
     } catch (err) {
-      setError(apiErrorText(err, t('settings.ha.error')));
+      setError(apiErrorText(err, t('settings.admin.ha.error')));
     } finally {
       setBusy(false);
     }
@@ -627,7 +627,7 @@ function HaPanel() {
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-3">
         <label htmlFor="ha-username" className="text-[13px] text-muted">
-          {t('settings.ha.usernameLabel')}
+          {t('settings.admin.ha.usernameLabel')}
         </label>
         <input
           id="ha-username"
@@ -644,7 +644,7 @@ function HaPanel() {
             disabled={busy}
             className="h-9 rounded-lg border border-rose-300 px-3 text-[13px] font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-60 dark:text-rose-300 dark:border-rose-500/40 dark:hover:bg-rose-500/10"
           >
-            {t('settings.ha.revoke')}
+            {t('settings.admin.ha.revoke')}
           </button>
         ) : (
           <button
@@ -653,22 +653,22 @@ function HaPanel() {
             disabled={busy}
             className="h-9 rounded-lg bg-brand px-3 text-[13px] font-semibold text-brandfg hover:brightness-110 disabled:opacity-60"
           >
-            {busy ? t('settings.ha.generating') : t('settings.ha.generate')}
+            {busy ? t('settings.admin.ha.generating') : t('settings.admin.ha.generate')}
           </button>
         )}
       </div>
 
       {status?.enabled && !token && (
-        <p className="text-[13px] text-ok">{t('settings.ha.enabled')}</p>
+        <p className="text-[13px] text-ok">{t('settings.admin.ha.enabled')}</p>
       )}
 
       {token && (
         <div className="rounded-xl border border-app bg-surface2 p-3">
           <p className="text-[12px] font-semibold uppercase tracking-wide text-faint mb-1">
-            {t('settings.ha.tokenLabel')}
+            {t('settings.admin.ha.tokenLabel')}
           </p>
           <code className="block break-all text-[13px] font-mono select-all">{token}</code>
-          <p className="text-[12px] text-faint mt-1.5">{t('settings.ha.tokenHint')}</p>
+          <p className="text-[12px] text-faint mt-1.5">{t('settings.admin.ha.tokenHint')}</p>
         </div>
       )}
 
@@ -773,7 +773,7 @@ export default function AdminBar() {
 
         <button
           type="button"
-          aria-label={t('settings.ha.title')}
+          aria-label={t('settings.admin.ha.title')}
           aria-expanded={showHa}
           onClick={() => setShowHa((v) => !v)}
           className={[
@@ -782,7 +782,7 @@ export default function AdminBar() {
           ].join(' ')}
         >
           <Home className="w-4 h-4 shrink-0" aria-hidden="true" />
-          <span className="hidden sm:inline">{t('settings.ha.title')}</span>
+          <span className="hidden sm:inline">{t('settings.admin.ha.title')}</span>
           <ChevronDown
             className={`w-3.5 h-3.5 shrink-0 transition-transform ${showHa ? 'rotate-180' : ''}`}
             aria-hidden="true"
