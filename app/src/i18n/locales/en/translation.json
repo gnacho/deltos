@@ -156,7 +156,15 @@
     "recurrenceMode": "When it is calculated",
     "recurrenceMode.due": "From due date",
     "recurrenceMode.completion": "Adaptive",
-    "recurrenceMode.completionHint": "Uses the average of your real completion intervals to suggest the next date"
+    "recurrenceMode.completionHint": "Uses the average of your real completion intervals to suggest the next date",
+    "subtasks": "Subtasks",
+    "subtaskPlaceholder": "Add a step…",
+    "subtaskAdd": "Add",
+    "subtaskToggle": "Toggle {{title}}",
+    "subtaskDelete": "Delete {{title}}",
+    "subtaskAddError": "Could not add the subtask",
+    "subtaskUpdateError": "Could not save the subtask",
+    "subtaskDeleteError": "Could not delete the subtask"
   },
   "attachments": {
     "empty": "No attachments.",

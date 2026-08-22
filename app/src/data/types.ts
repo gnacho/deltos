@@ -132,11 +132,21 @@ export interface ActivityEvent {
   username: string | null;
 }
 
+export interface Subtask {
+  id: string;
+  parent_id: string | null;
+  title: string;
+  done: boolean;
+  position: number;
+}
+
 export interface TaskDetail {
   task: Task;
+  labels: Label[];
   attachments: Attachment[];
   comments: Comment[];
   activity: ActivityEvent[];
+  subtasks: Subtask[];
 }
 
 export interface ActivityFeedItem {

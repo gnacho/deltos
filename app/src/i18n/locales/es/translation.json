@@ -156,7 +156,15 @@
     "recurrenceMode": "Cuándo se calcula",
     "recurrenceMode.due": "Desde el vencimiento",
     "recurrenceMode.completion": "Adaptativo",
-    "recurrenceMode.completionHint": "Usa la media de tus intervalos reales entre completados para sugerir la próxima fecha"
+    "recurrenceMode.completionHint": "Usa la media de tus intervalos reales entre completados para sugerir la próxima fecha",
+    "subtasks": "Subtareas",
+    "subtaskPlaceholder": "Añade un paso…",
+    "subtaskAdd": "Añadir",
+    "subtaskToggle": "Marcar {{title}}",
+    "subtaskDelete": "Eliminar {{title}}",
+    "subtaskAddError": "No se ha podido añadir la subtarea",
+    "subtaskUpdateError": "No se ha podido guardar la subtarea",
+    "subtaskDeleteError": "No se ha podido eliminar la subtarea"
   },
   "attachments": {
     "empty": "Sin adjuntos.",
