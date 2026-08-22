@@ -263,11 +263,11 @@ export function ProjectForm({
           {error}
         </p>
       )}
-      <div className="flex gap-2.5">
+      <div className="flex flex-wrap gap-2.5">
         <button
           type="submit"
           disabled={saving}
-          className="flex-1 h-11 rounded-xl bg-brand text-brandfg text-[14px] font-semibold hover:brightness-110 disabled:opacity-60"
+          className="px-6 h-11 rounded-xl bg-brand text-brandfg text-[14px] font-semibold hover:brightness-110 disabled:opacity-60"
         >
           {saving
             ? editing

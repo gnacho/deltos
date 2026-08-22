@@ -214,7 +214,7 @@ export default function ProjectsPage() {
         )}
 
         {(formOpen || editing) && (
-          <div className="sm:col-span-2 xl:col-span-3 rounded-2xl bg-surface border border-app shadow-soft p-5">
+          <div className="sm:col-span-2 xl:col-span-2 rounded-2xl bg-surface border border-app shadow-soft p-5">
             <h2 className="font-display font-semibold text-[15px] mb-4">
               {t(editing ? 'projects.form.editTitle' : 'projects.form.title')}
             </h2>
