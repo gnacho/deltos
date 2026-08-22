@@ -1,0 +1,3 @@
+# Test fixture credentials (server/tests/auth.test.js) - not production secrets.
+# Pattern from keynest: mock/demo credentials used by the test suite.
+03567878daa1c6003fc0dfe59e25b66e316459a9:server/tests/auth.test.js:generic-api-key:111
