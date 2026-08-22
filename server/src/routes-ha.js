@@ -24,6 +24,12 @@ function sha256(s) {
   return crypto.createHash('sha256').update(s).digest('hex')
 }
 
+function isMember(db, userId, projectId) {
+  return !!db
+    .prepare('SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ?')
+    .get(projectId, userId)
+}
+
 // Middleware: exige Authorization: Bearer <token> con hash en kv.
 export function requireHaToken(prod) {
   return async (c, next) => {
@@ -142,6 +148,11 @@ export function registerHaRoutes(app, ctx) {
     if (!projectId || !db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId)) {
       httpError(404, ERROR_CODES.PROJECT_NOT_FOUND)
     }
+    // Membresía: el usuario configurado (o el admin por defecto) solo crea
+    // tareas en proyectos de los que es miembro (issue #170).
+    if (!isMember(db, actor.id, projectId)) {
+      httpError(403, ERROR_CODES.AUTH_FORBIDDEN)
+    }
     const id = crypto.randomUUID()
     const now = Date.now()
     const pos = db
@@ -165,6 +176,16 @@ export function registerHaRoutes(app, ctx) {
   app.patch('/api/ha/tasks/:id/complete', requireHaToken(db), (c) => {
     const task = db.prepare('SELECT * FROM tasks WHERE id = ? AND deleted_at IS NULL').get(c.req.param('id'))
     if (!task) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
+    const username = kvGet(db, HA_USERNAME_KEY)
+    const actor = username
+      ? db.prepare('SELECT * FROM users WHERE username = ?').get(username)
+      : db.prepare('SELECT * FROM users WHERE role = ? ORDER BY created_at LIMIT 1').get('admin')
+    if (!actor) httpError(500, ERROR_CODES.INTERNAL_ERROR)
+    // Membresía: solo se completan tareas de proyectos del usuario configurado
+    // (o del admin por defecto). 404 para no revelar la existencia (issue #170).
+    if (!isMember(db, actor.id, task.project_id)) {
+      httpError(404, ERROR_CODES.TASK_NOT_FOUND)
+    }
     const now = Date.now()
     const update = db.transaction(() => {
       const targetCount = db

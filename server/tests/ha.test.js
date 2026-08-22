@@ -139,4 +139,36 @@ describe('ha — tareas públicas', () => {
     const res = await app.request('/api/ha/tasks', { headers: { authorization: 'Bearer incorrecto' } })
     expect(res.status).toBe(401)
   })
+
+  it('el token solo actúa en proyectos del usuario configurado (membresía #170)', async () => {
+    const { app, auth, project } = await setup()
+    // proyecto ajeno (admin lo crea, nadie más es miembro) + usuario pepe
+    const other = (await (await app.request('/api/projects', jsonReq(auth, 'POST', '/api/projects', { name: 'Ajeno' }))).json()).project
+    await app.request('/api/users', jsonReq(auth, 'POST', '/api/users', { username: 'pepe', password: 'pepe1234567', role: 'user' }))
+    const t = (await (await app.request('/api/tasks', jsonReq(auth, 'POST', '/api/tasks', { project_id: other.id, title: 'Secreta' }))).json()).task
+    const token = await genToken(app, auth, 'pepe')
+
+    // pepe no es miembro de 'Ajeno': no puede crear ni completar ahí
+    const created = await app.request('/api/ha/tasks', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Intrusa', project_id: other.id }),
+    })
+    expect(created.status).toBe(403)
+
+    const done = await app.request(`/api/ha/tasks/${t.id}/complete`, {
+      method: 'PATCH',
+      headers: { authorization: `Bearer ${token}` },
+    })
+    expect(done.status).toBe(404)
+
+    // el admin (miembro del proyecto propio) sí puede en su proyecto
+    const tokenAdmin = await genToken(app, auth, 'admin')
+    const created2 = await app.request('/api/ha/tasks', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${tokenAdmin}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Propia', project_id: project.id }),
+    })
+    expect(created2.status).toBe(201)
+  })
 })
