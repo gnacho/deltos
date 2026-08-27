@@ -698,7 +698,28 @@
     "applyError": "Could not start the update. Please try again.",
     "applyErrorAuth": "Your session has expired. Sign in again and retry the update.",
     "reload": "Reload",
-    "dismiss": "Dismiss"
+    "dismiss": "Dismiss",
+    "dialog": {
+      "title": "Update Deltos",
+      "desc": "The latest stable version is downloaded and the service restarts. It takes a few seconds and the app reloads on its own.",
+      "changelogTitle": "What's new",
+      "start": "Update",
+      "cancel": "Cancel",
+      "close": "Close",
+      "retry": "Retry",
+      "progressLabel": "Update progress",
+      "restarting": "Restarting the service…",
+      "reloadSoon": "The app will reload by itself in a few seconds.",
+      "failed": "The update did not complete.",
+      "failedStep": "The update script failed at one step. Check the deltos-update.service journal."
+    },
+    "step": {
+      "detect": "Checking version",
+      "download": "Downloading",
+      "verify": "Verifying signature",
+      "install": "Installing",
+      "restart": "Restarting"
+    }
   },
   "errorBoundary": {
     "title": "Something went wrong",

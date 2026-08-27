@@ -173,8 +173,18 @@ describe('recurrence — computeNextDue', () => {
 describe('recurrence — integración API', () => {
   it('mover a hecho crea la siguiente instancia en nuevo con due_date calculada', async () => {
     const { app, auth, project } = await setup()
+    // Fechas RELATIVAS al reloj real (#182): con fecha fija el test caduca al
+    // cruzar la medianoche (mode 'due' avanza hasta superar HOY).
+    const DAY = 24 * 60 * 60 * 1000
+    const isoLocal = (ms) => {
+      const d = new Date(ms)
+      const p = (n) => String(n).padStart(2, '0')
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+    }
+    const due = isoLocal(Date.now() - DAY) // ayer
+    const expected = isoLocal(Date.now() + 6 * DAY) // ayer + 7 = hoy + 6
     const t = await createTask(app, auth, project.id, {
-      due_date: '2026-08-21',
+      due_date: due,
       recurrence: { freq: 'weekly', interval: 1, mode: 'due' },
     })
     expect(t.recurrence).toEqual({ freq: 'weekly', interval: 1, weekdays: null, mode: 'due' })
@@ -190,7 +200,7 @@ describe('recurrence — integración API', () => {
     expect(next).toBeTruthy()
     expect(next.recurrence).toEqual({ freq: 'weekly', interval: 1, weekdays: null, mode: 'due' })
     expect(next.recurrence_group_id).toBe(t.id)
-    expect(next.due_date).toBe('2026-08-28')
+    expect(next.due_date).toBe(expected)
   })
 
   it('crea instancia con la mediana adaptativa en modo completion', async () => {

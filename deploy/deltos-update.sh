@@ -18,11 +18,27 @@ ENV_FILE="$CONF_DIR/env"
 SERVICE_NAME=deltos
 TS="$(date +%s)"
 TMP_DIR="$(mktemp -d)"
-trap 'rm -rf "$TMP_DIR"' EXIT INT TERM
+
+# Progreso (#189): JSON {step,pct,ts} que el server expone en
+# /api/update/progress mientras el apply corre. Se escribe en los data dirs
+# posibles (plano/capistrano); el server lee el suyo. Stale a los 15 min.
+PROG_FILES=""
+[ -d /opt/deltos/data ] && PROG_FILES="/opt/deltos/data/update-progress.json"
+[ -d /var/lib/deltos ] && PROG_FILES="$PROG_FILES /var/lib/deltos/update-progress.json"
+prog() { # $1=step $2=pct
+  for f in $PROG_FILES; do
+    printf '{"step":"%s","pct":%s,"ts":%s}' "$1" "$2" "$(date +%s000)" > "$f" 2>/dev/null || true
+    chmod 0644 "$f" 2>/dev/null || true
+  done
+}
+PROG_OK=0
+trap 'rm -rf "$TMP_DIR"' INT TERM
+trap 'rm -rf "$TMP_DIR"; [ "$PROG_OK" = 1 ] || prog error 0' EXIT
 
 log() { logger -t "$APP-update" "$@"; }
 
 echo "STEP:detect"
+prog detect 5
 VER="$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" \
   | sed -n 's/.*"tag_name": *"\(v\?[0-9][^"]*\)".*/\1/p' | head -n1)"
 [ -n "$VER" ] || { log "no se pudo resolver release latest"; exit 4; }
@@ -35,7 +51,7 @@ rm -f /var/lib/deltos/.update-requested /opt/deltos/data/.update-requested 2>/de
 
 # Marker semver real (fuente de verdad para /api/update/status).
 if [ -f "$MARKER" ] && [ "$(cat "$MARKER" 2>/dev/null || true)" = "$VER_NO_V" ]; then
-  log "al día ($VER_NO_V)"; exit 0
+  log "al día ($VER_NO_V)"; PROG_OK=1; exit 0
 fi
 
 # PORT del env actual (el deploy del service lo lee de EnvironmentFile).
@@ -43,6 +59,7 @@ PORT="$(sed -n 's/^PORT=//p' "$ENV_FILE" 2>/dev/null | head -1)"
 PORT="${PORT:-8080}"
 
 echo "STEP:download"
+prog download 25
 TARBALL="deltos_${VER_NO_V}_linux_${ARCH}.tar.gz"
 BASE="https://github.com/$REPO/releases/download/$VER"
 curl -fL "$BASE/$TARBALL" -o "$TMP_DIR/app.tar.gz"
@@ -52,16 +69,19 @@ curl -fL "$BASE/$TARBALL" -o "$TMP_DIR/app.tar.gz"
 curl -fL "$BASE/checksums.txt?nc=$TS" -o "$TMP_DIR/checksums.txt"
 
 echo "STEP:verify"
+prog verify 45
 expected="$(awk -v f="$TARBALL" '$0 ~ f {print $1; exit}' "$TMP_DIR/checksums.txt")"
 [ -n "$expected" ] || { log "checksums.txt sin entrada para $TARBALL"; exit 5; }
 got="$(sha256sum "$TMP_DIR/app.tar.gz" | awk '{print $1}')"
 [ "$expected" = "$got" ] || { log "SHA256 NO coincide ($TARBALL)"; exit 5; }
 
 echo "STEP:extract"
+prog extract 60
 mkdir -p "$TMP_DIR/pkg"
 tar -xzf "$TMP_DIR/app.tar.gz" -C "$TMP_DIR/pkg"
 
 echo "STEP:deploy"
+prog deploy 80
 # Dos layouts posibles:
 #  - Capistrano (install.sh): /opt/deltos/current → releases/vX, datos en /var/lib/deltos.
 #  - Plano (deploy manual CT 226): /opt/deltos/{server,app/dist}, datos en /opt/deltos/data.
@@ -105,11 +125,14 @@ fi
 # Datos NUNCA se tocan: SQLite y uploads viven en $STATE_DIR (fuera de server/).
 
 echo "STEP:restart"
+prog restart 95
 printf '%s' "$VER_NO_V" > "$MARKER"
 chmod 0644 "$MARKER"
 if [ "${SKIP_RESTART:-0}" != "1" ]; then
   systemctl restart "$SERVICE_NAME"
 fi
+prog done 100
+PROG_OK=1
 log "actualizado a $VER_NO_V (port $PORT)"
 
 # Rollback manual (layout plano):

@@ -6,6 +6,7 @@
 // deploy y, con SKIP_RESTART=1, el server sale y systemd (Restart=on-failure)
 // relanza con el código nuevo.
 import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { kvGet, kvSet } from './db.js'
 
 const REPO = process.env.GITHUB_REPO || 'gnacho/deltos'
@@ -22,15 +23,16 @@ export function currentId() {
   }
 }
 
-// Última release ESTABLE (releases/latest, tag v*), no la prerelease "latest"
-// de main. Caché en kv con TTL 5 min para no pegar a la API de GitHub en cada
-// llamada (rate-limit 60/h por IP sin token).
-async function latestId(prodDb) {
+// Última release ESTABLE (releases/latest, tag v*), no la prerelease "latest" de
+// main. Caché en kv con TTL 5 min para no pegar a la API de GitHub en cada
+// llamada (rate-limit 60/h por IP sin token). Devuelve {id, body} para que la
+// UI muestre el changelog del release (#189).
+async function latestInfo(prodDb) {
   const cached = kvGet(prodDb, CACHE_KEY)
   if (cached) {
     try {
       const c = JSON.parse(cached)
-      if (Date.now() - c.at < CACHE_TTL) return c.id
+      if (Date.now() - c.at < CACHE_TTL) return { id: c.id, body: c.body ?? '' }
     } catch { /* noop */ }
   }
   const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
@@ -40,8 +42,9 @@ async function latestId(prodDb) {
   if (!res.ok) return null
   const data = await res.json()
   const id = String(data.tag_name ?? '').replace(/^v/, '')
-  kvSet(prodDb, CACHE_KEY, JSON.stringify({ at: Date.now(), id }))
-  return id
+  const body = typeof data.body === 'string' ? data.body : ''
+  kvSet(prodDb, CACHE_KEY, JSON.stringify({ at: Date.now(), id, body }))
+  return { id, body }
 }
 
 // Comparación semver numérica: '1.10.0' > '1.9.0'; prefijos 'v' ignorados.
@@ -56,7 +59,24 @@ function compareSemver(a, b) {
 
 export async function updateStatus(prodDb) {
   const current = currentId()
-  const latest = await latestId(prodDb).catch(() => null)
-  const available = Boolean(latest && current && compareSemver(latest, current) > 0)
-  return { current, latest, available }
+  const latest = await latestInfo(prodDb).catch(() => null)
+  const available = Boolean(latest && current && compareSemver(latest.id, current) > 0)
+  return { current, latest: latest?.id ?? null, available, notes: latest?.body ?? '' }
+}
+
+// Progreso del apply (#189): deltos-update.sh escribe update-progress.json
+// {step,pct,ts} en el data dir en cada STEP. Solo se considera vivo si el ts
+// es reciente (15 min); un fichero viejo de una corrida muerta no se reporta.
+const PROGRESS_TTL = 15 * 60 * 1000
+const PROGRESS_FILE = 'update-progress.json'
+
+export function updateProgress(dataDir) {
+  try {
+    const raw = readFileSync(join(dataDir, PROGRESS_FILE), 'utf8')
+    const p = JSON.parse(raw)
+    if (!p.ts || Date.now() - p.ts > PROGRESS_TTL) return null
+    return { step: String(p.step ?? ''), pct: Number(p.pct) || 0, ts: p.ts }
+  } catch {
+    return null
+  }
 }

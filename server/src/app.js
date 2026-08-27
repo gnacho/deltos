@@ -24,7 +24,7 @@ import { httpError, onError, validationHook } from './errors.js'
 import { ERROR_CODES } from './error-codes.js'
 import { mutationRateLimit } from './rate-limit.js'
 import { idempotencyMiddleware } from './idempotency.js'
-import { updateStatus } from './update.js'
+import { updateStatus, updateProgress } from './update.js'
 
 const pkg = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
 
@@ -264,6 +264,13 @@ export function createApp(ctx) {
   app.get('/api/update/status', async (c) => {
     auth.requireAdmin(c)
     return c.json(await updateStatus(prod))
+  })
+
+  // Progreso del apply en curso (#189): lee update-progress.json del data dir
+  // (lo escribe deltos-update.sh en cada STEP). null si no hay nada fresco.
+  app.get('/api/update/progress', (c) => {
+    auth.requireAdmin(c)
+    return c.json({ progress: updateProgress(ctx.dataDir) })
   })
 
   app.post('/api/update/apply', async (c) => {

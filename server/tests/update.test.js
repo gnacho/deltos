@@ -34,3 +34,39 @@ describe('apply on-demand (flag)', () => {
     expect(res.status).toBe(401)
   })
 })
+
+describe('progress (#189)', () => {
+  it('GET /api/update/progress devuelve step/pct si el fichero es fresco', async () => {
+    const inst = await makeInstance()
+    const admin = await loginAdmin(inst.app)
+    fs.writeFileSync(
+      path.join(inst.dir, 'update-progress.json'),
+      JSON.stringify({ step: 'download', pct: 25, ts: Date.now() })
+    )
+    const res = await inst.app.request('/api/update/progress', jsonReq(admin, 'GET'))
+    expect(res.status).toBe(200)
+    const j = await res.json()
+    expect(j.progress).toMatchObject({ step: 'download', pct: 25 })
+  })
+
+  it('un fichero stale (corrida muerta) no se reporta', async () => {
+    const inst = await makeInstance()
+    const admin = await loginAdmin(inst.app)
+    fs.writeFileSync(
+      path.join(inst.dir, 'update-progress.json'),
+      JSON.stringify({ step: 'download', pct: 25, ts: Date.now() - 20 * 60 * 1000 })
+    )
+    const res = await inst.app.request('/api/update/progress', jsonReq(admin, 'GET'))
+    const j = await res.json()
+    expect(j.progress).toBeNull()
+  })
+
+  it('sin fichero devuelve null y no-admin recibe 403', async () => {
+    const inst = await makeInstance()
+    const admin = await loginAdmin(inst.app)
+    const res = await inst.app.request('/api/update/progress', jsonReq(admin, 'GET'))
+    expect((await res.json()).progress).toBeNull()
+    const noAuth = await inst.app.request('/api/update/progress', { method: 'GET' })
+    expect(noAuth.status).toBe(401)
+  })
+})
