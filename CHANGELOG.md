@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.13] - 2026-08-27
+
+### Fixed
+
+- **The update banner no longer fails silently when the apply request errors
+  (#180).** If the session cookie has expired, clicking "Update now" used to
+  trigger a quiet redirect to the login page with no explanation while the
+  update appeared to do nothing; the banner now keeps the error local,
+  explains that the session has expired (with a reload button that lands on
+  the login screen) and leaves the retry button available for any other
+  failure. This was the real cause behind the "in-app update does nothing"
+  report: the apply POST never reached the endpoint (401), and the update
+  chain itself (flag, systemd path unit, root service) was healthy all along.
+
 ## [2.6.11] - 2026-08-23
 
 ### Security
