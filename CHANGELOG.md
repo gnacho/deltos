@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.15] - 2026-08-27
+
+### Changed
+
+- **The update ribbon now appears on every view (#186).** The "new version
+  available" check used to run only from the Settings page, so a published
+  release stayed invisible everywhere else. The Layout now runs the check for
+  admins on any view against the server endpoint (which compares the deployed
+  marker with the latest stable release and caches the answer for five
+  minutes), removing the browser-side GitHub call that the shared rate limit
+  could silence. The banner is now a prominent solid banner when there is
+  something to install, and it remains dismissible per version.
+
 ## [2.6.13] - 2026-08-27
 
 ### Fixed
