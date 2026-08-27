@@ -20,7 +20,7 @@ import PullToRefresh from '@/components/PullToRefresh';
 import { useSession } from '@/auth/session-context';
 import { useTheme } from '@/theme/theme-context';
 import type { ThemeMode } from '@/theme/theme-context';
-import { ApiError, apiFetch, apiPost, dispatchUnauthorized } from '@/data/api-client';
+import { apiFetch, apiPost, dispatchUnauthorized } from '@/data/api-client';
 import { LogoMark } from '@/components/Logo';
 import { Avatar } from '@/components/Avatar';
 import { ConnectionDot } from '@/components/ConnectionDot';
@@ -31,6 +31,7 @@ import { TaskModal } from '@/components/TaskModal';
 import { useUpdateAvailable } from '@/hooks/useUpdateAvailable';
 import { setUpdateBanner, useUpdateBanner } from '@/hooks/update-banner-store';
 import { NewTaskModal } from '@/components/NewTaskModal';
+import UpdateDialog from '@/components/UpdateDialog';
 import { VersionFooter } from '@/components/VersionFooter';
 
 /**
@@ -177,55 +178,16 @@ function IconNavLink({
   );
 }
 
-/** Banner "hay una nueva versión" (anti pantalla-negra + resultado del check de GitHub). */
+/** Banner "hay una nueva versión" (anti pantalla-negra + resultado del check). */
 function UpdateBanner() {
   const { t } = useTranslation();
   const { demo } = useSession();
   const serverChanged = useUpdateAvailable(!demo);
   const checkResult = useUpdateBanner();
-  const [applying, setApplying] = useState(false);
-  const [timedOut, setTimedOut] = useState(false);
-  const [applyError, setApplyError] = useState<'generic' | 'auth' | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
 
-  if (!serverChanged && !checkResult.available && !checkResult.swWaiting) return null;
-
-  const versionSig = () =>
-    fetch('/api/version', { credentials: 'same-origin' })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j) => (j ? `${j.version}+${j.build}` : ''))
-      .catch(() => '');
-
-  const applyRelease = async () => {
-    if (!checkResult.applyRelease || applying) return;
-    setApplying(true);
-    setTimedOut(false);
-    setApplyError(null);
-    try {
-      const before = await versionSig();
-      await checkResult.applyRelease(); // POST apply → flag → 202 (async)
-      // El root update service corre en segundo plano; sondea hasta que el
-      // build del servidor cambie (se reinicia con el código nuevo).
-      const deadline = Date.now() + 90000;
-      const poll = async () => {
-        const sig = await versionSig();
-        if (before && sig && sig !== before) {
-          location.reload();
-          return;
-        }
-        if (Date.now() < deadline) window.setTimeout(poll, 2500);
-        else {
-          setApplying(false);
-          setTimedOut(true);
-        }
-      };
-      window.setTimeout(poll, 3000);
-    } catch (e) {
-      // Sin feedback silencioso (#180): el fallo del apply se explica en el
-      // banner; 401 = sesión caducada (recarga → login), el resto reintenta.
-      setApplying(false);
-      setApplyError(e instanceof ApiError && e.status === 401 ? 'auth' : 'generic');
-    }
-  };
+  if (!serverChanged && !checkResult.available && !checkResult.swWaiting)
+    return <>{dialogOpen && <UpdateDialog open={dialogOpen} onClose={() => setDialogOpen(false)} />}</>;
 
   // Estado "hay release nueva" (#186): banner sólido y notorio; el resto de
   // estados (redeploy del server) mantiene el aviso sutil.
@@ -244,24 +206,13 @@ function UpdateBanner() {
         {t('update.reload')}
       </button>
     ) : checkResult.available && checkResult.applyRelease ? (
-      timedOut || applyError === 'auth' ? (
-        <button
-          type="button"
-          onClick={() => location.reload()}
-          className={actionBtn}
-        >
-          {t('update.reload')}
-        </button>
-      ) : (
-        <button
-          type="button"
-          onClick={() => void applyRelease()}
-          disabled={applying}
-          className={actionBtn}
-        >
-          {applying ? t('update.applying') : t('update.installNow')}
-        </button>
-      )
+      <button
+        type="button"
+        onClick={() => setDialogOpen(true)}
+        className={actionBtn}
+      >
+        {t('update.installNow')}
+      </button>
     ) : checkResult.available && checkResult.url ? (
       <a
         href={checkResult.url}
@@ -282,45 +233,42 @@ function UpdateBanner() {
     );
 
   return (
-    <div
-      role="status"
-      className={
-        notable
-          ? 'mb-4 flex items-center gap-3 rounded-xl border border-sky-700 bg-gradient-to-r from-sky-600 to-sky-700 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-sky-900/30'
-          : 'mb-4 flex items-center gap-2.5 rounded-xl border border-sky-500/35 bg-sky-500/10 px-3.5 py-2.5 text-[13px] font-semibold text-sky-600 dark:text-sky-400'
-      }
-    >
-      {notable ? (
-        <RefreshCw className="h-5 w-5 shrink-0" aria-hidden />
-      ) : (
-        <span className="h-2 w-2 shrink-0 rounded-full bg-sky-500 animate-ping" />
-      )}
-      <span className="flex-1">
-        {applyError === 'auth'
-          ? t('update.applyErrorAuth')
-          : applyError
-            ? t('update.applyError')
-            : timedOut
-              ? t('update.applyTimeout')
-              : checkResult.available
-                ? t('update.bannerNew', { version: checkResult.version })
-                : t('update.banner')}
-      </span>
-      {applyAction}
-      {checkResult.available && checkResult.dismissVersion && (
-        <button
-          type="button"
-          onClick={checkResult.dismissVersion}
-          className={
-            notable
-              ? 'shrink-0 rounded-lg px-3 py-1.5 text-[12px] font-medium text-white/70 transition-colors hover:bg-white/10 hover:text-white'
-              : 'shrink-0 rounded-lg border border-sky-500/40 px-3 py-1 text-[12px] font-medium text-sky-500 hover:bg-sky-500/10'
-          }
-        >
-          {t('update.dismiss')}
-        </button>
-      )}
-    </div>
+    <>
+      {dialogOpen && <UpdateDialog open={dialogOpen} onClose={() => setDialogOpen(false)} />}
+      <div
+        role="status"
+        className={
+          notable
+            ? 'mb-4 flex items-center gap-3 rounded-xl border border-sky-700 bg-gradient-to-r from-sky-600 to-sky-700 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-sky-900/30'
+            : 'mb-4 flex items-center gap-2.5 rounded-xl border border-sky-500/35 bg-sky-500/10 px-3.5 py-2.5 text-[13px] font-semibold text-sky-600 dark:text-sky-400'
+        }
+      >
+        {notable ? (
+          <RefreshCw className="h-5 w-5 shrink-0" aria-hidden />
+        ) : (
+          <span className="h-2 w-2 shrink-0 rounded-full bg-sky-500 animate-ping" />
+        )}
+        <span className="flex-1">
+          {checkResult.available
+            ? t('update.bannerNew', { version: checkResult.version })
+            : t('update.banner')}
+        </span>
+        {applyAction}
+        {checkResult.available && checkResult.dismissVersion && (
+          <button
+            type="button"
+            onClick={checkResult.dismissVersion}
+            className={
+              notable
+                ? 'shrink-0 rounded-lg px-3 py-1.5 text-[12px] font-medium text-white/70 transition-colors hover:bg-white/10 hover:text-white'
+                : 'shrink-0 rounded-lg border border-sky-500/40 px-3 py-1 text-[12px] font-medium text-sky-500 hover:bg-sky-500/10'
+            }
+          >
+            {t('update.dismiss')}
+          </button>
+        )}
+      </div>
+    </>
   );
 }
 
