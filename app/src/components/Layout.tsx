@@ -19,7 +19,7 @@ import PullToRefresh from '@/components/PullToRefresh';
 import { useSession } from '@/auth/session-context';
 import { useTheme } from '@/theme/theme-context';
 import type { ThemeMode } from '@/theme/theme-context';
-import { apiPost, dispatchUnauthorized } from '@/data/api-client';
+import { ApiError, apiPost, dispatchUnauthorized } from '@/data/api-client';
 import { LogoMark } from '@/components/Logo';
 import { Avatar } from '@/components/Avatar';
 import { ConnectionDot } from '@/components/ConnectionDot';
@@ -181,6 +181,7 @@ function UpdateBanner() {
   const checkResult = useUpdateBanner();
   const [applying, setApplying] = useState(false);
   const [timedOut, setTimedOut] = useState(false);
+  const [applyError, setApplyError] = useState<'generic' | 'auth' | null>(null);
 
   if (!serverChanged && !checkResult.available && !checkResult.swWaiting) return null;
 
@@ -194,6 +195,7 @@ function UpdateBanner() {
     if (!checkResult.applyRelease || applying) return;
     setApplying(true);
     setTimedOut(false);
+    setApplyError(null);
     try {
       const before = await versionSig();
       await checkResult.applyRelease(); // POST apply → flag → 202 (async)
@@ -213,8 +215,11 @@ function UpdateBanner() {
         }
       };
       window.setTimeout(poll, 3000);
-    } catch {
+    } catch (e) {
+      // Sin feedback silencioso (#180): el fallo del apply se explica en el
+      // banner; 401 = sesión caducada (recarga → login), el resto reintenta.
       setApplying(false);
+      setApplyError(e instanceof ApiError && e.status === 401 ? 'auth' : 'generic');
     }
   };
 
@@ -228,7 +233,7 @@ function UpdateBanner() {
         {t('update.reload')}
       </button>
     ) : checkResult.available && checkResult.applyRelease ? (
-      timedOut ? (
+      timedOut || applyError === 'auth' ? (
         <button
           type="button"
           onClick={() => location.reload()}
@@ -272,11 +277,15 @@ function UpdateBanner() {
     >
       <span className="h-2 w-2 shrink-0 rounded-full bg-sky-500 animate-ping" />
       <span className="flex-1">
-        {timedOut
-          ? t('update.applyTimeout')
-          : checkResult.available
-            ? t('update.bannerNew', { version: checkResult.version })
-            : t('update.banner')}
+        {applyError === 'auth'
+          ? t('update.applyErrorAuth')
+          : applyError
+            ? t('update.applyError')
+            : timedOut
+              ? t('update.applyTimeout')
+              : checkResult.available
+                ? t('update.bannerNew', { version: checkResult.version })
+                : t('update.banner')}
       </span>
       {applyAction}
       {checkResult.available && checkResult.dismissVersion && (

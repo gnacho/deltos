@@ -695,6 +695,8 @@
     "installNow": "Update now",
     "applying": "Updating…",
     "applyTimeout": "The update is still running. Reload the page in a few minutes.",
+    "applyError": "Could not start the update. Please try again.",
+    "applyErrorAuth": "Your session has expired. Sign in again and retry the update.",
     "reload": "Reload",
     "dismiss": "Dismiss"
   },
