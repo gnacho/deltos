@@ -698,7 +698,28 @@
     "applyError": "No se pudo iniciar la actualización. Inténtalo de nuevo.",
     "applyErrorAuth": "Tu sesión ha caducado. Vuelve a iniciar sesión y repite la actualización.",
     "reload": "Recargar",
-    "dismiss": "Descartar"
+    "dismiss": "Descartar",
+    "dialog": {
+      "title": "Actualizar Deltos",
+      "desc": "Se descarga la última versión estable y el servicio se reinicia. Tarda unos segundos y la app se recarga sola.",
+      "changelogTitle": "Novedades",
+      "start": "Actualizar",
+      "cancel": "Cancelar",
+      "close": "Cerrar",
+      "retry": "Reintentar",
+      "progressLabel": "Progreso de la actualización",
+      "restarting": "Reiniciando el servicio…",
+      "reloadSoon": "La app se recargará sola en unos segundos.",
+      "failed": "La actualización no se completó.",
+      "failedStep": "El script de actualización falló en un paso. Revisa el journal de deltos-update.service."
+    },
+    "step": {
+      "detect": "Comprobando versión",
+      "download": "Descargando",
+      "verify": "Verificando firma",
+      "install": "Instalando",
+      "restart": "Reiniciando"
+    }
   },
   "errorBoundary": {
     "title": "Algo no ha ido bien",
