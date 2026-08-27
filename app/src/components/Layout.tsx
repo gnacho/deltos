@@ -13,13 +13,14 @@ import {
   ChevronsLeft,
   ChevronsRight,
   Receipt,
+  RefreshCw,
 } from 'lucide-react';
 import { useData } from '@/data/data-context';
 import PullToRefresh from '@/components/PullToRefresh';
 import { useSession } from '@/auth/session-context';
 import { useTheme } from '@/theme/theme-context';
 import type { ThemeMode } from '@/theme/theme-context';
-import { ApiError, apiPost, dispatchUnauthorized } from '@/data/api-client';
+import { ApiError, apiFetch, apiPost, dispatchUnauthorized } from '@/data/api-client';
 import { LogoMark } from '@/components/Logo';
 import { Avatar } from '@/components/Avatar';
 import { ConnectionDot } from '@/components/ConnectionDot';
@@ -28,7 +29,7 @@ import { ProjectIcon } from '@/components/ProjectIcon';
 import { ModalContext, type NewTaskDefaults, type TaskTab } from '@/components/modal-context';
 import { TaskModal } from '@/components/TaskModal';
 import { useUpdateAvailable } from '@/hooks/useUpdateAvailable';
-import { useUpdateBanner } from '@/hooks/update-banner-store';
+import { setUpdateBanner, useUpdateBanner } from '@/hooks/update-banner-store';
 import { NewTaskModal } from '@/components/NewTaskModal';
 import { VersionFooter } from '@/components/VersionFooter';
 
@@ -43,6 +44,9 @@ import { VersionFooter } from '@/components/VersionFooter';
  */
 
 const COLLAPSED_KEY = 'deltos-sidebar-collapsed';
+const UPDATE_CHECK_KEY = 'deltos-last-server-update-check';
+const UPDATE_DISMISS_KEY = 'deltos-release-dismissed';
+const UPDATE_URL = 'https://github.com/gnacho/deltos/releases';
 
 /** Rutas del bottom-nav móvil en orden (para la dirección del deslizamiento). */
 const BOTTOM_NAV_ORDER = ['/', '/projects', '/expenses', '/summary', '/settings'];
@@ -223,12 +227,19 @@ function UpdateBanner() {
     }
   };
 
+  // Estado "hay release nueva" (#186): banner sólido y notorio; el resto de
+  // estados (redeploy del server) mantiene el aviso sutil.
+  const notable = checkResult.available;
+  const actionBtn = notable
+    ? 'shrink-0 rounded-lg border border-white/30 bg-white/15 px-3 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-white/25 disabled:opacity-60'
+    : 'shrink-0 rounded-lg bg-sky-500 px-3 py-1 text-[12px] font-semibold text-white hover:brightness-110 disabled:opacity-60';
+
   const applyAction =
     checkResult.swWaiting && checkResult.applySw ? (
       <button
         type="button"
         onClick={checkResult.applySw}
-        className="shrink-0 rounded-lg bg-sky-500 px-3 py-1 text-[12px] font-semibold text-white hover:brightness-110"
+        className={actionBtn}
       >
         {t('update.reload')}
       </button>
@@ -237,7 +248,7 @@ function UpdateBanner() {
         <button
           type="button"
           onClick={() => location.reload()}
-          className="shrink-0 rounded-lg bg-sky-500 px-3 py-1 text-[12px] font-semibold text-white hover:brightness-110"
+          className={actionBtn}
         >
           {t('update.reload')}
         </button>
@@ -246,7 +257,7 @@ function UpdateBanner() {
           type="button"
           onClick={() => void applyRelease()}
           disabled={applying}
-          className="shrink-0 rounded-lg bg-sky-500 px-3 py-1 text-[12px] font-semibold text-white hover:brightness-110 disabled:opacity-60"
+          className={actionBtn}
         >
           {applying ? t('update.applying') : t('update.installNow')}
         </button>
@@ -256,7 +267,7 @@ function UpdateBanner() {
         href={checkResult.url}
         target="_blank"
         rel="noreferrer"
-        className="shrink-0 rounded-lg bg-sky-500 px-3 py-1 text-[12px] font-semibold text-white hover:brightness-110"
+        className={actionBtn}
       >
         {t('update.openRelease')}
       </a>
@@ -264,7 +275,7 @@ function UpdateBanner() {
       <button
         type="button"
         onClick={() => location.reload()}
-        className="shrink-0 rounded-lg bg-sky-500 px-3 py-1 text-[12px] font-semibold text-white hover:brightness-110"
+        className={actionBtn}
       >
         {t('update.reload')}
       </button>
@@ -273,9 +284,17 @@ function UpdateBanner() {
   return (
     <div
       role="status"
-      className="mb-4 flex items-center gap-2.5 rounded-xl border border-sky-500/35 bg-sky-500/10 px-3.5 py-2.5 text-[13px] font-semibold text-sky-600 dark:text-sky-400"
+      className={
+        notable
+          ? 'mb-4 flex items-center gap-3 rounded-xl border border-sky-700 bg-gradient-to-r from-sky-600 to-sky-700 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-sky-900/30'
+          : 'mb-4 flex items-center gap-2.5 rounded-xl border border-sky-500/35 bg-sky-500/10 px-3.5 py-2.5 text-[13px] font-semibold text-sky-600 dark:text-sky-400'
+      }
     >
-      <span className="h-2 w-2 shrink-0 rounded-full bg-sky-500 animate-ping" />
+      {notable ? (
+        <RefreshCw className="h-5 w-5 shrink-0" aria-hidden />
+      ) : (
+        <span className="h-2 w-2 shrink-0 rounded-full bg-sky-500 animate-ping" />
+      )}
       <span className="flex-1">
         {applyError === 'auth'
           ? t('update.applyErrorAuth')
@@ -292,7 +311,11 @@ function UpdateBanner() {
         <button
           type="button"
           onClick={checkResult.dismissVersion}
-          className="shrink-0 rounded-lg border border-sky-500/40 px-3 py-1 text-[12px] font-medium text-sky-500 hover:bg-sky-500/10"
+          className={
+            notable
+              ? 'shrink-0 rounded-lg px-3 py-1.5 text-[12px] font-medium text-white/70 transition-colors hover:bg-white/10 hover:text-white'
+              : 'shrink-0 rounded-lg border border-sky-500/40 px-3 py-1 text-[12px] font-medium text-sky-500 hover:bg-sky-500/10'
+          }
         >
           {t('update.dismiss')}
         </button>
@@ -301,8 +324,62 @@ function UpdateBanner() {
   );
 }
 
-/** Barra de modo demo (patrón zfsctl): siempre visible con sesión demo. */
-function DemoBanner() {
+/**
+ * Check automático de actualizaciones en TODAS las vistas (#186): el server
+ * compara marker vs última release (GET /api/update/status, caché kv 5 min)
+ * y el resultado alimenta el ribbon global. Sin llamadas a GitHub desde el
+ * navegador (evita el rate-limit de #181). Throttle semanal propio, distinto
+ * del check manual de Ajustes; respeta el dismiss por versión. Solo admins.
+ */
+function UpdateAutoCheck() {
+  const { user, demo } = useSession();
+  const isAdmin = user?.role === 'admin' && !demo;
+  useEffect(() => {
+    if (!isAdmin) return;
+    try {
+      const last = Number(window.localStorage.getItem(UPDATE_CHECK_KEY) || 0);
+      if (Date.now() - last < 7 * 24 * 60 * 60 * 1000) return;
+      window.localStorage.setItem(UPDATE_CHECK_KEY, String(Date.now()));
+    } catch {
+      /* sin storage: comprobar igualmente */
+    }
+    let stale = false;
+    void (async () => {
+      try {
+        const s = await apiFetch<{ current: string; latest: string | null; available: boolean }>(
+          '/api/update/status'
+        );
+        if (stale || !s?.available || !s.latest) return;
+        const latest = s.latest;
+        if (window.localStorage.getItem(UPDATE_DISMISS_KEY) === latest) return;
+        setUpdateBanner({
+          available: true,
+          version: latest,
+          url: UPDATE_URL,
+          applyRelease: async () => {
+            await apiPost('/api/update/apply', undefined, { noAuthEvent: true });
+          },
+          dismissVersion: () => {
+            try {
+              window.localStorage.setItem(UPDATE_DISMISS_KEY, latest);
+            } catch {
+              /* noop */
+            }
+            setUpdateBanner({ available: false });
+          },
+        });
+      } catch {
+        /* sin info de actualización: no molestar */
+      }
+    })();
+    return () => {
+      stale = true;
+    };
+  }, [isAdmin]);
+  return null;
+}
+
+/** Barra de modo demo (patrón zfsctl): siempre visible con sesión demo. */function DemoBanner() {
   const { t } = useTranslation();
   const exitDemo = async () => {
     try {
@@ -776,6 +853,7 @@ export default function Layout() {
         <PullToRefresh>
           <div className="mx-auto max-w-[1440px] px-4 sm:px-6 lg:px-8">
             <UpdateBanner />
+            <UpdateAutoCheck />
             {demo && <DemoBanner />}
           </div>
           <Outlet />
