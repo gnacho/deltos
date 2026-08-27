@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.17] - 2026-08-28
+
+### Added
+
+- **Updating now shows what changes and how far along it is (#189).** Clicking
+  "Update now" opens a wizard with the current → latest version pair, the
+  release notes as a changelog list, named steps (checking, downloading,
+  verifying, installing, restarting) with a progress bar, and automatic reload
+  once the server comes back. The update script reports its step to the data
+  dir at every stage, and a new admin endpoint serves it with a staleness
+  window so a dead run is never reported as in-flight. Failures keep the
+  guarantees from #180: an expired session is explained instead of silently
+  redirecting to login.
+
+### Fixed
+
+- **Another date-dependent recurrence test stopped exploding at midnight.**
+  The integration test that moves a recurring task to done anchored on a fixed
+  future date; it now computes its dates relative to the clock (same family as
+  #182).
+
 ## [2.6.15] - 2026-08-27
 
 ### Changed
