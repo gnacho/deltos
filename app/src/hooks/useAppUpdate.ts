@@ -98,8 +98,10 @@ export function useAppUpdate(currentVersion: string, repoUrl?: string) {
 
   // Aplica la release nueva en el SERVIDOR (deltos-update.sh, solo admin).
   // El servidor se reinicia; la app se recarga con el build nuevo.
+  // noAuthEvent: con la sesión caducada el POST da 401 y hay que lanzarlo al
+  // caller (banner) en vez de disparar el redirect global a login (#180).
   const applyRelease = async () => {
-    await apiPost<{ ok: boolean }>('/api/update/apply');
+    await apiPost<{ ok: boolean }>('/api/update/apply', undefined, { noAuthEvent: true });
   };
 
   const dismissVersion = useCallback(() => {
