@@ -122,15 +122,17 @@ describe('recurrence — computeNextDue', () => {
 
   it('mode completion: primer completado sin historia usa el intervalo configurado', () => {
     const db = dbWithTasks()
-    // siembra la tarea hecha con su evento moved→hecho para simular el estado real
+    // Timestamp FIJO (no Date.now()): las expectativas afirman contra un today
+    // fijo y el cálculo ancla en la fecha de completado (#182, time-bomb).
+    const T0 = Date.UTC(2026, 7, 22, 12)
     db.prepare(
       `INSERT INTO tasks (id, project_id, title, "column", position, created_at, updated_at, recurrence, recurrence_group_id)
        VALUES ('a3', 'p1', 'Riega', 'hecho', 0, ?, ?, ?, 'a3')`
-    ).run(Date.now(), Date.now(), JSON.stringify({ freq: 'daily', interval: 2, mode: 'completion' }))
+    ).run(T0, T0, JSON.stringify({ freq: 'daily', interval: 2, mode: 'completion' }))
     db.prepare(
       `INSERT INTO activity_events (id, task_id, user_id, type, data, created_at)
        VALUES ('e1', 'a3', 'u1', 'moved', '{"from":"encurso","to":"hecho"}', ?)`
-    ).run(Date.now() - 1000)
+    ).run(T0 - 1000)
     const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get('a3')
     const today = '2026-08-22'
     expect(computeNextDue(db, task, today)).toBe('2026-08-24')
@@ -140,7 +142,9 @@ describe('recurrence — computeNextDue', () => {
   it('mode completion: con historia de la serie usa la mediana de intervalos reales', () => {
     const db = dbWithTasks()
     const DAY = 24 * 60 * 60 * 1000
-    const now = Date.now()
+    // Ancla FIJA en el today del test (2026-08-22): con Date.now() las
+    // expectativas caducan al pasar la fecha (#182, time-bomb).
+    const now = Date.UTC(2026, 7, 22, 12)
     // dos instancias completadas separadas 7 días + esta a 9 días → mediana 8
     for (const [tid, off] of [
       ['s1', -16 * DAY],
