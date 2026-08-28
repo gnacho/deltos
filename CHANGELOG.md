@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.19] - 2026-08-28
+
+### Changed
+
+- **A failed update check is no longer silent (#181).** The server status now
+  tells apart "up to date" from "could not check" (the shared GitHub rate
+  limit used to degrade quietly into no-news), and the manual check in
+  Settings explains the cause and when to retry.
+
 ## [2.6.17] - 2026-08-28
 
 ### Added
