@@ -551,7 +551,7 @@
       "upToDate": "You're up to date — v{{version}} is the latest version",
       "updateAvailable": "New version available: v{{version}}",
       "viewRelease": "View release",
-      "updateError": "Could not check for updates. Try again.",
+      "updateError": "Could not check (GitHub request limit). Wait a few minutes and retry.",
       "updateNow": "Update and reload",
       "stack": "Node 24 · Hono · SQLite · React 19",
       "code": "Source on GitHub",
