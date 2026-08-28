@@ -250,6 +250,7 @@ h2{font-size:clamp(28px,4vw,42px);margin-bottom:16px}
 .mcard{
   background:#111a2e;border:1px solid rgba(148,163,184,.14);border-radius:10px;padding:9px 10px;
   box-shadow:0 3px 10px -4px rgba(0,0,0,.5);
+  position:relative;z-index:2;
 }
 .mcard .tags{display:flex;gap:4px;margin-bottom:6px}
 .mtag{font-size:8px;font-weight:600;padding:2px 6px;border-radius:5px;letter-spacing:.02em}
@@ -258,7 +259,7 @@ h2{font-size:clamp(28px,4vw,42px);margin-bottom:16px}
 .mcard .meta .av{margin-left:auto;width:15px;height:15px;border-radius:50%;display:grid;place-items:center;font-size:7.5px;font-weight:700;color:#04160e}
 /* card that travels across the board */
 .mcard-ghost{
-  position:absolute;z-index:5;width:29.5%;left:14px;top:61px;
+  position:absolute;z-index:1;width:29.5%;left:14px;top:61px;
   background:#152642;border:1px solid rgba(52,211,153,.45);border-radius:10px;padding:9px 10px;
   box-shadow:0 14px 34px -8px rgba(0,0,0,.7),0 0 24px -6px rgba(52,211,153,.4);
   animation:cardMove 9s cubic-bezier(.55,.1,.35,1) infinite;
@@ -554,7 +555,7 @@ html.js .reveal.in{opacity:1;transform:none}
 }
 .shot-stage:hover{border-color:var(--border-strong);box-shadow:var(--shadow)}
 .shot-stage img{
-  width:100%;aspect-ratio:16/10;object-fit:contain;
+  width:100%;aspect-ratio:3/2;object-fit:contain;
   display:block;background:var(--surface-2);
 }
 .shot-stage figcaption{
@@ -572,7 +573,7 @@ html.js .reveal.in{opacity:1;transform:none}
 .shot-arrow svg{width:20px;height:20px}
 .shot-thumbs{display:flex;gap:12px;margin-top:16px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin;justify-content:center}
 .thumb{
-  flex:none;width:150px;aspect-ratio:16/10;border-radius:12px;overflow:hidden;
+  flex:none;width:150px;aspect-ratio:3/2;border-radius:12px;overflow:hidden;
   border:2px solid var(--border);background:var(--card);padding:0;cursor:pointer;
   transition:border-color .2s,transform .2s;
 }
