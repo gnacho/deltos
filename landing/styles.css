@@ -570,7 +570,7 @@ html.js .reveal.in{opacity:1;transform:none}
 }
 .shot-arrow:hover{color:var(--text);border-color:var(--border-strong);background:var(--surface)}
 .shot-arrow svg{width:20px;height:20px}
-.shot-thumbs{display:flex;gap:12px;margin-top:16px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin}
+.shot-thumbs{display:flex;gap:12px;margin-top:16px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin;justify-content:center}
 .thumb{
   flex:none;width:150px;aspect-ratio:16/10;border-radius:12px;overflow:hidden;
   border:2px solid var(--border);background:var(--card);padding:0;cursor:pointer;
@@ -617,6 +617,7 @@ html.js .reveal.in{opacity:1;transform:none}
 .mock-url svg{vertical-align:-1px;margin-right:2px;opacity:.8}
 
 @media(max-width:760px){
+  .shot-thumbs{justify-content:flex-start}
   .shot-arrow{width:38px;height:38px}
   .shot-arrow svg{width:18px;height:18px}
 }
