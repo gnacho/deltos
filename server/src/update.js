@@ -61,7 +61,9 @@ export async function updateStatus(prodDb) {
   const current = currentId()
   const latest = await latestInfo(prodDb).catch(() => null)
   const available = Boolean(latest && current && compareSemver(latest.id, current) > 0)
-  return { current, latest: latest?.id ?? null, available, notes: latest?.body ?? '' }
+  // checkFailed (#181): el fetch a GitHub falló (p. ej. 403 rate-limit 60/h por
+  // IP). Sin esto, "sin novedades" y "no se pudo comprobar" son indistinguibles.
+  return { current, latest: latest?.id ?? null, available, notes: latest?.body ?? '', checkFailed: latest === null }
 }
 
 // Progreso del apply (#189): deltos-update.sh escribe update-progress.json
