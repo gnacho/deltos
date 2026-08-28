@@ -551,7 +551,7 @@
       "upToDate": "Estás al día — v{{version}} es la última versión",
       "updateAvailable": "Nueva versión disponible: v{{version}}",
       "viewRelease": "Ver novedades",
-      "updateError": "No se pudo comprobar. Inténtalo de nuevo.",
+      "updateError": "No se pudo comprobar (límite de peticiones de GitHub). Espera unos minutos y reintenta.",
       "updateNow": "Actualizar y recargar",
       "stack": "Node 24 · Hono · SQLite · React 19",
       "code": "Código en GitHub",
