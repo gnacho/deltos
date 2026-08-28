@@ -139,7 +139,9 @@
 
   const enAria = {
     "appearance.theme": "Toggle theme",
-    "shots.close": "Close"
+    "shots.close": "Close",
+    "shots.prev": "Previous",
+    "shots.next": "Next"
   };
 
   const titles = {
@@ -186,7 +188,13 @@
 
   window.LandingLang = {
     setLang: setLang,
-    get lang() { return document.documentElement.lang || 'es'; }
+    get lang() { return document.documentElement.lang || 'es'; },
+    altFor: function (key) { return (this.lang === 'en' ? enAlt : esAlt)[key] || ''; },
+    textFor: function (key) {
+      const d = this.lang === 'en' ? enDict : esDict;
+      return d[key] !== undefined ? d[key] : '';
+    },
+    ariaFor: function (key) { return (this.lang === 'en' ? enAria : esAria)[key] || ''; }
   };
 
   const boot = initialLang();

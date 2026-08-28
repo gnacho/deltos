@@ -33,27 +33,72 @@
   function themeNow() { return root.getAttribute('data-theme') === 'light' ? 'light' : 'dark'; }
   function langNow() { return root.lang === 'en' ? 'en' : 'es'; }
 
-  /* ---------- Capturas por idioma/tema: shot-<id>-<lang>-<theme>.webp ---------- */
-  const shotImgs = Array.prototype.slice.call(document.querySelectorAll('[data-shot]'));
-  function applyShots() {
-    shotImgs.forEach(function (img) {
-      img.src = 'assets/shot-' + img.dataset.shot + '-' + langNow() + '-' + themeNow() + '.webp';
+  /* ---------- Capturas: principal + carrusel, por idioma/tema ---------- */
+  const SHOT_ORDER = ['board', 'casa', 'viaje', 'trabajo', 'expenses', 'settings'];
+  let shotIndex = 0;
+  const mainImg = document.getElementById('shotMain');
+  const capEl = document.getElementById('shotCap');
+  const thumbs = Array.prototype.slice.call(document.querySelectorAll('.thumb'));
+  const prevBtn = document.getElementById('shotPrev');
+  const nextBtn = document.getElementById('shotNext');
+  const stage = document.getElementById('shotStage');
+
+  function shotUrl(id) { return 'assets/shot-' + id + '-' + langNow() + '-' + themeNow() + '.webp'; }
+
+  const capKey = function (id) { return 'shot.' + id + '.cap'; };
+  const altKey = function (id) { return 'shot.' + id + '.alt'; };
+
+  function renderMain() {
+    if (!mainImg || !capEl) return;
+    const id = SHOT_ORDER[shotIndex];
+    mainImg.src = shotUrl(id);
+    mainImg.dataset.i18nAlt = altKey(id);
+    mainImg.alt = window.LandingLang.altFor(altKey(id)) || mainImg.alt;
+    capEl.innerHTML = window.LandingLang.textFor(capKey(id));
+    thumbs.forEach(function (t) {
+      const on = t.dataset.shot === id;
+      t.classList.toggle('active', on);
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.setAttribute('tabindex', on ? '0' : '-1');
     });
   }
+
+  function applyShots() {
+    thumbs.forEach(function (t) { t.querySelector('img').src = shotUrl(t.dataset.shot); });
+    renderMain();
+  }
   document.addEventListener('deltos:lang', applyShots);
+
+  function goto(idx) {
+    shotIndex = (idx + SHOT_ORDER.length) % SHOT_ORDER.length;
+    renderMain();
+  }
+  if (thumbs.length) {
+    thumbs.forEach(function (t) {
+      t.addEventListener('click', function () { goto(SHOT_ORDER.indexOf(t.dataset.shot)); });
+    });
+  }
+  if (prevBtn) prevBtn.addEventListener('click', function () { goto(shotIndex - 1); });
+  if (nextBtn) nextBtn.addEventListener('click', function () { goto(shotIndex + 1); });
+  if (stage) {
+    stage.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowLeft') { e.preventDefault(); goto(shotIndex - 1); }
+      if (e.key === 'ArrowRight') { e.preventDefault(); goto(shotIndex + 1); }
+    });
+  }
   applyShots();
 
-  /* ---------- Lightbox: zoom de cualquier captura ---------- */
+  /* ---------- Lightbox: zoom de la captura principal ---------- */
   const lightbox = document.getElementById('shotLightbox');
   const lightboxImg = document.getElementById('lightboxImg');
   const lightboxCaption = document.getElementById('lightboxCaption');
   const lightboxClose = document.getElementById('lightboxClose');
 
-  function openLightbox(img, caption) {
-    if (!lightbox) return;
-    lightboxImg.src = img.src;
-    lightboxImg.alt = img.alt || '';
-    lightboxCaption.textContent = caption || '';
+  function openLightbox() {
+    if (!lightbox || !mainImg) return;
+    lightboxImg.src = mainImg.src;
+    lightboxImg.alt = mainImg.alt || '';
+    lightboxCaption.textContent = capEl ? capEl.textContent : '';
     lightbox.hidden = false;
     lightbox.setAttribute('aria-hidden', 'false');
     requestAnimationFrame(function () { lightbox.classList.add('open'); });
@@ -71,15 +116,12 @@
     }, reduceMotion ? 0 : 220);
   }
 
-  document.querySelectorAll('.shot img').forEach(function (img) {
-    const caption = img.closest('figure') ? img.closest('figure').querySelector('figcaption') : null;
-    const open = function () { openLightbox(img, caption ? caption.textContent : ''); };
-    img.addEventListener('click', open);
-    img.setAttribute('tabindex', '0');
-    img.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+  if (stage) {
+    stage.addEventListener('click', openLightbox);
+    stage.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openLightbox(); }
     });
-  });
+  }
   if (lightboxClose) lightboxClose.addEventListener('click', closeLightbox);
   if (lightboxImg) lightboxImg.addEventListener('click', closeLightbox);
   if (lightbox) {

@@ -28,8 +28,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<script src="boot.js?v=10"></script>
-<link rel="stylesheet" href="styles.css?v=11">
+<script src="boot.js?v=12"></script>
+<link rel="stylesheet" href="styles.css?v=12">
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -282,33 +282,41 @@
     <div class="section-head reveal">
       <span class="h-eyebrow"><span class="num">02</span><span data-i18n="shots.eyebrow">La app</span></span>
       <h2 data-i18n="shots.title">La app, por dentro</h2>
-      <p class="lede" data-i18n="shots.lede">Capturas reales de la demo, en tu idioma y en tu tema. Pulsa cualquiera para verla a tamaño completo.</p>
+      <p class="lede" data-i18n="shots.lede">Capturas reales de la demo, en tu idioma y en tu tema. La principal cambia con el carrusel; pulsa para verla a tamaño completo.</p>
     </div>
-    <div class="shots-grid">
-      <figure class="shot reveal">
-        <img data-shot="board" src="assets/shot-board-es-dark.webp" width="1440" height="900" alt="Tablero de Deltos en modo demo con las etapas Nuevo, En curso y Hecho, y tarjetas de casa, trabajo y viaje" data-i18n-alt="shot.board.alt">
-        <figcaption data-i18n="shot.board.cap">El tablero, con las tres etapas y los filtros</figcaption>
+
+    <div class="shot-slider reveal">
+      <button class="shot-arrow prev" id="shotPrev" aria-label="Anterior" data-i18n-aria="shots.prev">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <figure class="shot-stage" id="shotStage" tabindex="0" aria-label="Captura principal">
+        <img id="shotMain" src="assets/shot-board-es-dark.webp" width="1440" height="900" alt="Tablero de Deltos en modo demo con las etapas Nuevo, En curso y Hecho, y tarjetas de casa, trabajo y viaje" data-i18n-alt="shot.board.alt">
+        <figcaption id="shotCap" data-i18n="shot.board.cap">El tablero, con las tres etapas y los filtros</figcaption>
       </figure>
-      <figure class="shot reveal d1">
-        <img data-shot="casa" src="assets/shot-casa-es-dark.webp" width="1440" height="900" loading="lazy" alt="Tablero del proyecto Casa de Deltos con tarjetas como pedir cita ITV o revisar el presupuesto de la reforma" data-i18n-alt="shot.casa.alt">
-        <figcaption data-i18n="shot.casa.cap">El proyecto Casa, con etiquetas y prioridades</figcaption>
-      </figure>
-      <figure class="shot reveal d2">
-        <img data-shot="viaje" src="assets/shot-viaje-es-dark.webp" width="1440" height="900" loading="lazy" alt="Tablero del proyecto Viaje a Lisboa con reservas de hotel, billetes y lista de restaurantes" data-i18n-alt="shot.viaje.alt">
-        <figcaption data-i18n="shot.viaje.cap">El viaje a Lisboa, con fechas y responsables</figcaption>
-      </figure>
-      <figure class="shot reveal">
-        <img data-shot="trabajo" src="assets/shot-trabajo-es-dark.webp" width="1440" height="900" loading="lazy" alt="Tablero del proyecto Trabajo con la presentación del trimestre, una factura y un bug de inicio de sesión" data-i18n-alt="shot.trabajo.alt">
-        <figcaption data-i18n="shot.trabajo.cap">El tablero de Trabajo, para equipos pequeños</figcaption>
-      </figure>
-      <figure class="shot reveal d1">
-        <img data-shot="expenses" src="assets/shot-expenses-es-dark.webp" width="1440" height="900" loading="lazy" alt="Tablero de gastos de Deltos con la compra del Mercadona, una cena y la factura de la luz, con división de pagos" data-i18n-alt="shot.expenses.alt">
-        <figcaption data-i18n="shot.expenses.cap">Gastos compartidos, con su reparto</figcaption>
-      </figure>
-      <figure class="shot reveal d2">
-        <img data-shot="settings" src="assets/shot-settings-es-dark.webp" width="1440" height="900" loading="lazy" alt="Ajustes de Deltos: apariencia con tema claro, oscuro o automático, color de acento, densidad y editor de etiquetas" data-i18n-alt="shot.settings.alt">
-        <figcaption data-i18n="shot.settings.cap">Ajustes: tema, acento, densidad y etiquetas</figcaption>
-      </figure>
+      <button class="shot-arrow next" id="shotNext" aria-label="Siguiente" data-i18n-aria="shots.next">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18"/></svg>
+      </button>
+    </div>
+
+    <div class="shot-thumbs" id="shotThumbs" role="tablist" aria-label="Capturas">
+      <button class="thumb active" role="tab" aria-selected="true" data-shot="board" aria-label="El tablero">
+        <img src="assets/shot-board-es-dark.webp" alt="" aria-hidden="true" loading="lazy">
+      </button>
+      <button class="thumb" role="tab" aria-selected="false" data-shot="casa" aria-label="El proyecto Casa">
+        <img src="assets/shot-casa-es-dark.webp" alt="" aria-hidden="true" loading="lazy">
+      </button>
+      <button class="thumb" role="tab" aria-selected="false" data-shot="viaje" aria-label="El viaje a Lisboa">
+        <img src="assets/shot-viaje-es-dark.webp" alt="" aria-hidden="true" loading="lazy">
+      </button>
+      <button class="thumb" role="tab" aria-selected="false" data-shot="trabajo" aria-label="El tablero de Trabajo">
+        <img src="assets/shot-trabajo-es-dark.webp" alt="" aria-hidden="true" loading="lazy">
+      </button>
+      <button class="thumb" role="tab" aria-selected="false" data-shot="expenses" aria-label="Gastos compartidos">
+        <img src="assets/shot-expenses-es-dark.webp" alt="" aria-hidden="true" loading="lazy">
+      </button>
+      <button class="thumb" role="tab" aria-selected="false" data-shot="settings" aria-label="Ajustes">
+        <img src="assets/shot-settings-es-dark.webp" alt="" aria-hidden="true" loading="lazy">
+      </button>
     </div>
   </div>
 </section>
@@ -531,7 +539,7 @@
   <p class="lightbox-caption" id="lightboxCaption"></p>
 </div>
 
-<script src="i18n.js?v=10"></script>
-<script src="app.js?v=10"></script>
+<script src="i18n.js?v=12"></script>
+<script src="app.js?v=12"></script>
 </body>
 </html>
