@@ -546,13 +546,15 @@ html.js .reveal.in{opacity:1;transform:none}
 
 /* ============ CAPTURAS ============ */
 .shots-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
+.shot:first-child{grid-column:1/-1}
+.shot:first-child img{aspect-ratio:16/10}
 .shot{
   margin:0;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
   overflow:hidden;transition:transform .25s,border-color .25s,box-shadow .25s;
 }
 .shot:hover{transform:translateY(-4px);border-color:var(--border-strong);box-shadow:var(--shadow)}
 .shot img{
-  width:100%;aspect-ratio:16/10;object-fit:cover;object-position:top center;
+  width:100%;aspect-ratio:16/10;object-fit:cover;object-position:top left;
   cursor:zoom-in;display:block;background:var(--surface-2);
 }
 .shot figcaption{
