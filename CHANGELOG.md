@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.20] - 2026-08-29
+
+### Fixed
+
+- **Add Umami analytics tracker to the landing page (#196).** The landing now
+  reports page views to `stat.domatix.com` so visits appear in Umami.
+
 ## [2.6.19] - 2026-08-28
 
 ### Changed
