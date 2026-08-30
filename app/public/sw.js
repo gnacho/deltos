@@ -19,7 +19,10 @@ self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(STATIC_CACHE).then((cache) => cache.addAll(PRECACHE)));
 });
 
+let bypassUntil = 0;
+
 self.addEventListener('activate', (event) => {
+  bypassUntil = Date.now() + 30_000;
   event.waitUntil(
     caches
       .keys()
@@ -125,12 +128,28 @@ self.addEventListener('fetch', (event) => {
   }
 
   // Estáticos fingerprinted: caché primero, rellenar on-the-fly.
+  // Bypass window: tras activación del SW nuevo, network-first durante 30s
+  // para asegurar que el navegador descarga todos los assets frescos.
   if (
     url.pathname.startsWith('/assets/') ||
     url.pathname.startsWith('/fonts/') ||
     url.pathname.startsWith('/icons/') ||
     url.pathname === '/manifest.webmanifest'
   ) {
+    if (Date.now() < bypassUntil) {
+      event.respondWith(
+        fetch(request).then((res) => {
+          if (res.ok) {
+            const copy = res.clone();
+            caches.open(STATIC_CACHE).then((cache) => cache.put(request, copy));
+          }
+          return res;
+        }).catch(() =>
+          caches.match(request).then((cached) => cached || Response.error()),
+        ),
+      );
+      return;
+    }
     event.respondWith(
       caches.match(request).then(
         (cached) =>

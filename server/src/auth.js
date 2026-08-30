@@ -143,9 +143,14 @@ export function requireAdmin(c) {
 
 // --- Login / logout -------------------------------------------------------
 
+const DUMMY_HASH = '$2b$10$abcdefghijklmnopqrstuuABCDEFGHIJKLMNOPQRSTUVWXYZ012'
+
 export async function verifyLogin(db, username, password) {
   const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username)
-  if (!user) return null
+  if (!user) {
+    await bcrypt.compare(password, DUMMY_HASH)
+    return null
+  }
   const valid = await bcrypt.compare(password, user.password_hash)
   if (!valid) return null
   const { password_hash, ...pub } = user
