@@ -519,6 +519,28 @@ body.mm-dragging {
   }
 }
 
+/* Skeleton shimmer (30-Ago-2026, leccion Yuvomi) */
+@keyframes skeleton-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.skeleton-line {
+  height: 0.625rem;
+  border-radius: 0.25rem;
+  background: linear-gradient(
+    90deg,
+    rgb(var(--hover-rgb)) 25%,
+    rgb(var(--border-rgb)) 50%,
+    rgb(var(--hover-rgb)) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+.skeleton-card { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-line { animation: none; opacity: 0.5; }
+}
+
 /* Reducir animaciones para las view transitions (SO + switch de Ajustes) */
 html.reduce-motion::view-transition-old(*),
 html.reduce-motion::view-transition-new(*) {

@@ -8,6 +8,8 @@ import { useData } from '@/data/data-context';
 import { useTaskModal } from '@/components/modal-context';
 import { EventText } from '@/components/task/EventText';
 import { colorOf } from '@/lib/colors';
+import { SkeletonList } from '@/components/Skeleton';
+import { EmptyState } from '@/components/EmptyState';
 import { relTime, fmtFullDate } from '@/i18n';
 
 const EVENT_ICON: Record<ActivityEventType, typeof Plus> = {
@@ -91,27 +93,24 @@ export default function ActivityFeed() {
   return (
     <div className="max-w-[1440px] mx-auto">
       {loading ? (
-        <div className="animate-pulse space-y-2.5" role="status">
-          {[0, 1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-16 rounded-2xl bg-surface2" />
-          ))}
-        </div>
+        <SkeletonList rows={5} />
       ) : error ? (
-        <div className="rounded-2xl bg-surface border border-app shadow-soft p-8 text-center">
-          <p className="text-[15px] font-medium mb-1">{t('common.error')}</p>
-          <p className="text-sm text-muted mb-4">{error}</p>
-          <button
-            type="button"
-            onClick={() => void load(null, false)}
-            className="px-5 py-2.5 rounded-xl bg-brand text-brandfg text-[14px] font-semibold hover:brightness-110"
-          >
-            {t('common.retry')}
-          </button>
-        </div>
+        <EmptyState
+          variant="error"
+          title={t('common.error')}
+          description={error}
+          cta={
+            <button
+              type="button"
+              onClick={() => void load(null, false)}
+              className="px-5 py-2.5 rounded-xl bg-brand text-brandfg text-[14px] font-semibold hover:brightness-110"
+            >
+              {t('common.retry')}
+            </button>
+          }
+        />
       ) : items.length === 0 ? (
-        <p className="rounded-2xl border border-dashed border-app px-4 py-10 text-center text-[15px] text-muted">
-          {t('activityPage.empty')}
-        </p>
+        <EmptyState variant="empty" title={t('activityPage.empty')} />
       ) : (
         <>
           {groups.map((g) => (

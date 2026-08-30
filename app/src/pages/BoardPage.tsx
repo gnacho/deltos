@@ -13,6 +13,8 @@ import { useStepSwipe } from '@/hooks/useStepSwipe';
 import { Filters, FiltersToggleButton } from '@/components/Filters';
 import { emptyFilters, type FilterState } from '@/components/filters-state';
 import { COLUMNS } from '@/lib/constants';
+import { SkeletonBoard } from '@/components/Skeleton';
+import { EmptyState } from '@/components/EmptyState';
 import { colorOf, COLUMN_ACCENT_RGB } from '@/lib/colors';
 import { announce } from '@/lib/announce';
 import { ProjectActions } from '@/components/ProjectActions';
@@ -152,30 +154,26 @@ export default function BoardPage() {
     if (data.bootstrapError) {
       return (
       <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 pt-0 lg:pt-7">
-          <div className="rounded-2xl bg-surface border border-app shadow-soft p-8 text-center max-w-md mx-auto">
-            <p className="text-[15px] font-medium mb-1">{t('common.error')}</p>
-            <p className="text-sm text-muted mb-4">{data.bootstrapError}</p>
-            <button
-              type="button"
-              onClick={data.refresh}
-              className="px-5 py-2.5 rounded-xl bg-brand text-brandfg text-[14px] font-semibold hover:brightness-110"
-            >
-              {t('common.retry')}
-            </button>
-          </div>
+          <EmptyState
+            variant="error"
+            title={t('common.error')}
+            description={data.bootstrapError}
+            cta={
+              <button
+                type="button"
+                onClick={data.refresh}
+                className="px-5 py-2.5 rounded-xl bg-brand text-brandfg text-[14px] font-semibold hover:brightness-110"
+              >
+                {t('common.retry')}
+              </button>
+            }
+          />
         </div>
       );
     }
     return (
-      <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 pt-5 lg:pt-7" role="status">
-        <div className="animate-pulse space-y-3">
-          <div className="h-8 w-48 rounded-lg bg-surface2" />
-          <div className="grid lg:grid-cols-3 gap-4">
-            {[0, 1, 2].map((i) => (
-              <div key={i} className="h-64 rounded-2xl bg-surface2" />
-            ))}
-          </div>
-        </div>
+      <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 pt-5 lg:pt-7">
+        <SkeletonBoard />
       </div>
     );
   }
