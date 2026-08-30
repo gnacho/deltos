@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.22] - 2026-08-30
+
+### Security
+
+- **Timing-safe login.** `verifyLogin` now runs bcrypt against a dummy hash
+  when the username is not found, preventing timing-based user enumeration.
+- **Placeholder detection at startup.** The config validator rejects
+  `.env.example` placeholder values (`cambia`, `changeme`, `example`, etc.)
+  with a fail-fast error before the server starts listening.
+- **Service worker bypass window.** After a new SW activates, all requests
+  bypass cache for 30 seconds to ensure fresh assets are served post-deploy.
+
+### Added
+
+- **Shared Skeleton components.** `SkeletonList`, `SkeletonBoard`, and
+  `SkeletonCard` with shimmer animation and `aria-hidden="true"`. Respects
+  `prefers-reduced-motion`.
+- **Shared EmptyState component.** Three variants (`empty`, `no-results`,
+  `error`) with enforced icon-title-description-hint-CTA composition order
+  and proper ARIA roles (`alert` for errors, `status` for no-results).
+
+### Changed
+
+- BoardPage, ExpenseBoard, and ActivityFeed now use the shared Skeleton and
+  EmptyState components instead of ad-hoc `animate-pulse` blocks.
+
 ## [2.6.20] - 2026-08-29
 
 ### Fixed
