@@ -50,6 +50,16 @@ const envSchema = z
         message: 'SESSION_SECRET es obligatorio en producción (issue #168)',
       })
     }
+    const PLACEHOLDER_MARKERS = ['cambia', 'changeme', 'change-me', 'example', 'placeholder', 'your-secret', 'replace_me', 'xxx']
+    for (const [key, val] of [['AUTH_PASS', env.AUTH_PASS], ['SESSION_SECRET', env.SESSION_SECRET]]) {
+      if (val && PLACEHOLDER_MARKERS.some((m) => val.toLowerCase().includes(m))) {
+        ctx.addIssue({
+          code: 'custom',
+          path: [key],
+          message: `${key} contiene un valor de ejemplo del .env.example; genera un secreto real`,
+        })
+      }
+    }
   })
 
 export function loadConfig(env = process.env) {
