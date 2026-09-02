@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { MessageCircle, Paperclip, Repeat } from 'lucide-react';
+import { MessageCircle, Paperclip, Repeat, Archive, ArchiveRestore } from 'lucide-react';
 import type { ColumnId, Project, Task } from '@/data/types';
 import { colorOf } from '@/lib/colors';
 import { Avatar } from '@/components/Avatar';
@@ -13,21 +13,39 @@ interface CardProps {
   index: number;
   onOpen: (id: string) => void;
   onMove?: (id: string, toCol: ColumnId) => void;
+  /** Tarea archivada: sin drag, con acción de desarchivar. */
+  archived?: boolean;
+  /** Archivado manual (solo tarjetas en Hecho). */
+  onArchive?: (id: string) => void;
+  onUnarchive?: (id: string) => void;
 }
 
-/** Tarjeta desktop (completa): etiquetas, prioridad, vencimiento, contadores, avatar. */
-export function TaskCard({ task, project, index, onOpen }: CardProps) {
+/** Tarjeta desktop (completa): etiquetas, prioridad, vencimiento, contadores, avatar.
+ *  Es un div role=button (no un <button>) para poder anidar las acciones de
+ *  archivar/desarchivar sin elementos interactivos anidados inválidos. */
+export function TaskCard({ task, project, index, onOpen, archived, onArchive, onUnarchive }: CardProps) {
   const { t } = useTranslation();
   const done = task.column === 'hecho';
   const delay = Math.min(index, 10) * 40;
+  const canArchive = !archived && done && onArchive !== undefined;
   return (
-    <button
-      type="button"
-      data-task={task.id}
-      draggable
+    <div
+      role="button"
+      tabIndex={0}
+      data-task={archived ? undefined : task.id}
+      data-archived={archived ? task.id : undefined}
+      draggable={!archived}
       onClick={() => onOpen(task.id)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onOpen(task.id);
+        }
+      }}
       style={{ animationDelay: `${delay}ms` }}
-      className={`card w-full text-left rounded-2xl bg-surface border border-app shadow-soft p-3.5 transition-transform duration-150 hover:-translate-y-0.5 hover:shadow-md ${done ? 'opacity-60' : ''}`}
+      className={`card w-full text-left rounded-2xl bg-surface border border-app shadow-soft p-3.5 transition-transform duration-150 hover:-translate-y-0.5 hover:shadow-md cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-brand ${
+        done ? 'opacity-60' : ''
+      } ${archived ? 'opacity-50 bg-surface2/60' : ''}`}
     >
       {project && (
         <div className="flex items-center gap-1.5 mb-2">
@@ -45,9 +63,7 @@ export function TaskCard({ task, project, index, onOpen }: CardProps) {
           ))}
         </div>
       )}
-      <h3
-        className={`text-[15px] font-medium leading-snug ${done ? 'line-through decoration-1' : ''}`}
-      >
+      <h3 className={`text-[15px] font-medium leading-snug ${done ? 'line-through decoration-1' : ''}`}>
         {task.title}
       </h3>
       {(task.priority || task.due_date || task.recurrence) && (
@@ -79,18 +95,48 @@ export function TaskCard({ task, project, index, onOpen }: CardProps) {
             </span>
           )}
         </span>
-        {task.assignee ? (
-          <Avatar name={task.assignee.username} color={task.assignee.color} />
-        ) : (
-          <UnassignedAvatar />
-        )}
+        <span className="flex items-center gap-2">
+          {canArchive && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onArchive(task.id);
+              }}
+              className="w-7 h-7 -mr-1 rounded-lg text-faint hover:bg-surface2 hover:text-muted flex items-center justify-center"
+              aria-label={t('task.archiveAria', { title: task.title })}
+              title={t('task.archive')}
+            >
+              <Archive className="w-4 h-4" aria-hidden="true" />
+            </button>
+          )}
+          {archived && onUnarchive && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onUnarchive(task.id);
+              }}
+              className="w-7 h-7 -mr-1 rounded-lg text-faint hover:bg-surface2 hover:text-muted flex items-center justify-center"
+              aria-label={t('task.unarchiveAria', { title: task.title })}
+              title={t('task.unarchive')}
+            >
+              <ArchiveRestore className="w-4 h-4" aria-hidden="true" />
+            </button>
+          )}
+          {task.assignee ? (
+            <Avatar name={task.assignee.username} color={task.assignee.color} />
+          ) : (
+            <UnassignedAvatar />
+          )}
+        </span>
       </div>
-    </button>
+    </div>
   );
 }
 
 /** Tarjeta MÓVIL simplificada: título (17px/600, 2 líneas), proyecto (dot+nombre), prioridad. */
-export function TaskCardMobile({ task, project, index, onOpen, onMove }: CardProps) {
+export function TaskCardMobile({ task, project, index, onOpen, onMove, archived, onArchive, onUnarchive }: CardProps) {
   const { t } = useTranslation();
   const done = task.column === 'hecho';
   const delay = Math.min(index, 10) * 40;
@@ -136,7 +182,9 @@ export function TaskCardMobile({ task, project, index, onOpen, onMove }: CardPro
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
         style={{ animationDelay: `${delay}ms` }}
-        className={`card w-full text-left rounded-2xl bg-surface border border-app shadow-soft px-4 py-3.5 min-h-[64px] flex flex-col justify-center gap-2 ${done ? 'opacity-60' : ''}`}
+        className={`card w-full text-left rounded-2xl bg-surface border border-app shadow-soft px-4 py-3.5 min-h-[64px] flex flex-col justify-center gap-2 ${
+          done ? 'opacity-60' : ''
+        } ${archived ? 'opacity-50 bg-surface2/60' : ''}`}
       >
         <h3
           className={`text-[17px] font-semibold leading-snug line-clamp-2 ${done ? 'line-through decoration-1' : ''}`}
@@ -166,6 +214,18 @@ export function TaskCardMobile({ task, project, index, onOpen, onMove }: CardPro
         </div>
       </button>
 
+      {/* Archivada (móvil): acción de desarchivar bajo la tarjeta */}
+      {archived && onUnarchive && (
+        <button
+          type="button"
+          onClick={() => onUnarchive(task.id)}
+          className="mt-1 w-full inline-flex items-center justify-center gap-1.5 rounded-xl border border-app bg-surface px-3 py-2 text-[13px] font-medium text-muted hover:text-text"
+        >
+          <ArchiveRestore className="w-4 h-4" aria-hidden="true" />
+          {t('task.unarchive')}
+        </button>
+      )}
+
       {showMove && onMove && (
         <div className="fixed inset-0 z-50 flex items-end justify-center pb-6" onClick={() => setShowMove(false)}>
           <div className="absolute inset-0 bg-black/20" />
@@ -191,6 +251,19 @@ export function TaskCardMobile({ task, project, index, onOpen, onMove }: CardPro
                 {col.id === task.column && <span className="text-[12px] text-muted ml-auto">{t('board.current')}</span>}
               </button>
             ))}
+            {task.column === 'hecho' && onArchive && (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowMove(false);
+                  onArchive(task.id);
+                }}
+                className="w-full mt-1 flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-[15px] font-medium hover:bg-surface2 active:bg-surface2"
+              >
+                <Archive className="w-4 h-4 text-muted" aria-hidden="true" />
+                {t('task.archive')}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setShowMove(false)}

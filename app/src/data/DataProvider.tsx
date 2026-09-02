@@ -219,6 +219,24 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [fetchBootstrap, fetchDetail],
   );
 
+  const archiveTask = useCallback(
+    async (id: string): Promise<void> => {
+      await apiPost<{ task: Task }>(`/api/tasks/${encodeURIComponent(id)}/archive`, {});
+      await fetchBootstrap();
+      if (detailCache.current.has(id)) await fetchDetail(id);
+    },
+    [fetchBootstrap, fetchDetail],
+  );
+
+  const unarchiveTask = useCallback(
+    async (id: string): Promise<void> => {
+      await apiPost<{ task: Task }>(`/api/tasks/${encodeURIComponent(id)}/unarchive`, {});
+      await fetchBootstrap();
+      if (detailCache.current.has(id)) await fetchDetail(id);
+    },
+    [fetchBootstrap, fetchDetail],
+  );
+
   const deleteTask = useCallback(
     async (id: string): Promise<void> => {
       await apiDelete(`/api/tasks/${encodeURIComponent(id)}`);
@@ -429,6 +447,24 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [fetchExpenses, fetchExpenseDetail],
   );
 
+  const archiveExpense = useCallback(
+    async (id: string): Promise<void> => {
+      await apiPost<{ expense: Expense }>(`/api/expenses/${encodeURIComponent(id)}/archive`, {});
+      await fetchExpenses();
+      if (expenseDetailCache.current.has(id)) await fetchExpenseDetail(id);
+    },
+    [fetchExpenses, fetchExpenseDetail],
+  );
+
+  const unarchiveExpense = useCallback(
+    async (id: string): Promise<void> => {
+      await apiPost<{ expense: Expense }>(`/api/expenses/${encodeURIComponent(id)}/unarchive`, {});
+      await fetchExpenses();
+      if (expenseDetailCache.current.has(id)) await fetchExpenseDetail(id);
+    },
+    [fetchExpenses, fetchExpenseDetail],
+  );
+
   const refreshExpenseDetail = useCallback(
     (id: string) => { expenseDetailCache.current.delete(id); void fetchExpenseDetail(id); },
     [fetchExpenseDetail],
@@ -475,6 +511,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       createTask,
       patchTask,
       moveTask,
+      archiveTask,
+      unarchiveTask,
       deleteTask,
       parseTaskText,
       addSubtask,
@@ -494,6 +532,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       createExpense,
       updateExpense,
       moveExpense,
+      archiveExpense,
+      unarchiveExpense,
       deleteExpense,
       getExpenseDetail: (id) => {
         const cached = expenseDetailCache.current.get(id);

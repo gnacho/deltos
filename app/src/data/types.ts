@@ -82,6 +82,7 @@ export interface Task {
   created_by: string;
   created_at: number;
   updated_at: number;
+  archived_at: number | null; // epoch ms; null = activa en el tablero
   labels: Label[];
   counts: { comments: number; attachments: number };
 }
@@ -217,6 +218,7 @@ export interface Expense {
   created_by_color: string;
   created_at: number;
   updated_at: number;
+  archived_at: number | null; // epoch ms; null = activo en el tablero
   counts: { comments: number; attachments: number };
 }
 

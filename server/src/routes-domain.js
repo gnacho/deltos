@@ -277,6 +277,7 @@ function hydrateTasks(db, whereSql = '', params = []) {
     created_by: t.created_by,
     created_at: t.created_at,
     updated_at: t.updated_at,
+    archived_at: t.archived_at ?? null,
     labels: byTask.get(t.id) || [],
     counts: { comments: t.comments_count, attachments: t.attachments_count },
   }))
@@ -373,7 +374,7 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
                 COALESCE(SUM(CASE WHEN t."column" = 'nuevo' THEN 1 ELSE 0 END), 0) AS nuevo,
                 COALESCE(SUM(CASE WHEN t."column" = 'encurso' THEN 1 ELSE 0 END), 0) AS encurso,
                 COALESCE(SUM(CASE WHEN t."column" = 'hecho' THEN 1 ELSE 0 END), 0) AS hecho
-         FROM projects p LEFT JOIN tasks t ON t.project_id = p.id AND t.deleted_at IS NULL
+         FROM projects p LEFT JOIN tasks t ON t.project_id = p.id AND t.deleted_at IS NULL AND t.archived_at IS NULL
          WHERE p.id IN (SELECT project_id FROM project_members WHERE user_id = ?)
          GROUP BY p.id ORDER BY p.position`
       )
@@ -601,17 +602,20 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
     const id = crypto.randomUUID()
     const now = Date.now()
     const pos = db
-      .prepare('SELECT COALESCE(MAX(position) + 1, 0) AS p FROM tasks WHERE "column" = ?')
+      .prepare(
+        'SELECT COALESCE(MAX(position) + 1, 0) AS p FROM tasks WHERE "column" = ? AND archived_at IS NULL AND deleted_at IS NULL'
+      )
       .get(data.column).p
     const rec = data.recurrence != null ? normalizeRecurrence(data.recurrence) : null
     const create = db.transaction(() => {
       db.prepare(
-        `INSERT INTO tasks (id, project_id, title, description, "column", position, priority, due_date, assignee_id, created_by, created_at, updated_at, recurrence, recurrence_group_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO tasks (id, project_id, title, description, "column", position, priority, due_date, assignee_id, created_by, created_at, updated_at, recurrence, recurrence_group_id, done_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).run(
         id, data.project_id, data.title, data.description, data.column, pos,
         data.priority ?? null, data.due_date ?? null, data.assignee_id ?? null, user.id, now, now,
-        rec ? serializeRecurrence(rec) : null, rec ? id : null
+        rec ? serializeRecurrence(rec) : null, rec ? id : null,
+        data.column === 'hecho' ? now : null
       )
       replaceTaskLabels(db, id, data.labels)
       addEvent(db, id, user.id, 'created')
@@ -726,29 +730,45 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
       const fromPos = task.position
       const toCol = data.column
       const targetCount = db
-        .prepare('SELECT COUNT(*) AS n FROM tasks WHERE "column" = ? AND id != ?')
+        .prepare(
+          'SELECT COUNT(*) AS n FROM tasks WHERE "column" = ? AND id != ? AND archived_at IS NULL AND deleted_at IS NULL'
+        )
         .get(toCol, task.id).n
       const toPos = Math.min(data.position, targetCount)
 
       const move = db.transaction(() => {
-        if (fromCol === toCol) {
+        if (task.archived_at) {
+          // Tarea archivada: su posición origen está congelada (fue compactada
+          // al archivar). Solo abre hueco en la destino y reactiva.
+          db.prepare(
+            'UPDATE tasks SET position = position + 1 WHERE "column" = ? AND position >= ? AND archived_at IS NULL AND deleted_at IS NULL'
+          ).run(toCol, toPos)
+        } else if (fromCol === toCol) {
           if (toPos === fromPos) return false // sin cambio
           if (toPos < fromPos) {
             db.prepare(
-              'UPDATE tasks SET position = position + 1 WHERE "column" = ? AND position >= ? AND position < ?'
+              'UPDATE tasks SET position = position + 1 WHERE "column" = ? AND position >= ? AND position < ? AND archived_at IS NULL AND deleted_at IS NULL'
             ).run(toCol, toPos, fromPos)
           } else {
             db.prepare(
-              'UPDATE tasks SET position = position - 1 WHERE "column" = ? AND position > ? AND position <= ?'
+              'UPDATE tasks SET position = position - 1 WHERE "column" = ? AND position > ? AND position <= ? AND archived_at IS NULL AND deleted_at IS NULL'
             ).run(toCol, fromPos, toPos)
           }
         } else {
-          // compacta la columna origen y abre hueco en la destino
-          db.prepare('UPDATE tasks SET position = position - 1 WHERE "column" = ? AND position > ?').run(fromCol, fromPos)
-          db.prepare('UPDATE tasks SET position = position + 1 WHERE "column" = ? AND position >= ?').run(toCol, toPos)
+          // compacta la columna origen y abre hueco en la destino (solo activas)
+          db.prepare(
+            'UPDATE tasks SET position = position - 1 WHERE "column" = ? AND position > ? AND archived_at IS NULL AND deleted_at IS NULL'
+          ).run(fromCol, fromPos)
+          db.prepare(
+            'UPDATE tasks SET position = position + 1 WHERE "column" = ? AND position >= ? AND archived_at IS NULL AND deleted_at IS NULL'
+          ).run(toCol, toPos)
         }
-        db.prepare('UPDATE tasks SET "column" = ?, position = ?, updated_at = ? WHERE id = ?')
-          .run(toCol, toPos, Date.now(), task.id)
+        // Mover reactiva la tarea (si estaba archivada, vuelve al tablero) y
+        // marca/clear done_at según entre o salga de 'hecho'.
+        const doneAt = toCol === 'hecho' ? Date.now() : null
+        db.prepare(
+          'UPDATE tasks SET "column" = ?, position = ?, updated_at = ?, archived_at = NULL, done_at = ? WHERE id = ?'
+        ).run(toCol, toPos, Date.now(), doneAt, task.id)
         addEvent(db, task.id, user.id, 'moved', { from: fromCol, to: toCol })
         return true
       })
@@ -773,12 +793,64 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
     requireMember(db, user.id, task.project_id)
     const del = db.transaction(() => {
       db.prepare('UPDATE tasks SET deleted_at = ? WHERE id = ?').run(Date.now(), task.id)
-      db.prepare('UPDATE tasks SET position = position - 1 WHERE "column" = ? AND position > ? AND deleted_at IS NULL')
-        .run(task.column, task.position)
+      // Las archivadas ya están fuera de la secuencia: no se compacta.
+      if (!task.archived_at) {
+        db.prepare(
+          'UPDATE tasks SET position = position - 1 WHERE "column" = ? AND position > ? AND archived_at IS NULL AND deleted_at IS NULL'
+        ).run(task.column, task.position)
+      }
     })
     del()
     hub.broadcast('tasks')
     return c.body(null, 204)
+  })
+
+  // Archivar tarea (manual): solo tareas en 'hecho'. La tarea desaparece del
+  // tablero y se recupera con "mostrar archivadas" (o moviéndola). No es
+  // borrar: conserva comentarios, adjuntos e historial.
+  app.post('/api/tasks/:id/archive', zValidator('param', idParamSchema, validationHook), (c) => {
+    const db = c.get('db')
+    const user = c.get('user')
+    const task = getTask(db, c.req.valid('param').id)
+    if (!task) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
+    requireMember(db, user.id, task.project_id)
+    if (task.column !== 'hecho') httpError(422, ERROR_CODES.TASK_NOT_DONE)
+    if (task.archived_at) return c.json({ task: hydrateTasks(db, 't.id = ?', [task.id])[0] })
+    const now = Date.now()
+    const archive = db.transaction(() => {
+      db.prepare('UPDATE tasks SET archived_at = ? WHERE id = ?').run(now, task.id)
+      db.prepare(
+        'UPDATE tasks SET position = position - 1 WHERE "column" = ? AND position > ? AND archived_at IS NULL AND deleted_at IS NULL'
+      ).run(task.column, task.position)
+    })
+    archive()
+    hub.broadcast('tasks')
+    return c.json({ task: hydrateTasks(db, 't.id = ?', [task.id])[0] })
+  })
+
+  // Desarchivar: la tarea vuelve al final de 'hecho' con ventana fresca de
+  // 3 días antes de que el auto-archivo la vuelva a archivar.
+  app.post('/api/tasks/:id/unarchive', zValidator('param', idParamSchema, validationHook), (c) => {
+    const db = c.get('db')
+    const user = c.get('user')
+    const task = getTask(db, c.req.valid('param').id)
+    if (!task) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
+    requireMember(db, user.id, task.project_id)
+    if (!task.archived_at) return c.json({ task: hydrateTasks(db, 't.id = ?', [task.id])[0] })
+    const now = Date.now()
+    const unarchive = db.transaction(() => {
+      const pos = db
+        .prepare(
+          'SELECT COALESCE(MAX(position) + 1, 0) AS p FROM tasks WHERE "column" = ? AND archived_at IS NULL AND deleted_at IS NULL'
+        )
+        .get('hecho').p
+      db.prepare(
+        'UPDATE tasks SET archived_at = NULL, done_at = ?, "column" = ?, position = ? WHERE id = ?'
+      ).run(now, 'hecho', pos, task.id)
+    })
+    unarchive()
+    hub.broadcast('tasks')
+    return c.json({ task: hydrateTasks(db, 't.id = ?', [task.id])[0] })
   })
 
   // Detalle completo: task + labels + attachments + comments + activity (paginado LIMIT 50)
@@ -1077,9 +1149,15 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
     const task = db.prepare('SELECT * FROM tasks WHERE id = ? AND deleted_at IS NOT NULL').get(c.req.valid('param').id)
     if (!task) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
     requireMember(db, user.id, task.project_id)
-    const pos = db.prepare('SELECT COALESCE(MAX(position) + 1, 0) AS p FROM tasks WHERE "column" = ? AND deleted_at IS NULL')
-      .get(task.column).p
-    db.prepare('UPDATE tasks SET deleted_at = NULL, position = ?, updated_at = ? WHERE id = ?').run(pos, Date.now(), task.id)
+    // Restaurar reactiva siempre: si estaba archivada al borrarse, vuelve
+    // activa al tablero (done_at fresco si vuelve a 'hecho').
+    const pos = db.prepare(
+      'SELECT COALESCE(MAX(position) + 1, 0) AS p FROM tasks WHERE "column" = ? AND archived_at IS NULL AND deleted_at IS NULL'
+    ).get(task.column).p
+    const now = Date.now()
+    db.prepare(
+      'UPDATE tasks SET deleted_at = NULL, position = ?, updated_at = ?, archived_at = NULL, done_at = CASE WHEN "column" = \'hecho\' THEN ? ELSE NULL END WHERE id = ?'
+    ).run(pos, now, now, task.id)
     hub.broadcast('tasks')
     return c.json({ task: hydrateTasks(db, 't.id = ?', [task.id])[0] })
   })

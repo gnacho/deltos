@@ -8,7 +8,7 @@ import { COLUMNS, PRIORITIES, PRIORITY_BADGE } from '@/lib/constants';
 import { colorOf } from '@/lib/colors';
 import { Avatar } from '@/components/Avatar';
 import { announce } from '@/lib/announce';
-import { ArrowUp, ArrowRight, ArrowDown, ChevronDown, User } from 'lucide-react';
+import { ArrowUp, ArrowRight, ArrowDown, ChevronDown, User, Archive, ArchiveRestore } from 'lucide-react';
 import { RecurrenceField } from '@/components/task/RecurrenceField';
 import { SubtaskList } from '@/components/task/SubtaskList';
 import type { TaskRecurrence } from '@/data/types';
@@ -128,7 +128,7 @@ export function DetailsTab({ detail, onClose }: { detail: TaskDetail; onClose: (
       </div>
 
       <section>
-        <div className="flex flex-wrap gap-2" role="group" aria-label={t('task.moveToGroup')}>
+        <div className="flex flex-wrap gap-2 items-center" role="group" aria-label={t('task.moveToGroup')}>
           {COLUMNS.map((c) => {
             const current = task.column === c.id;
             return (
@@ -145,7 +145,7 @@ export function DetailsTab({ detail, onClose }: { detail: TaskDetail; onClose: (
                 onClick={() => {
                   const position = data
                     .getTasks()
-                    .filter((tk) => tk.column === c.id && tk.id !== task.id).length;
+                    .filter((tk) => !tk.archived_at && tk.column === c.id && tk.id !== task.id).length;
                   void data
                     .moveTask(task.id, c.id, position)
                     .then(() =>
@@ -170,6 +170,43 @@ export function DetailsTab({ detail, onClose }: { detail: TaskDetail; onClose: (
               </button>
             );
           })}
+          {task.archived_at ? (
+            <span className="inline-flex items-center gap-2 ml-1">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-surface2 text-muted">
+                <Archive className="w-3 h-3" aria-hidden="true" />
+                {t('task.archived')}
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  void data
+                    .unarchiveTask(task.id)
+                    .then(() => announce(t('board.taskUnarchived', { title: task.title })))
+                    .catch(() => setSaveState('error'))
+                }
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-medium bg-surface border border-app text-muted hover:bg-surface2"
+              >
+                <ArchiveRestore className="w-4 h-4" aria-hidden="true" />
+                {t('task.unarchive')}
+              </button>
+            </span>
+          ) : (
+            task.column === 'hecho' && (
+              <button
+                type="button"
+                onClick={() =>
+                  void data
+                    .archiveTask(task.id)
+                    .then(() => announce(t('board.taskArchived', { title: task.title })))
+                    .catch(() => setSaveState('error'))
+                }
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-medium bg-surface border border-app text-muted hover:bg-surface2"
+              >
+                <Archive className="w-4 h-4" aria-hidden="true" />
+                {t('task.archive')}
+              </button>
+            )
+          )}
         </div>
       </section>
 
