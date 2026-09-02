@@ -19,7 +19,7 @@ import { ERROR_CODES } from './error-codes.js'
 import { decodeCursor, keysetPage } from './pagination.js'
 import { logger } from './logger.js'
 import { isBackupTimerActive } from './backup.js'
-import { normalizeRecurrence, serializeRecurrence, computeNextDue, todayLocal } from './recurrence.js'
+import { normalizeRecurrence, serializeRecurrence, computeNextDue, todayLocal, adaptiveInterval, completionDates } from './recurrence.js'
 import { parseTaskText } from './nlp.js'
 
 const log = logger.child({ component: 'domain' })
@@ -271,6 +271,7 @@ function hydrateTasks(db, whereSql = '', params = []) {
     due_date: t.due_date,
     recurrence: t.recurrence ? JSON.parse(t.recurrence) : null,
     recurrence_group_id: t.recurrence_group_id,
+    recurrence_paused: !!t.recurrence_paused,
     assignee_id: t.assignee_id,
     assignee: t.assignee_id
       ? { id: t.assignee_id, username: t.assignee_username, color: t.assignee_color }
@@ -297,7 +298,8 @@ function getTask(db, id) {
 // Crea la siguiente instancia de una tarea recurrente al completarse.
 // Devuelve la tarea hidratada nueva o null si no se pudo (no debería).
 function createRecurringInstance(db, doneTask, actorId) {
-  const rec = normalizeRecurrence(JSON.parse(doneTask.recurrence))
+  if (doneTask.recurrence_paused) return null
+  const rec = normalizeRecurrence(typeof doneTask.recurrence === 'string' ? JSON.parse(doneTask.recurrence) : doneTask.recurrence)
   if (!rec) return null
   const nextDue = computeNextDue(db, doneTask, todayLocal())
   if (!nextDue) return null
@@ -874,6 +876,117 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
 
     hub.broadcast('tasks')
     return c.json({ task: hydrateTasks(db, 't.id = ?', [task.id])[0] })
+  })
+
+  // Listado de series recurrentes para la vista Periódicas. Incluye la
+  // instancia activa, la próxima fecha y el estado (open/paused/waiting).
+  app.get('/api/tasks/recurring', (c) => {
+    const db = c.get('db')
+    const user = c.get('user')
+    const today = todayLocal()
+    const rows = db
+      .prepare(
+        `SELECT t.*, p.name AS project_name, p.color AS project_color
+         FROM tasks t
+         JOIN project_members pm ON pm.project_id = t.project_id
+         JOIN projects p ON p.id = t.project_id
+         WHERE pm.user_id = ? AND t.recurrence IS NOT NULL AND t.deleted_at IS NULL`
+      )
+      .all(user.id)
+
+    const byGroup = new Map()
+    for (const t of rows) {
+      const rec = normalizeRecurrence(typeof t.recurrence === 'string' ? JSON.parse(t.recurrence) : t.recurrence)
+      if (!rec) continue
+      const groupId = t.recurrence_group_id || t.id
+      const series = byGroup.get(groupId) || {
+        group_id: groupId,
+        title: t.title,
+        project_id: t.project_id,
+        project_name: t.project_name,
+        project_color: t.project_color,
+        rec,
+        tasks: [],
+      }
+      series.tasks.push(t)
+      byGroup.set(groupId, series)
+    }
+
+    const result = []
+    for (const s of byGroup.values()) {
+      const active = s.tasks.find((t) => t.column !== 'hecho' && !t.archived_at) || null
+      const completed = s.tasks
+        .filter((t) => t.column === 'hecho' || t.archived_at)
+        .sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0))
+      const lastCompleted = completed[0] || null
+      const isPaused = active ? !!active.recurrence_paused : s.tasks.some((t) => t.recurrence_paused)
+
+      let nextDue = null
+      if (active) {
+        nextDue = active.due_date || null
+      } else if (lastCompleted) {
+        nextDue = computeNextDue(db, lastCompleted, today)
+      }
+
+      let status = 'waiting'
+      if (isPaused) status = 'paused'
+      else if (active) status = 'open'
+
+      const intervalDays =
+        s.rec.mode === 'completion'
+          ? adaptiveInterval(completionDates(db, s.group_id), s.rec.interval)
+          : s.rec.interval * (s.rec.freq === 'daily' ? 1 : s.rec.freq === 'weekly' ? 7 : 30)
+
+      result.push({
+        group_id: s.group_id,
+        title: s.title,
+        project: { id: s.project_id, name: s.project_name, color: s.project_color },
+        recurrence: s.rec,
+        active_task_id: active ? active.id : null,
+        next_due: nextDue,
+        status,
+        effective_interval_days: intervalDays,
+        last_completed_at: lastCompleted ? lastCompleted.updated_at : null,
+      })
+    }
+
+    return c.json({ series: result })
+  })
+
+  // Pausar/reanudar una serie recurrente. Afecta a la instancia activa (o se
+  // almacena en el grupo para futuras instancias si no hay activa ahora).
+  app.post('/api/tasks/recurring/:id/pause', zValidator('param', idParamSchema, validationHook), (c) => {
+    const db = c.get('db')
+    const user = c.get('user')
+    const groupId = c.req.valid('param').id
+    const rows = db
+      .prepare(
+        `SELECT t.* FROM tasks t
+         JOIN project_members pm ON pm.project_id = t.project_id
+         WHERE t.recurrence_group_id = ? AND pm.user_id = ? AND t.deleted_at IS NULL`
+      )
+      .all(groupId, user.id)
+    if (rows.length === 0) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
+    db.prepare('UPDATE tasks SET recurrence_paused = 1 WHERE recurrence_group_id = ?').run(groupId)
+    hub.broadcast('tasks')
+    return c.body(null, 204)
+  })
+
+  app.post('/api/tasks/recurring/:id/resume', zValidator('param', idParamSchema, validationHook), (c) => {
+    const db = c.get('db')
+    const user = c.get('user')
+    const groupId = c.req.valid('param').id
+    const rows = db
+      .prepare(
+        `SELECT t.* FROM tasks t
+         JOIN project_members pm ON pm.project_id = t.project_id
+         WHERE t.recurrence_group_id = ? AND pm.user_id = ? AND t.deleted_at IS NULL`
+      )
+      .all(groupId, user.id)
+    if (rows.length === 0) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
+    db.prepare('UPDATE tasks SET recurrence_paused = 0 WHERE recurrence_group_id = ?').run(groupId)
+    hub.broadcast('tasks')
+    return c.body(null, 204)
   })
 
   // Desarchivar: la tarea vuelve al final de 'hecho' con ventana fresca de

@@ -77,6 +77,7 @@ export interface Task {
   due_date: string | null; // YYYY-MM-DD
   recurrence: TaskRecurrence | null;
   recurrence_group_id: string | null;
+  recurrence_paused: boolean;
   assignee_id: string | null;
   assignee: TaskAssignee | null;
   created_by: string;

@@ -250,4 +250,57 @@ describe('recurrence — integración API', () => {
     expect(task2.recurrence).toBeNull()
     expect(task2.recurrence_group_id).toBeNull()
   })
+
+  it('GET /api/tasks/recurring lista series con instancia activa y próxima fecha', async () => {
+    const { app, auth, project } = await setup()
+    const t = await createTask(app, auth, project.id, {
+      due_date: '2026-09-01',
+      recurrence: { freq: 'daily', interval: 1, mode: 'due' },
+    })
+    const res = await app.request('/api/tasks/recurring', { headers: { cookie: auth.cookie } })
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.series).toHaveLength(1)
+    const s = body.series[0]
+    expect(s.group_id).toBe(t.id)
+    expect(s.active_task_id).toBe(t.id)
+    expect(s.status).toBe('open')
+    expect(s.recurrence.freq).toBe('daily')
+  })
+
+  it('GET /api/tasks/recurring muestra waiting cuando no hay instancia activa', async () => {
+    const { app, auth, project } = await setup()
+    const t = await createTask(app, auth, project.id, {
+      column: 'hecho',
+      due_date: '2026-09-01',
+      recurrence: { freq: 'daily', interval: 1, mode: 'due' },
+    })
+    const res = await app.request('/api/tasks/recurring', { headers: { cookie: auth.cookie } })
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.series[0].status).toBe('waiting')
+    expect(body.series[0].active_task_id).toBeNull()
+  })
+
+  it('pausar/reanudar serie actualiza recurrence_paused y evita nueva instancia', async () => {
+    const { app, auth, project } = await setup()
+    const t = await createTask(app, auth, project.id, {
+      due_date: '2026-09-01',
+      recurrence: { freq: 'daily', interval: 1, mode: 'due' },
+    })
+    const pause = await app.request(`/api/tasks/recurring/${t.id}/pause`, jsonReq(auth, 'POST', '', {}))
+    expect(pause.status).toBe(204)
+    const list = await (await app.request('/api/tasks/recurring', { headers: { cookie: auth.cookie } })).json()
+    expect(list.series[0].status).toBe('paused')
+
+    await app.request(`/api/tasks/${t.id}/move`, jsonReq(auth, 'POST', '', { column: 'hecho', position: 0 }))
+    const boot = await (await app.request('/api/bootstrap', { headers: { cookie: auth.cookie } })).json()
+    const next = boot.tasks.find((x) => x.recurrence_group_id === t.id && x.column === 'nuevo')
+    expect(next).toBeUndefined()
+
+    const resume = await app.request(`/api/tasks/recurring/${t.id}/resume`, jsonReq(auth, 'POST', '', {}))
+    expect(resume.status).toBe(204)
+    const resumed = await (await app.request('/api/tasks/recurring', { headers: { cookie: auth.cookie } })).json()
+    expect(resumed.series[0].status).toBe('waiting')
+  })
 })
