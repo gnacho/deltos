@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, Navigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
-import { Plus, Settings2, ChevronDown } from 'lucide-react';
+import { Plus, Settings2, ChevronDown, Repeat } from 'lucide-react';
 import type { ColumnId, Task } from '@/data/types';
 import { useData } from '@/data/data-context';
 import { useSession } from '@/auth/session-context';
@@ -31,6 +31,7 @@ export default function BoardPage() {
   const [filters, setFilters] = useState<FilterState>(emptyFilters);
   const [scope, setScope] = useState<'all' | 'mine' | 'others'>('all');
   const [seg, setSeg] = useState<ColumnId>('nuevo');
+  const [recurringOnly, setRecurringOnly] = useState(false);
   const [projectActionsOpen, setProjectActionsOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
@@ -91,13 +92,14 @@ export default function BoardPage() {
     if (scope === 'mine') list = list.filter((tk) => tk.assignee_id === me.id);
     else if (scope === 'others')
       list = list.filter((tk) => tk.assignee_id !== null && tk.assignee_id !== me.id);
+    if (recurringOnly) list = list.filter((tk) => tk.recurrence);
     return {
       visible: list.filter((tk) => !tk.archived_at),
       archivedList: list
         .filter((tk) => tk.archived_at && tk.column === 'hecho')
         .sort((a, b) => a.position - b.position),
     };
-  }, [tasks, isTodo, view, filters, scope, me.id]);
+  }, [tasks, isTodo, view, filters, scope, recurringOnly, me.id]);
 
   const byColumn = useMemo(() => {
     const map = new Map<ColumnId, Task[]>();
@@ -267,6 +269,19 @@ export default function BoardPage() {
               );
             })}
           </div>
+          <button
+            type="button"
+            aria-pressed={recurringOnly}
+            onClick={() => setRecurringOnly((v) => !v)}
+            className={`inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-[13px] font-medium transition-colors ${
+              recurringOnly
+                ? 'bg-brand/10 text-brand shadow-soft'
+                : 'text-muted hover:text-text bg-surface2'
+            }`}
+          >
+            <Repeat className="w-4 h-4" aria-hidden="true" />
+            <span className="hidden sm:inline">{t('board.recurringOnly')}</span>
+          </button>
           {isTodo && (
             <FiltersToggleButton
               activeCount={filtersOpen ? 0 : activeFilterCount}
