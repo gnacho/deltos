@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronRight, ListTodo, CalendarClock } from 'lucide-react';
+import { Archive, CalendarClock, ChevronRight, ListTodo } from 'lucide-react';
 import type { Expense, Task } from '@/data/types';
 import { useData } from '@/data/data-context';
 import { useSession } from '@/auth/session-context';
@@ -11,6 +11,7 @@ import { colorOf } from '@/lib/colors';
 import { fmtMoney } from '@/lib/format';
 import { parseISODate, fmtFullDate } from '@/i18n';
 import ActivityFeed from '@/components/ActivityFeed';
+import { apiPost } from '@/data/api-client';
 
 type Tab = 'reminders' | 'activity';
 
@@ -90,6 +91,7 @@ export default function SummaryPage() {
   const { openTask } = useTaskModal();
   const [tab, setTab] = useState<Tab>('reminders');
   const [detailExpense, setDetailExpense] = useState<string | null>(null);
+  const [archiving, setArchiving] = useState<Set<string>>(new Set());
 
   const today = useMemo(() => {
     const d = new Date();
@@ -116,6 +118,20 @@ export default function SummaryPage() {
   const openExpense = (id: string) => {
     data.refreshExpenseDetail(id);
     setDetailExpense(id);
+  };
+
+  const archiveTask = async (task: Task) => {
+    if (archiving.has(task.id)) return;
+    setArchiving((prev) => new Set(prev).add(task.id));
+    try {
+      await apiPost(`/api/tasks/${task.id}/done-and-archive`, {});
+    } finally {
+      setArchiving((prev) => {
+        const next = new Set(prev);
+        next.delete(task.id);
+        return next;
+      });
+    }
   };
 
   return (
@@ -189,12 +205,19 @@ export default function SummaryPage() {
                       {bucket.tasks.map((task) => {
                         const project = data.getProject(task.project_id);
                         return (
-                          <button
+                          <div
                             key={task.id}
-                            type="button"
+                            role="button"
+                            tabIndex={0}
                             onClick={() => openTask(task.id, 'detalles')}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                openTask(task.id, 'detalles');
+                              }
+                            }}
                             aria-label={t('task.openDetail', { title: task.title })}
-                            className="card w-full text-left rounded-2xl bg-surface border border-app shadow-soft px-4 py-3 flex items-center gap-3"
+                            className="card w-full text-left rounded-2xl bg-surface border border-app shadow-soft px-4 py-3 flex items-center gap-3 cursor-pointer"
                           >
                             <span
                               className={`w-1.5 h-10 rounded-full shrink-0 ${colorOf(project?.color ?? 'slate').dot}`}
@@ -210,7 +233,20 @@ export default function SummaryPage() {
                               </span>
                             </span>
                             <ChevronRight className="w-4 h-4 text-faint shrink-0" aria-hidden="true" />
-                          </button>
+                            <button
+                              type="button"
+                              aria-label={t('summary.tasks.archiveAria', { title: task.title })}
+                              title={t('summary.tasks.archive')}
+                              disabled={archiving.has(task.id)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void archiveTask(task);
+                              }}
+                              className="shrink-0 p-1.5 rounded-lg text-faint hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10 disabled:opacity-50 transition-colors"
+                            >
+                              <Archive className="w-4 h-4" aria-hidden="true" />
+                            </button>
+                          </div>
                         );
                       })}
                     </div>

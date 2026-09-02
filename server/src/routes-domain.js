@@ -829,6 +829,53 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
     return c.json({ task: hydrateTasks(db, 't.id = ?', [task.id])[0] })
   })
 
+  // Completar y archivar en un paso: útil para limpiar recordatorios desde el
+  // Resumen. Si la tarea no está en 'hecho' se mueve primero (con recurrencia),
+  // luego se archiva. Idempotente si ya estaba archivada.
+  app.post('/api/tasks/:id/done-and-archive', zValidator('param', idParamSchema, validationHook), (c) => {
+    const db = c.get('db')
+    const user = c.get('user')
+    const task = getTask(db, c.req.valid('param').id)
+    if (!task) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
+    requireMember(db, user.id, task.project_id)
+    if (task.archived_at) return c.json({ task: hydrateTasks(db, 't.id = ?', [task.id])[0] })
+
+    const now = Date.now()
+    let archivePos = task.position
+    const tx = db.transaction(() => {
+      if (task.column !== 'hecho') {
+        // compactar columna origen y mover a hecho al final
+        db.prepare(
+          'UPDATE tasks SET position = position - 1 WHERE "column" = ? AND position > ? AND archived_at IS NULL AND deleted_at IS NULL'
+        ).run(task.column, task.position)
+        archivePos = db
+          .prepare(
+            'SELECT COALESCE(MAX(position) + 1, 0) AS p FROM tasks WHERE "column" = ? AND archived_at IS NULL AND deleted_at IS NULL'
+          )
+          .get('hecho').p
+        db.prepare(
+          'UPDATE tasks SET "column" = ?, position = ?, updated_at = ?, done_at = ?, archived_at = NULL WHERE id = ?'
+        ).run('hecho', archivePos, now, now, task.id)
+        addEvent(db, task.id, user.id, 'moved', { from: task.column, to: 'hecho' })
+      }
+      // archivar
+      db.prepare('UPDATE tasks SET archived_at = ? WHERE id = ?').run(now, task.id)
+      db.prepare(
+        'UPDATE tasks SET position = position - 1 WHERE "column" = ? AND position > ? AND archived_at IS NULL AND deleted_at IS NULL'
+      ).run('hecho', archivePos)
+    })
+    tx()
+
+    // Recurrencia: al completar (si no estaba ya en hecho) y si es recurrente,
+    // se crea la siguiente instancia en 'nuevo'.
+    if (task.column !== 'hecho' && task.recurrence) {
+      createRecurringInstance(db, task, user.id)
+    }
+
+    hub.broadcast('tasks')
+    return c.json({ task: hydrateTasks(db, 't.id = ?', [task.id])[0] })
+  })
+
   // Desarchivar: la tarea vuelve al final de 'hecho' con ventana fresca de
   // 3 días antes de que el auto-archivo la vuelva a archivar.
   app.post('/api/tasks/:id/unarchive', zValidator('param', idParamSchema, validationHook), (c) => {
