@@ -558,6 +558,13 @@
         "tokenLabel": "Token (muéstralo una vez)",
         "tokenHint": "Copia el token y úsalo como Bearer en la integración REST de Home Assistant. Si lo pierdes, genera uno nuevo (revoca el anterior).",
         "error": "No se pudo gestionar la integración con Home Assistant"
+      },
+      "archive": {
+        "button": "Archivo",
+        "title": "Archivado automático",
+        "hint": "Días antes de archivar tareas y gastos terminados.",
+        "days": "Archivar tras",
+        "daysUnit": "días"
       }
     },
     "about": {

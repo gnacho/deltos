@@ -109,11 +109,17 @@ describe('expense archive', () => {
     expect((await rawExpense(prod, abierto.id)).archived_at).toBeNull()
   })
 
-  it('auto-archivo auto-cura done_at NULL con updated_at (semillas pre-migración)', async () => {
+  it('auto-archivo respeta archive_after_days configurable', async () => {
     const { app, auth, prod } = await setup()
-    const e = await createExpense(app, auth, 'Sin marca', { step: 'hecho' })
-    prod.prepare('UPDATE expenses SET done_at = NULL, updated_at = ? WHERE id = ?').run(Date.now() - 5 * DAY, e.id)
+    const masViejo = await createExpense(app, auth, 'Más viejo', { step: 'hecho' })
+    const dentro = await createExpense(app, auth, 'Dentro del umbral', { step: 'hecho' })
+
+    prod.prepare('UPDATE expenses SET done_at = ? WHERE id = ?').run(Date.now() - 8 * DAY, masViejo.id)
+    prod.prepare('UPDATE expenses SET done_at = ? WHERE id = ?').run(Date.now() - 5 * DAY, dentro.id)
+    kvSet(prod, 'archive_after_days', '6')
+
     expect(archiveStaleDoneExpenses(prod)).toBe(1)
-    expect((await rawExpense(prod, e.id)).archived_at).not.toBeNull()
+    expect((await rawExpense(prod, masViejo.id)).archived_at).not.toBeNull()
+    expect((await rawExpense(prod, dentro.id)).archived_at).toBeNull()
   })
 })

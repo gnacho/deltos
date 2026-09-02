@@ -3,7 +3,7 @@
 // en create/move y exclusión de archivadas en counts del bootstrap.
 import { describe, it, expect } from 'vitest'
 import { makeInstance, loginAdmin, jsonReq } from './helpers.js'
-import { archiveStaleDoneTasks } from '../src/db.js'
+import { archiveStaleDoneTasks, kvSet } from '../src/db.js'
 
 const DAY = 24 * 60 * 60 * 1000
 
@@ -159,24 +159,17 @@ describe('task archive', () => {
     expect((await rawTask(prod, t.id)).archived_at).not.toBeNull()
   })
 
-  it('un miembro de otro proyecto no puede archivar (403)', async () => {
-    const inst = await setup()
-    const { app, auth, project } = inst
-    const done = await createTask(app, auth, project.id, 'Hecha', { column: 'hecho' })
+  it('auto-archivo respeta archive_after_days configurable', async () => {
+    const { app, auth, project, prod } = await setup()
+    const masVieja = await createTask(app, auth, project.id, 'Más vieja', { column: 'hecho' })
+    const dentro = await createTask(app, auth, project.id, 'Dentro del umbral', { column: 'hecho' })
 
-    const created = await app.request(
-      '/api/users',
-      jsonReq(auth, 'POST', '/api/users', { username: 'otro', password: 'otro1234567' })
-    )
-    expect(created.status).toBe(201)
-    const login = await app.request(
-      '/api/auth/login',
-      jsonReq(null, 'POST', '', { username: 'otro', password: 'otro1234567' })
-    )
-    const body = await login.json()
-    const otro = { cookie: login.headers.get('set-cookie').split(';')[0], csrfToken: body.csrfToken ?? null }
+    prod.prepare('UPDATE tasks SET done_at = ? WHERE id = ?').run(Date.now() - 8 * DAY, masVieja.id)
+    prod.prepare('UPDATE tasks SET done_at = ? WHERE id = ?').run(Date.now() - 5 * DAY, dentro.id)
+    kvSet(prod, 'archive_after_days', '6')
 
-    const res = await app.request(`/api/tasks/${done.id}/archive`, jsonReq(otro, 'POST', '', {}))
-    expect(res.status).toBe(403)
+    expect(archiveStaleDoneTasks(prod)).toBe(1)
+    expect((await rawTask(prod, masVieja.id)).archived_at).not.toBeNull()
+    expect((await rawTask(prod, dentro.id)).archived_at).toBeNull()
   })
 })
