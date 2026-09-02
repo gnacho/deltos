@@ -758,6 +758,8 @@
     "tasks.today": "Vencen hoy",
     "tasks.upcoming": "Próximas",
     "tasks.highPriority": "Prioridad alta",
+    "tasks.archive": "Archivar",
+    "tasks.archiveAria": "Archivar tarea {{title}}",
     "expenses.heading": "Gastos",
     "expenses.empty": "Sin gastos pendientes.",
     "expenses.youOwe": "Debes",

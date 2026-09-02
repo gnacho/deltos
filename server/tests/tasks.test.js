@@ -14,8 +14,8 @@ async function setup() {
   return { ...inst, auth, project }
 }
 
-async function createTask(app, auth, project_id, title) {
-  const res = await app.request('/api/tasks', jsonReq(auth, 'POST', '/api/tasks', { project_id, title }))
+async function createTask(app, auth, project_id, title, extra = {}) {
+  const res = await app.request('/api/tasks', jsonReq(auth, 'POST', '/api/tasks', { project_id, title, ...extra }))
   expect(res.status).toBe(201)
   return (await res.json()).task
 }
@@ -244,6 +244,53 @@ describe('tasks', () => {
     expect(page2.items[0].type).toBe('created')
     expect(page2.hasMore).toBe(false)
     expect(page2.nextCursor).toBeNull()
+  })
+
+  it('done-and-archive: completa, archiva y compacta posiciones', async () => {
+    const { app, auth, project, prod } = await setup()
+    const a = await createTask(app, auth, project.id, 'A')
+    const b = await createTask(app, auth, project.id, 'B')
+    const res = await app.request(`/api/tasks/${a.id}/done-and-archive`, jsonReq(auth, 'POST', '', {}))
+    expect(res.status).toBe(200)
+    const row = prod.prepare('SELECT * FROM tasks WHERE id = ?').get(a.id)
+    expect(row.column).toBe('hecho')
+    expect(row.archived_at).not.toBeNull()
+    expect(row.done_at).not.toBeNull()
+    // B ha quedado en posición 0 de 'nuevo'
+    expect(prod.prepare('SELECT position FROM tasks WHERE id = ?').get(b.id).position).toBe(0)
+  })
+
+  it('done-and-archive en tarea ya hecha solo la archiva', async () => {
+    const { app, auth, project, prod } = await setup()
+    const a = await createTask(app, auth, project.id, 'A')
+    await app.request(`/api/tasks/${a.id}/move`, jsonReq(auth, 'POST', '', { column: 'hecho', position: 0 }))
+    const res = await app.request(`/api/tasks/${a.id}/done-and-archive`, jsonReq(auth, 'POST', '', {}))
+    expect(res.status).toBe(200)
+    const row = prod.prepare('SELECT * FROM tasks WHERE id = ?').get(a.id)
+    expect(row.archived_at).not.toBeNull()
+  })
+
+  it('done-and-archive genera instancia recurrente', async () => {
+    const { app, auth, project, prod } = await setup()
+    const t = await createTask(app, auth, project.id, 'R', {
+      due_date: '2026-09-01',
+      recurrence: { freq: 'daily', interval: 1, mode: 'due' },
+    })
+    const res = await app.request(`/api/tasks/${t.id}/done-and-archive`, jsonReq(auth, 'POST', '', {}))
+    expect(res.status).toBe(200)
+    const group = prod.prepare('SELECT COUNT(*) AS n FROM tasks WHERE recurrence_group_id = ?').get(t.id).n
+    expect(group).toBe(2) // original archivada + nueva instancia
+  })
+
+  it('done-and-archive rechaza tarea inexistente y ajenos', async () => {
+    const { app, auth, project } = await setup()
+    const t = await createTask(app, auth, project.id, 'Privada')
+    await app.request('/api/users', jsonReq(auth, 'POST', '/api/users', { username: 'otro', password: 'otro1234567' }))
+    const login = await app.request('/api/auth/login', jsonReq(null, 'POST', '', { username: 'otro', password: 'otro1234567' }))
+    const body = await login.json()
+    const otro = { cookie: login.headers.get('set-cookie').split(';')[0], csrfToken: body.csrfToken ?? null }
+    const res = await app.request(`/api/tasks/${t.id}/done-and-archive`, jsonReq(otro, 'POST', '', {}))
+    expect(res.status).toBe(403)
   })
 
   it('validación: título vacío y fecha mal formada → 422', async () => {

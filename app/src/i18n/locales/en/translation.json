@@ -758,6 +758,8 @@
     "tasks.today": "Due today",
     "tasks.upcoming": "Upcoming",
     "tasks.highPriority": "High priority",
+    "tasks.archive": "Archive",
+    "tasks.archiveAria": "Archive task {{title}}",
     "expenses.heading": "Expenses",
     "expenses.empty": "No pending expenses.",
     "expenses.youOwe": "You owe",
