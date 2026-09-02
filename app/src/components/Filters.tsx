@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Funnel, ChevronDown, X } from 'lucide-react';
+import { Funnel, ChevronDown, X, Check, Search } from 'lucide-react';
 import type { Priority } from '@/data/types';
 import { emptyFilters, type FilterState } from '@/components/filters-state';
 import { useData } from '@/data/data-context';
@@ -73,8 +73,136 @@ function Chip({
   );
 }
 
+/** Desplegable multi-selección para grupos largos (proyectos, etiquetas):
+ *  botón con contador + popover con búsqueda cuando la lista crece. */
+function FilterDropdown({
+  label,
+  items,
+  selected,
+  onToggle,
+  onClear,
+}: {
+  label: string;
+  items: { id: string; name: string; color: string }[];
+  selected: Set<string>;
+  onToggle: (id: string) => void;
+  onClear: () => void;
+}) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const showSearch = items.length > 8;
+  const filtered = query
+    ? items.filter((i) => i.name.toLowerCase().includes(query.toLowerCase()))
+    : items;
+
+  return (
+    <div className="relative" onKeyDown={(e) => e.key === 'Escape' && setOpen(false)}>
+      <button
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs ${
+          selected.size
+            ? 'bg-brand/10 border border-brand/40 text-brand font-medium'
+            : 'bg-surface border border-app text-muted hover:bg-surface2'
+        }`}
+      >
+        {label}
+        {selected.size > 0 && (
+          <span className="tnum px-1.5 rounded-full bg-brand text-brandfg text-[10px] font-semibold">
+            {selected.size}
+          </span>
+        )}
+        <ChevronDown
+          className={`w-3.5 h-3.5 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+          aria-hidden="true"
+        />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} aria-hidden="true" />
+          <div
+            role="listbox"
+            aria-multiselectable="true"
+            aria-label={label}
+            className="absolute z-30 left-0 mt-1.5 w-72 max-w-[calc(100vw-3rem)] rounded-xl bg-surface border border-app shadow-2xl p-2"
+          >
+            {showSearch && (
+              <div className="relative mb-1.5">
+                <Search
+                  className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-faint"
+                  aria-hidden="true"
+                />
+                <input
+                  type="text"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder={t('filters.search')}
+                  aria-label={t('filters.search')}
+                  className="w-full bg-surface2 border border-app rounded-lg pl-8 pr-2.5 py-1.5 text-[13px] outline-none focus:border-brand"
+                />
+              </div>
+            )}
+            <ul className="max-h-56 overflow-y-auto nice-scroll">
+              {filtered.map((item) => {
+                const active = selected.has(item.id);
+                return (
+                  <li key={item.id} role="option" aria-selected={active}>
+                    <button
+                      type="button"
+                      onClick={() => onToggle(item.id)}
+                      className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-surface2 text-left text-[13px]"
+                    >
+                      <span
+                        className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
+                          active
+                            ? 'bg-brand border-brand text-brandfg'
+                            : 'border-app text-transparent'
+                        }`}
+                        aria-hidden="true"
+                      >
+                        <Check className="w-3 h-3" />
+                      </span>
+                      <span
+                        className={`w-2 h-2 rounded-full shrink-0 ${colorOf(item.color).dot}`}
+                        aria-hidden="true"
+                      />
+                      <span className="flex-1 truncate">{item.name}</span>
+                    </button>
+                  </li>
+                );
+              })}
+              {filtered.length === 0 && (
+                <li className="px-2.5 py-3 text-center text-xs text-faint" aria-live="polite">
+                  {t('filters.noResults')}
+                </li>
+              )}
+            </ul>
+            {selected.size > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClear();
+                  setOpen(false);
+                }}
+                className="w-full mt-1 inline-flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-[12px] font-medium text-muted hover:bg-surface2 hover:text-text"
+              >
+                <X className="w-3 h-3" aria-hidden="true" />
+                {t('filters.clearGroup', { count: selected.size })}
+              </button>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 /** Barra de filtros de la vista Todo: panel colapsable en móvil, siempre visible en desktop.
- *  Incluye el toggle "Mis tareas" en la misma barra. */
+ *  Proyectos y etiquetas van en desplegables (escalan con listas largas);
+ *  personas y prioridades quedan como chips (conjuntos acotados). */
 export function Filters({
   filters,
   onChange,
@@ -118,22 +246,12 @@ export function Filters({
     onChange(next);
   };
 
-  const groups = useMemo(
+  const clearGroup = (group: keyof FilterState) => {
+    onChange({ ...filters, [group]: new Set() } as FilterState);
+  };
+
+  const chipGroups = useMemo(
     () => [
-      {
-        label: t('filters.project'),
-        chips: projects.map((p) => (
-          <Chip
-            key={p.id}
-            active={filters.projects.has(p.id)}
-            color={p.color}
-            onClick={() => toggle('projects', p.id)}
-          >
-            <span className={`w-2 h-2 rounded-full ${colorOf(p.color).dot}`} aria-hidden="true" />
-            {p.name}
-          </Chip>
-        )),
-      },
       {
         label: t('filters.person'),
         chips: [
@@ -178,23 +296,9 @@ export function Filters({
           );
         }),
       },
-      {
-        label: t('filters.label'),
-        chips: labels.map((l) => (
-          <Chip
-            key={l.id}
-            active={filters.tags.has(l.id)}
-            color={l.color}
-            onClick={() => toggle('tags', l.id)}
-          >
-            <span className={`w-2 h-2 rounded-full ${colorOf(l.color).dot}`} aria-hidden="true" />
-            {l.name}
-          </Chip>
-        )),
-      },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [t, projects, users, labels, filters],
+    [t, users, filters],
   );
 
   return (
@@ -231,7 +335,14 @@ export function Filters({
       >
         <div className="min-h-0 overflow-hidden">
           <div className="rounded-2xl bg-surface border border-app p-3.5 flex flex-wrap items-center gap-x-4 gap-y-2.5">
-            {groups.map((g) => (
+            <FilterDropdown
+              label={t('filters.project')}
+              items={projects.map((p) => ({ id: p.id, name: p.name, color: p.color }))}
+              selected={filters.projects}
+              onToggle={(id) => toggle('projects', id)}
+              onClear={() => clearGroup('projects')}
+            />
+            {chipGroups.map((g) => (
               <div key={g.label} className="flex items-center gap-1.5 flex-wrap">
                 <span className="text-[11px] font-semibold tracking-wide uppercase text-faint mr-0.5">
                   {g.label}
@@ -239,6 +350,13 @@ export function Filters({
                 {g.chips}
               </div>
             ))}
+            <FilterDropdown
+              label={t('filters.label')}
+              items={labels.map((l) => ({ id: l.id, name: l.name, color: l.color }))}
+              selected={filters.tags}
+              onToggle={(id) => toggle('tags', id)}
+              onClear={() => clearGroup('tags')}
+            />
             {activeCount > 0 && (
               <button
                 type="button"

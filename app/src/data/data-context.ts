@@ -55,6 +55,8 @@ export interface DataApi {
   createTask: (input: CreateTaskInput) => Promise<Task>;
   patchTask: (id: string, patch: TaskPatch) => Promise<void>;
   moveTask: (id: string, column: string, position: number) => Promise<void>;
+  archiveTask: (id: string) => Promise<void>;
+  unarchiveTask: (id: string) => Promise<void>;
   deleteTask: (id: string) => Promise<void>;
   parseTaskText: (text: string, lang: 'es' | 'en') => Promise<{
     parsed: boolean;

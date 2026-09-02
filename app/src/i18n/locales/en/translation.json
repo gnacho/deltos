@@ -85,7 +85,12 @@
     "scopeAria": "Board scope",
     "scopeAll": "All",
     "scopeMine": "Mine",
-    "scopeOthers": "Others"
+    "scopeOthers": "Others",
+    "showArchived": "Show archived ({{count}})",
+    "hideArchived": "Hide archived",
+    "archivedListAria": "Archived tasks",
+    "taskArchived": "Task \"{{title}}\" archived",
+    "taskUnarchived": "Task \"{{title}}\" unarchived"
   },
   "filters": {
     "toggle": "Filters",
@@ -94,7 +99,10 @@
     "priority": "Priority",
     "label": "Label",
     "unassigned": "Unassigned",
-    "clear": "Clear filters ({{count}})"
+    "clear": "Clear filters ({{count}})",
+    "search": "Search…",
+    "noResults": "No results",
+    "clearGroup": "Clear filters ({{count}})"
   },
   "task": {
     "tabs": {
@@ -134,6 +142,11 @@
     "notFound": "Task not found",
     "openDetail": "Open details of {{title}}",
     "noProject": "No project",
+    "archive": "Archive",
+    "unarchive": "Unarchive",
+    "archived": "Archived",
+    "archiveAria": "Archive {{title}}",
+    "unarchiveAria": "Unarchive {{title}}",
     "recurrence": "Repeats",
     "recurrenceAdd": "Repeat this task",
     "recurrenceOff": "Stop repeating",

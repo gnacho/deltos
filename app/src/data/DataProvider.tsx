@@ -219,6 +219,24 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [fetchBootstrap, fetchDetail],
   );
 
+  const archiveTask = useCallback(
+    async (id: string): Promise<void> => {
+      await apiPost<{ task: Task }>(`/api/tasks/${encodeURIComponent(id)}/archive`, {});
+      await fetchBootstrap();
+      if (detailCache.current.has(id)) await fetchDetail(id);
+    },
+    [fetchBootstrap, fetchDetail],
+  );
+
+  const unarchiveTask = useCallback(
+    async (id: string): Promise<void> => {
+      await apiPost<{ task: Task }>(`/api/tasks/${encodeURIComponent(id)}/unarchive`, {});
+      await fetchBootstrap();
+      if (detailCache.current.has(id)) await fetchDetail(id);
+    },
+    [fetchBootstrap, fetchDetail],
+  );
+
   const deleteTask = useCallback(
     async (id: string): Promise<void> => {
       await apiDelete(`/api/tasks/${encodeURIComponent(id)}`);
@@ -475,6 +493,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       createTask,
       patchTask,
       moveTask,
+      archiveTask,
+      unarchiveTask,
       deleteTask,
       parseTaskText,
       addSubtask,

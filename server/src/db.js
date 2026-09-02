@@ -87,7 +87,9 @@ CREATE TABLE IF NOT EXISTS tasks (
   updated_at INTEGER NOT NULL,
   deleted_at INTEGER,
   recurrence TEXT,  -- JSON: {freq, interval, weekdays?, mode} o NULL
-  recurrence_group_id TEXT  -- id de la primera instancia de la serie recurrente
+  recurrence_group_id TEXT,  -- id de la primera instancia de la serie recurrente
+  done_at INTEGER,       -- epoch ms de la última entrada en 'hecho' (para auto-archivo)
+  archived_at INTEGER    -- epoch ms de archivado; NULL = tarea activa en el tablero
 );
 
 CREATE TABLE IF NOT EXISTS task_labels (
@@ -363,6 +365,14 @@ export function migrateSchema(db) {
     db.exec('ALTER TABLE tasks ADD COLUMN recurrence_group_id TEXT')
     log.info('schema_migrated', { table: 'tasks', column: 'recurrence_group_id' })
   }
+  if (!taskCols.includes('done_at')) {
+    db.exec('ALTER TABLE tasks ADD COLUMN done_at INTEGER')
+    log.info('schema_migrated', { table: 'tasks', column: 'done_at' })
+  }
+  if (!taskCols.includes('archived_at')) {
+    db.exec('ALTER TABLE tasks ADD COLUMN archived_at INTEGER')
+    log.info('schema_migrated', { table: 'tasks', column: 'archived_at' })
+  }
   // Project membership: owner_id en projects + backfill de project_members.
   // Los proyectos existentes (creados antes de esta feature) no tenían
   // membresía: para no dejarlos invisibles, sembramos a TODOS los usuarios
@@ -464,6 +474,46 @@ export function hourlyMaintenance(db, label) {
 export function kvGet(db, key, fallback = null) {
   const row = db.prepare('SELECT value FROM kv WHERE key = ?').get(key)
   return row ? row.value : fallback
+}
+
+// Auto-archivo: las tareas de 'hecho' llevan más de ARCHIVE_AFTER_DAYS días
+// completadas → archived_at (desaparecen del tablero; se recuperan con
+// "mostrar archivadas"). Llamado desde index.js al arrancar y cada hora.
+// Devuelve el número de tareas archivadas (0 si no tocaba).
+// El primer UPDATE auto-cura done_at de tareas 'hecho' sin marca (semillas
+// demo nuevas o BDs pre-migración): les da updated_at como fecha de entrada.
+export const ARCHIVE_AFTER_DAYS = 3
+
+export function archiveStaleDoneTasks(db) {
+  const cutoff = Date.now() - ARCHIVE_AFTER_DAYS * 24 * 60 * 60 * 1000
+  const tx = db.transaction(() => {
+    db.prepare(
+      `UPDATE tasks SET done_at = updated_at
+       WHERE "column" = 'hecho' AND done_at IS NULL AND archived_at IS NULL AND deleted_at IS NULL`
+    ).run()
+    const stale = db
+      .prepare(
+        `SELECT id, position FROM tasks
+         WHERE "column" = 'hecho' AND archived_at IS NULL AND deleted_at IS NULL
+           AND done_at IS NOT NULL AND done_at < ?`
+      )
+      .all(cutoff)
+    if (stale.length === 0) return 0
+    const now = Date.now()
+    const archive = db.prepare('UPDATE tasks SET archived_at = ? WHERE id = ?')
+    const compact = db.prepare(
+      `UPDATE tasks SET position = position - 1
+       WHERE "column" = ? AND position > ? AND archived_at IS NULL AND deleted_at IS NULL`
+    )
+    for (const t of stale) {
+      archive.run(now, t.id)
+      compact.run('hecho', t.position)
+    }
+    return stale.length
+  })
+  const archived = tx()
+  if (archived > 0) log.info('tasks_auto_archived', { count: archived })
+  return archived
 }
 
 export function kvSet(db, key, value) {
