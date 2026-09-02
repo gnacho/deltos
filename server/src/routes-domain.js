@@ -159,6 +159,7 @@ const serverSettingsSchema = z.object({
   backup_retention_days: z.number().int().min(1).max(365),
   max_attachments_per_task: z.number().int().min(5).max(50),
   plugin_expenses_enabled: z.boolean(),
+  archive_after_days: z.number().int().min(1).max(365),
 })
 
 // Query del feed de actividad: keyset por cursor opaco (sin page/offset).
@@ -1441,6 +1442,7 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
       backup_path: kvGet(prod, 'backup_path'),
       backup_timer_active: await isBackupTimerActive(),
       plugin_expenses_enabled: kvGet(prod, 'plugin_expenses_enabled', '0') === '1',
+      archive_after_days: parseInt(kvGet(prod, 'archive_after_days', '3'), 10),
     })
   })
 
@@ -1452,6 +1454,7 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
     kvSet(prod, 'backup_retention_days', String(data.backup_retention_days))
     kvSet(prod, 'max_attachments_per_task', String(data.max_attachments_per_task))
     kvSet(prod, 'plugin_expenses_enabled', data.plugin_expenses_enabled ? '1' : '0')
+    kvSet(prod, 'archive_after_days', String(data.archive_after_days))
     auditLog(prod, c.get('user').id, 'server_settings_changed', 'setting', 'server', data)
     hub.broadcast('settings')
     return c.json({
@@ -1459,6 +1462,7 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
       backup_retention_days: data.backup_retention_days,
       max_attachments_per_task: data.max_attachments_per_task,
       plugin_expenses_enabled: data.plugin_expenses_enabled,
+      archive_after_days: data.archive_after_days,
     })
   })
 

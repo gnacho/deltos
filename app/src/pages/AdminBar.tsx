@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  Archive,
   ChevronDown,
   Database,
   Download,
@@ -42,6 +43,7 @@ interface ServerSettings {
   backup_path: string | null;
   backup_timer_active: boolean;
   plugin_expenses_enabled: boolean;
+  archive_after_days: number;
 }
 
 function Card({ children, className }: { children: ReactNode; className?: string }) {
@@ -217,6 +219,7 @@ function BackupsPanel({ expanded }: { expanded: boolean }) {
         backup_retention_days: patch.backup_retention_days ?? settings.backup_retention_days,
         max_attachments_per_task: patch.max_attachments_per_task ?? settings.max_attachments_per_task,
         plugin_expenses_enabled: patch.plugin_expenses_enabled ?? settings.plugin_expenses_enabled,
+        archive_after_days: patch.archive_after_days ?? settings.archive_after_days,
       });
       setSettings(updated);
     } catch (err) {
@@ -302,6 +305,92 @@ function BackupsPanel({ expanded }: { expanded: boolean }) {
           {error && <p role="alert" className="text-[13px] font-medium text-rose-600 dark:text-rose-400">{error}</p>}
           {success && <p role="status" className="text-[13px] font-medium text-ok">{success}</p>}
         </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------- 4. Archivado automático ---------- */
+function ArchivePanel({ expanded }: { expanded: boolean }) {
+  const { t } = useTranslation();
+  const [settings, setSettings] = useState<ServerSettings | null>(null);
+  const [draft, setDraft] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!expanded) return;
+    let cancelled = false;
+    apiFetch<ServerSettings>('/api/settings/server')
+      .then((res) => {
+        if (!cancelled) {
+          setSettings(res);
+          setDraft(String(res.archive_after_days));
+        }
+      })
+      .catch(() => { if (!cancelled) setError(t('settings.server.saveError')); });
+    return () => { cancelled = true; };
+  }, [expanded, t]);
+
+  const save = async (value: string) => {
+    if (!settings || busy) return;
+    const n = parseInt(value, 10);
+    if (!Number.isFinite(n) || n < 1 || n > 365) {
+      setError(t('settings.server.saveError'));
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const updated = await apiPut<ServerSettings>('/api/settings/server', {
+        backup_enabled: settings.backup_enabled,
+        backup_retention_days: settings.backup_retention_days,
+        max_attachments_per_task: settings.max_attachments_per_task,
+        plugin_expenses_enabled: settings.plugin_expenses_enabled,
+        archive_after_days: n,
+      });
+      setSettings(updated);
+      setDraft(String(updated.archive_after_days));
+    } catch (err) {
+      setError(apiErrorText(err, t('settings.server.saveError')));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!expanded || !settings) return null;
+
+  return (
+    <div className="w-full mt-4 pt-4 border-t border-app">
+      <div className="flex flex-wrap items-end gap-4">
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="archive-days" className="text-[13px] text-muted">
+            {t('settings.admin.archive.days')}
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              id="archive-days"
+              type="number"
+              min={1}
+              max={365}
+              value={draft}
+              disabled={busy}
+              onChange={(e) => setDraft(e.target.value)}
+              onBlur={() => { if (draft !== String(settings.archive_after_days)) void save(draft); }}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void save(draft); } }}
+              className="w-20 bg-surface2 border border-app rounded-lg px-3 py-2 text-[14px] outline-none focus:border-brand disabled:opacity-60"
+            />
+            <span className="text-[13px] text-muted">{t('settings.admin.archive.daysUnit')}</span>
+          </div>
+        </div>
+        <p className="text-[12px] text-faint max-w-md">
+          {t('settings.admin.archive.hint')}
+        </p>
+      </div>
+      {error && (
+        <p role="alert" className="mt-3 text-[13px] font-medium text-rose-600 dark:text-rose-400">
+          {error}
+        </p>
       )}
     </div>
   );
@@ -687,6 +776,7 @@ export default function AdminBar() {
   const { user } = useSession();
   const upd = useAppUpdate(pkg.version, REPO_URL);
   const [showBackups, setShowBackups] = useState(false);
+  const [showArchive, setShowArchive] = useState(false);
   const [showUsers, setShowUsers] = useState(false);
   const [showHa, setShowHa] = useState(false);
 
@@ -755,6 +845,24 @@ export default function AdminBar() {
 
         <button
           type="button"
+          aria-label={t('settings.admin.archive.button')}
+          aria-expanded={showArchive}
+          onClick={() => setShowArchive((v) => !v)}
+          className={[
+            'inline-flex h-9 items-center gap-1.5 rounded-xl border px-3 text-[13px] font-medium transition-colors shrink-0',
+            showArchive ? activeBtnCls : inactiveBtnCls,
+          ].join(' ')}
+        >
+          <Archive className="w-4 h-4 shrink-0" aria-hidden="true" />
+          <span className="hidden sm:inline">{t('settings.admin.archive.button')}</span>
+          <ChevronDown
+            className={`w-3.5 h-3.5 shrink-0 transition-transform ${showArchive ? 'rotate-180' : ''}`}
+            aria-hidden="true"
+          />
+        </button>
+
+        <button
+          type="button"
           aria-label={t('settings.users.title')}
           aria-expanded={showUsers}
           onClick={() => setShowUsers((v) => !v)}
@@ -796,6 +904,7 @@ export default function AdminBar() {
 
       {/* Paneles desplegados */}
       <BackupsPanel expanded={showBackups} />
+      <ArchivePanel expanded={showArchive} />
       {showHa && (
         <div className="mt-4 border-t border-app pt-4">
           <HaPanel />

@@ -74,6 +74,7 @@ describe('audit log admin', () => {
       backup_retention_days: 14,
       max_attachments_per_task: 10,
       plugin_expenses_enabled: false,
+      archive_after_days: 7,
     }))
     const res = await app.request('/api/admin/audit', { headers: { cookie: auth.cookie } })
     const body = await res.json()

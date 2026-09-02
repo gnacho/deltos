@@ -17,6 +17,7 @@ describe('ajustes del servidor', () => {
     expect(body.backup_last_run).toBeNull()
     expect(typeof body.backup_timer_active).toBe('boolean')
     expect(body.plugin_expenses_enabled).toBe(false)
+    expect(body.archive_after_days).toBe(3)
   })
 
   it('GET /api/settings/server → 403 para usuario no-admin', async () => {
@@ -28,7 +29,7 @@ describe('ajustes del servidor', () => {
     expect(res.status).toBe(403)
   })
 
-  it('PUT /api/settings/server actualiza backup y adjuntos', async () => {
+  it('PUT /api/settings/server actualiza backup, adjuntos y archivado', async () => {
     const { app } = await makeInstance()
     const auth = await loginAdmin(app)
     const res = await app.request('/api/settings/server', jsonReq(auth, 'PUT', '/api/settings/server', {
@@ -36,12 +37,14 @@ describe('ajustes del servidor', () => {
       backup_retention_days: 30,
       max_attachments_per_task: 20,
       plugin_expenses_enabled: false,
+      archive_after_days: 14,
     }))
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.backup_enabled).toBe(false)
     expect(body.backup_retention_days).toBe(30)
     expect(body.max_attachments_per_task).toBe(20)
+    expect(body.archive_after_days).toBe(14)
   })
 
   it('PUT /api/settings/server valida límites', async () => {
@@ -52,6 +55,7 @@ describe('ajustes del servidor', () => {
       backup_retention_days: 0,
       max_attachments_per_task: 50,
       plugin_expenses_enabled: false,
+      archive_after_days: 3,
     }))
     expect(bad1.status).toBe(422)
 
@@ -60,8 +64,18 @@ describe('ajustes del servidor', () => {
       backup_retention_days: 7,
       max_attachments_per_task: 999,
       plugin_expenses_enabled: false,
+      archive_after_days: 3,
     }))
     expect(bad2.status).toBe(422)
+
+    const bad3 = await app.request('/api/settings/server', jsonReq(auth, 'PUT', '/api/settings/server', {
+      backup_enabled: true,
+      backup_retention_days: 7,
+      max_attachments_per_task: 50,
+      plugin_expenses_enabled: false,
+      archive_after_days: 0,
+    }))
+    expect(bad3.status).toBe(422)
   })
 
   it('POST /api/settings/backup/run ejecuta un backup manual', async () => {
@@ -86,6 +100,7 @@ describe('ajustes del servidor', () => {
       backup_retention_days: 7,
       max_attachments_per_task: 5,
       plugin_expenses_enabled: false,
+      archive_after_days: 3,
     }))
     const project = (
       await (await app.request('/api/projects', jsonReq(auth, 'POST', '', { name: 'Casa' }))).json()

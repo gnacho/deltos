@@ -486,16 +486,21 @@ export function kvGet(db, key, fallback = null) {
   return row ? row.value : fallback
 }
 
-// Auto-archivo: las tareas de 'hecho' llevan más de ARCHIVE_AFTER_DAYS días
-// completadas → archived_at (desaparecen del tablero; se recuperan con
-// "mostrar archivadas"). Llamado desde index.js al arrancar y cada hora.
-// Devuelve el número de tareas archivadas (0 si no tocaba).
+export function getArchiveAfterDays(db) {
+  const raw = kvGet(db, 'archive_after_days', '3')
+  const parsed = parseInt(raw, 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 3
+}
+
+// Auto-archivo: las tareas de 'hecho' llevan más de N días (configurable vía
+// archive_after_days, por defecto 3) completadas → archived_at (desaparecen del
+// tablero; se recuperan con "mostrar archivadas"). Llamado desde index.js al
+// arrancar y cada hora. Devuelve el número de tareas archivadas (0 si no tocaba).
 // El primer UPDATE auto-cura done_at de tareas 'hecho' sin marca (semillas
 // demo nuevas o BDs pre-migración): les da updated_at como fecha de entrada.
-export const ARCHIVE_AFTER_DAYS = 3
-
 export function archiveStaleDoneTasks(db) {
-  const cutoff = Date.now() - ARCHIVE_AFTER_DAYS * 24 * 60 * 60 * 1000
+  const days = getArchiveAfterDays(db)
+  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000
   const tx = db.transaction(() => {
     db.prepare(
       `UPDATE tasks SET done_at = updated_at
@@ -528,7 +533,8 @@ export function archiveStaleDoneTasks(db) {
 
 // Auto-archivo de GASTOS: espejo del de tareas, sobre el paso 'hecho' (Pagado).
 export function archiveStaleDoneExpenses(db) {
-  const cutoff = Date.now() - ARCHIVE_AFTER_DAYS * 24 * 60 * 60 * 1000
+  const days = getArchiveAfterDays(db)
+  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000
   const tx = db.transaction(() => {
     db.prepare(
       `UPDATE expenses SET done_at = updated_at
