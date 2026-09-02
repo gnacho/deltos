@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, Navigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
-import { Plus, Settings2 } from 'lucide-react';
+import { Plus, Settings2, ChevronDown } from 'lucide-react';
 import type { ColumnId, Task } from '@/data/types';
 import { useData } from '@/data/data-context';
 import { useSession } from '@/auth/session-context';
@@ -33,6 +33,7 @@ export default function BoardPage() {
   const [seg, setSeg] = useState<ColumnId>('nuevo');
   const [projectActionsOpen, setProjectActionsOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
 
   const activeFilterCount =
     filters.projects.size + filters.people.size + filters.priorities.size + filters.tags.size;
@@ -75,8 +76,9 @@ export default function BoardPage() {
   const tasks = data.getTasks();
   const project = isTodo ? undefined : data.getProject(view);
 
-  /* Tareas visibles según vista + filtros + alcance (todas/mías/de otras) */
-  const visible = useMemo(() => {
+  /* Tareas visibles según vista + filtros + alcance (todas/mías/de otras).
+   * Las archivadas quedan aparte: solo se ven con "mostrar archivadas". */
+  const { visible, archivedList } = useMemo(() => {
     let list = isTodo ? tasks.slice() : tasks.filter((tk) => tk.project_id === view);
     if (isTodo) {
       const f = filters;
@@ -89,7 +91,12 @@ export default function BoardPage() {
     if (scope === 'mine') list = list.filter((tk) => tk.assignee_id === me.id);
     else if (scope === 'others')
       list = list.filter((tk) => tk.assignee_id !== null && tk.assignee_id !== me.id);
-    return list;
+    return {
+      visible: list.filter((tk) => !tk.archived_at),
+      archivedList: list
+        .filter((tk) => tk.archived_at && tk.column === 'hecho')
+        .sort((a, b) => a.position - b.position),
+    };
   }, [tasks, isTodo, view, filters, scope, me.id]);
 
   const byColumn = useMemo(() => {
@@ -110,9 +117,10 @@ export default function BoardPage() {
   const doMove = async (id: string, toCol: ColumnId, refId: string | null) => {
     const task = data.getTask(id);
     if (!task) return false;
-    /* Posición = índice en la columna completa (sin filtros), excluyendo la arrastrada */
+    /* Posición = índice en la columna completa (sin filtros ni archivadas),
+     * excluyendo la arrastrada */
     const colTasks = tasks
-      .filter((tk) => tk.column === toCol && tk.id !== id)
+      .filter((tk) => !tk.archived_at && tk.column === toCol && tk.id !== id)
       .sort((a, b) => a.position - b.position);
     let position = colTasks.length;
     if (refId) {
@@ -135,9 +143,31 @@ export default function BoardPage() {
     }
   };
 
+  const doArchive = async (id: string) => {
+    const task = data.getTask(id);
+    try {
+      await data.archiveTask(id);
+      announce(t('board.taskArchived', { title: task?.title ?? '' }));
+    } catch {
+      announce(t('common.error'));
+    }
+  };
+
+  const doUnarchive = async (id: string) => {
+    const task = data.getTask(id);
+    try {
+      await data.unarchiveTask(id);
+      announce(t('board.taskUnarchived', { title: task?.title ?? '' }));
+    } catch {
+      announce(t('common.error'));
+    }
+  };
+
+  const activeTasks = useMemo(() => tasks.filter((tk) => !tk.archived_at), [tasks]);
+
   const dnd = useKanbanDnD<ColumnId>({
     boardRef,
-    items: tasks,
+    items: activeTasks,
     onMove: (id, toCol, refId) => void doMove(id, toCol, refId),
   });
 
@@ -338,6 +368,7 @@ export default function BoardPage() {
                       project={data.getProject(tk.project_id)}
                       index={i}
                       onOpen={(id) => openTask(id)}
+                      onArchive={c.id === 'hecho' ? doArchive : undefined}
                     />
                   </MobileMoveCard>
                 ))}
@@ -345,6 +376,41 @@ export default function BoardPage() {
                   <p className="rounded-2xl border border-dashed border-app px-4 py-8 text-center text-[15px] text-muted">
                     {t('board.emptyState', { column: t(`columns.${c.id}`) })}
                   </p>
+                )}
+                {c.id === 'hecho' && archivedList.length > 0 && (
+                  <div className="pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowArchived((o) => !o)}
+                      aria-expanded={showArchived}
+                      className="inline-flex items-center gap-1 rounded-full px-2.5 py-1.5 text-[13px] font-medium text-faint hover:text-muted"
+                    >
+                      <ChevronDown
+                        className={`w-4 h-4 transition-transform duration-200 ${
+                          showArchived ? 'rotate-180' : ''
+                        }`}
+                        aria-hidden="true"
+                      />
+                      {showArchived
+                        ? t('board.hideArchived')
+                        : t('board.showArchived', { count: archivedList.length })}
+                    </button>
+                    {showArchived && (
+                      <div className="mt-2 space-y-3" aria-label={t('board.archivedListAria')}>
+                        {archivedList.map((tk, i) => (
+                          <TaskCardMobile
+                            key={tk.id}
+                            task={tk}
+                            project={data.getProject(tk.project_id)}
+                            index={i}
+                            onOpen={(id) => openTask(id)}
+                            archived
+                            onUnarchive={doUnarchive}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             ))}
@@ -406,6 +472,7 @@ export default function BoardPage() {
                       project={isTodo ? data.getProject(tk.project_id) : undefined}
                       index={i}
                       onOpen={(id) => openTask(id)}
+                      onArchive={col.id === 'hecho' ? doArchive : undefined}
                     />
                   ))}
                   {list.length === 0 && (
@@ -417,6 +484,48 @@ export default function BoardPage() {
                     </p>
                   )}
                 </div>
+
+                {/* Archivadas bajo la columna Hecho: ocultas por defecto */}
+                {col.id === 'hecho' && archivedList.length > 0 && (
+                  <div className="mt-2 px-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowArchived((o) => !o)}
+                      aria-expanded={showArchived}
+                      aria-controls="archived-list"
+                      className="inline-flex items-center gap-1 rounded-full px-2.5 py-1.5 text-[12px] font-medium text-faint hover:text-muted hover:bg-surface2"
+                    >
+                      <ChevronDown
+                        className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                          showArchived ? 'rotate-180' : ''
+                        }`}
+                        aria-hidden="true"
+                      />
+                      {showArchived
+                        ? t('board.hideArchived')
+                        : t('board.showArchived', { count: archivedList.length })}
+                    </button>
+                    {showArchived && (
+                      <div
+                        id="archived-list"
+                        className="mt-2 space-y-3"
+                        aria-label={t('board.archivedListAria')}
+                      >
+                        {archivedList.map((tk, i) => (
+                          <TaskCard
+                            key={tk.id}
+                            task={tk}
+                            project={isTodo ? data.getProject(tk.project_id) : undefined}
+                            index={i}
+                            onOpen={(id) => openTask(id)}
+                            archived
+                            onUnarchive={doUnarchive}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </section>
             );
           })}

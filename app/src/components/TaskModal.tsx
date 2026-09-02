@@ -98,7 +98,7 @@ export function TaskModal({
       />
       <div
         ref={panelRef}
-        className="relative w-full h-full lg:h-auto lg:max-h-[88vh] lg:max-w-2xl bg-surface lg:rounded-2xl border border-app shadow-2xl overflow-y-auto nice-scroll"
+        className="relative w-full h-full lg:h-auto lg:max-h-[88vh] lg:max-w-2xl xl:max-w-3xl 2xl:max-w-4xl bg-surface lg:rounded-2xl border border-app shadow-2xl overflow-y-auto nice-scroll"
       >
         {/* Cabecera fija: título + tab bar */}
         <div className="sticky top-0 z-10 bg-surface/95 backdrop-blur border-b border-app">

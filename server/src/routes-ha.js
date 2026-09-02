@@ -198,12 +198,19 @@ export function registerHaRoutes(app, ctx) {
     const now = Date.now()
     const update = db.transaction(() => {
       const targetCount = db
-        .prepare('SELECT COUNT(*) AS n FROM tasks WHERE "column" = ? AND id != ?')
+        .prepare(
+          'SELECT COUNT(*) AS n FROM tasks WHERE "column" = ? AND id != ? AND archived_at IS NULL AND deleted_at IS NULL'
+        )
         .get('hecho', task.id).n
-      db.prepare('UPDATE tasks SET position = position - 1 WHERE "column" = ? AND position > ?')
-        .run(task.column, task.position)
-      db.prepare('UPDATE tasks SET "column" = ?, position = ?, updated_at = ? WHERE id = ?')
-        .run('hecho', targetCount, now, task.id)
+      // Archivada: posición congelada, no se compacta el origen.
+      if (!task.archived_at) {
+        db.prepare(
+          'UPDATE tasks SET position = position - 1 WHERE "column" = ? AND position > ? AND archived_at IS NULL AND deleted_at IS NULL'
+        ).run(task.column, task.position)
+      }
+      db.prepare(
+        'UPDATE tasks SET "column" = ?, position = ?, updated_at = ?, archived_at = NULL, done_at = ? WHERE id = ?'
+      ).run('hecho', targetCount, now, now, task.id)
       db.prepare(
         'INSERT INTO activity_events (id, task_id, user_id, type, data, created_at) VALUES (?, ?, ?, ?, ?, ?)'
       ).run(crypto.randomUUID(), task.id, task.created_by, 'moved', JSON.stringify({ from: task.column, to: 'hecho' }), now)

@@ -148,6 +148,7 @@ function shapeRow(row, shares) {
     created_by: row.created_by, created_by_username: row.created_by_username,
     created_by_color: row.created_by_color,
     created_at: row.created_at, updated_at: row.updated_at, deleted_at: row.deleted_at,
+    archived_at: row.archived_at ?? null,
     counts: { comments: row.comment_count ?? 0, attachments: row.attachment_count ?? 0 },
   }
 }
@@ -224,6 +225,15 @@ function getExpense(db, id) {
   return db.prepare('SELECT * FROM expenses WHERE id = ? AND deleted_at IS NULL').get(id)
 }
 
+// Marca las banderas de archivado al cambiar de etapa (todos los caminos:
+// move, update, settle, my-share): entrar en 'hecho' → done_at; salir → NULL;
+// cualquier cambio de etapa reactiva el gasto (archived_at = NULL).
+function applyStepFlags(db, id, newStep) {
+  db.prepare(
+    `UPDATE expenses SET done_at = CASE WHEN ? = 'hecho' THEN ? ELSE NULL END, archived_at = NULL WHERE id = ?`
+  ).run(newStep, Date.now(), id)
+}
+
 export function registerExpenseRoutes(app, { prod, hub, uploadsDir }) {
   app.use('/api/expenses/*', async (c, next) => {
     if (!pluginEnabled(prod)) httpError(404, ERROR_CODES.NOT_FOUND)
@@ -264,7 +274,10 @@ export function registerExpenseRoutes(app, { prod, hub, uploadsDir }) {
         const e = db.prepare('SELECT step, payer_id FROM expenses WHERE id = ?').get(eid)
         const newStep = resolveStep(db, eid, e.payer_id, e.step)
         db.prepare('UPDATE expenses SET step = ?, updated_at = ? WHERE id = ?').run(newStep, now, eid)
-        if (newStep !== e.step) addExpenseEvent(db, eid, user.id, 'moved', { from: e.step, to: newStep })
+        if (newStep !== e.step) {
+          applyStepFlags(db, eid, newStep)
+          addExpenseEvent(db, eid, user.id, 'moved', { from: e.step, to: newStep })
+        }
       }
       /* Reembolso visible: evento global (expense_id NULL) como artefacto del saldado */
       addExpenseEvent(db, null, user.id, 'settled', {
@@ -314,20 +327,23 @@ export function registerExpenseRoutes(app, { prod, hub, uploadsDir }) {
     validateShares(db, data.shares, data.amount_cents, payerId)
 
     const id = crypto.randomUUID()
-    const maxPos = db.prepare('SELECT COALESCE(MAX(position), -1) AS mx FROM expenses WHERE step = ? AND deleted_at IS NULL').get(data.step).mx
+    const maxPos = db.prepare('SELECT COALESCE(MAX(position), -1) AS mx FROM expenses WHERE step = ? AND deleted_at IS NULL AND archived_at IS NULL').get(data.step).mx
     const position = maxPos + 1
 
     db.transaction(() => {
       db.prepare(
         `INSERT INTO expenses (id, title, amount_cents, label_id, project_id, notes, payer_id,
-         payment_method, spent_at, step, position, created_by, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         payment_method, spent_at, step, position, created_by, created_at, updated_at, done_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).run(id, data.title, data.amount_cents, data.label_id || null, data.project_id || null,
         data.notes, payerId, data.payment_method || null, data.spent_at ?? now,
-        data.step, position, user.id, now, now)
+        data.step, position, user.id, now, now, data.step === 'hecho' ? now : null)
       writeShares(db, id, data.shares, payerId)
       const step = resolveStep(db, id, payerId, data.step)
-      if (step !== data.step) db.prepare('UPDATE expenses SET step = ? WHERE id = ?').run(step, id)
+      if (step !== data.step) {
+        db.prepare('UPDATE expenses SET step = ? WHERE id = ?').run(step, id)
+        applyStepFlags(db, id, step)
+      }
       addExpenseEvent(db, id, user.id, 'created', {})
       if (data.notes) addExpenseEvent(db, id, user.id, 'notes', {})
       if (data.shares.length > 0) addExpenseEvent(db, id, user.id, 'shares', { count: data.shares.length })
@@ -405,6 +421,7 @@ export function registerExpenseRoutes(app, { prod, hub, uploadsDir }) {
       const requested = data.step !== undefined ? data.step : current.step
       const newStep = resolveStep(db, id, payerId, requested)
       db.prepare('UPDATE expenses SET step = ? WHERE id = ?').run(newStep, id)
+      if (newStep !== current.step) applyStepFlags(db, id, newStep)
 
       if (data.title !== undefined && data.title !== current.title) addExpenseEvent(db, id, user.id, 'title', { from: current.title, to: data.title })
       if (data.amount_cents !== undefined && data.amount_cents !== current.amount_cents) addExpenseEvent(db, id, user.id, 'amount', { from: current.amount_cents, to: data.amount_cents })
@@ -436,6 +453,7 @@ export function registerExpenseRoutes(app, { prod, hub, uploadsDir }) {
         .run(paid ? 1 : 0, id, user.id)
       const newStep = resolveStep(db, id, current.payer_id, current.step)
       db.prepare('UPDATE expenses SET step = ?, updated_at = ? WHERE id = ?').run(newStep, Date.now(), id)
+      if (newStep !== current.step) applyStepFlags(db, id, newStep)
       addExpenseEvent(db, id, user.id, 'paid', { share: true, paid })
       if (newStep !== current.step) addExpenseEvent(db, id, user.id, 'moved', { from: current.step, to: newStep })
     })()
@@ -461,16 +479,65 @@ export function registerExpenseRoutes(app, { prod, hub, uploadsDir }) {
     const current = db.prepare('SELECT * FROM expenses WHERE id = ? AND deleted_at IS NULL').get(id)
     if (!current) httpError(404, ERROR_CODES.EXPENSE_NOT_FOUND)
 
-    const maxPos = db.prepare('SELECT COALESCE(MAX(position), -1) AS mx FROM expenses WHERE step = ? AND deleted_at IS NULL').get(step).mx
+    const maxPos = db.prepare('SELECT COALESCE(MAX(position), -1) AS mx FROM expenses WHERE step = ? AND deleted_at IS NULL AND archived_at IS NULL').get(step).mx
     const clamped = Math.min(position, maxPos + 1)
 
     db.transaction(() => {
-      db.prepare('UPDATE expenses SET position = position - 1 WHERE step = ? AND deleted_at IS NULL AND position > ?').run(current.step, current.position)
-      db.prepare('UPDATE expenses SET position = position + 1 WHERE step = ? AND deleted_at IS NULL AND position >= ?').run(step, clamped)
+      // Archivado: posición congelada (compactada al archivar); solo abre
+      // hueco en destino y reactiva.
+      if (current.archived_at) {
+        db.prepare('UPDATE expenses SET position = position + 1 WHERE step = ? AND deleted_at IS NULL AND archived_at IS NULL AND position >= ?').run(step, clamped)
+      } else {
+        db.prepare('UPDATE expenses SET position = position - 1 WHERE step = ? AND deleted_at IS NULL AND archived_at IS NULL AND position > ?').run(current.step, current.position)
+        db.prepare('UPDATE expenses SET position = position + 1 WHERE step = ? AND deleted_at IS NULL AND archived_at IS NULL AND position >= ?').run(step, clamped)
+      }
       db.prepare('UPDATE expenses SET step = ?, position = ?, updated_at = ? WHERE id = ?').run(step, clamped, Date.now(), id)
+      applyStepFlags(db, id, step)
       addExpenseEvent(db, id, c.get('user').id, 'moved', { from: current.step, to: step })
     })()
 
+    hub.broadcast('expenses')
+    return c.json({ expense: hydrateExpense(db, id) })
+  })
+
+  // --- Archivar gasto (manual): solo paso 'hecho' (Pagado). Espejo de tareas:
+  // desaparece del tablero y se recupera con "mostrar archivadas".
+  app.post('/api/expenses/:id/archive', zValidator('param', idParamSchema, validationHook), (c) => {
+    const db = c.get('db')
+    const id = c.req.valid('param').id
+    const current = getExpense(db, id)
+    if (!current) httpError(404, ERROR_CODES.EXPENSE_NOT_FOUND)
+    if (current.created_by !== c.get('user').id && current.payer_id !== c.get('user').id) {
+      httpError(403, ERROR_CODES.PROJECT_NOT_MEMBER)
+    }
+    if (current.step !== 'hecho') httpError(422, ERROR_CODES.EXPENSE_NOT_DONE)
+    if (current.archived_at) return c.json({ expense: hydrateExpense(db, id) })
+    db.transaction(() => {
+      db.prepare('UPDATE expenses SET archived_at = ? WHERE id = ?').run(Date.now(), id)
+      db.prepare('UPDATE expenses SET position = position - 1 WHERE step = ? AND deleted_at IS NULL AND archived_at IS NULL AND position > ?')
+        .run(current.step, current.position)
+    })()
+    hub.broadcast('expenses')
+    return c.json({ expense: hydrateExpense(db, id) })
+  })
+
+  // --- Desarchivar gasto: al final de 'hecho' con ventana fresca de 3 días.
+  app.post('/api/expenses/:id/unarchive', zValidator('param', idParamSchema, validationHook), (c) => {
+    const db = c.get('db')
+    const id = c.req.valid('param').id
+    const current = getExpense(db, id)
+    if (!current) httpError(404, ERROR_CODES.EXPENSE_NOT_FOUND)
+    if (current.created_by !== c.get('user').id && current.payer_id !== c.get('user').id) {
+      httpError(403, ERROR_CODES.PROJECT_NOT_MEMBER)
+    }
+    if (!current.archived_at) return c.json({ expense: hydrateExpense(db, id) })
+    const now = Date.now()
+    db.transaction(() => {
+      const pos = db.prepare('SELECT COALESCE(MAX(position) + 1, 0) AS p FROM expenses WHERE step = ? AND deleted_at IS NULL AND archived_at IS NULL').get('hecho').p
+      db.prepare(
+        'UPDATE expenses SET archived_at = NULL, done_at = ?, step = ?, position = ? WHERE id = ?'
+      ).run(now, 'hecho', pos, id)
+    })()
     hub.broadcast('expenses')
     return c.json({ expense: hydrateExpense(db, id) })
   })
@@ -486,7 +553,10 @@ export function registerExpenseRoutes(app, { prod, hub, uploadsDir }) {
 
     db.transaction(() => {
       db.prepare('UPDATE expenses SET deleted_at = ?, updated_at = ? WHERE id = ?').run(Date.now(), Date.now(), id)
-      db.prepare('UPDATE expenses SET position = position - 1 WHERE step = ? AND deleted_at IS NULL AND position > ?').run(current.step, current.position)
+      // Las archivadas ya están fuera de la secuencia: no se compacta.
+      if (!current.archived_at) {
+        db.prepare('UPDATE expenses SET position = position - 1 WHERE step = ? AND deleted_at IS NULL AND archived_at IS NULL AND position > ?').run(current.step, current.position)
+      }
     })()
 
     hub.broadcast('expenses')

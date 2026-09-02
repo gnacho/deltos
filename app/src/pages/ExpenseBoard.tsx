@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Plus, BarChart3 } from 'lucide-react';
+import { Plus, BarChart3, ChevronDown } from 'lucide-react';
 import type { ExpenseStep } from '@/data/types';
 import { useData } from '@/data/data-context';
 import { useSession } from '@/auth/session-context';
@@ -39,6 +39,7 @@ export default function ExpenseBoard() {
   const [filter, setFilter] = useState<FilterType>('all');
   const [seg, setSeg] = useState<ExpenseStep>('nuevo');
   const [view, setView] = useState<'tablero' | 'resumen'>('tablero');
+  const [showArchived, setShowArchived] = useState(false);
 
   const boardRef = useRef<HTMLDivElement>(null);
   const mobileTrackRef = useRef<HTMLDivElement>(null);
@@ -77,7 +78,9 @@ export default function ExpenseBoard() {
 
   const expenses = data.getExpenses();
 
-  const visible = useMemo(() => {
+  /* Archivadas aparte (solo se ven con "mostrar archivadas"); los resúmenes
+   * de dinero siguen usando la lista completa (el gasto existió). */
+  const { visible, archivedList } = useMemo(() => {
     let list = expenses;
     if (filter === 'mine')
       list = list.filter(
@@ -93,7 +96,12 @@ export default function ExpenseBoard() {
           e.payer_id !== me?.id &&
           !e.shares.some((sh) => sh.user_id === me?.id),
       );
-    return list;
+    return {
+      visible: list.filter((e) => !e.archived_at),
+      archivedList: list
+        .filter((e) => e.archived_at && e.step === 'hecho')
+        .sort((a, b) => a.position - b.position),
+    };
   }, [expenses, filter, me?.id]);
 
   const byStep = useMemo(() => {
@@ -119,7 +127,7 @@ export default function ExpenseBoard() {
     const expense = data.getExpense(id);
     if (!expense) return;
     const colExpenses = expenses
-      .filter((e) => e.step === toCol && e.id !== id)
+      .filter((e) => !e.archived_at && e.step === toCol && e.id !== id)
       .sort((a, b) => a.position - b.position);
     let position = colExpenses.length;
     if (refId) {
@@ -146,9 +154,31 @@ export default function ExpenseBoard() {
     }
   };
 
+  const doArchive = async (id: string) => {
+    const expense = data.getExpense(id);
+    try {
+      await data.archiveExpense(id);
+      announce(t('expenses.archivedAnnounce', { title: expense?.title ?? '' }));
+    } catch {
+      announce(t('common.error'));
+    }
+  };
+
+  const doUnarchive = async (id: string) => {
+    const expense = data.getExpense(id);
+    try {
+      await data.unarchiveExpense(id);
+      announce(t('expenses.unarchivedAnnounce', { title: expense?.title ?? '' }));
+    } catch {
+      announce(t('common.error'));
+    }
+  };
+
+  const activeExpenses = useMemo(() => expenses.filter((e) => !e.archived_at), [expenses]);
+
   const dnd = useKanbanDnD<ExpenseStep>({
     boardRef,
-    items: expenses,
+    items: activeExpenses,
     onMove: (id, toCol, refId) => void doMove(id, toCol, refId),
   });
 
@@ -161,7 +191,7 @@ export default function ExpenseBoard() {
     } else if (!(fromCol === 'en-curso' && toStep === 'hecho')) {
       if (!window.confirm(t('expenses.moveConfirm', { from: t(`expenseSteps.${fromCol}`), to: t(`expenseSteps.${toStep}`) }))) return;
     }
-    const position = expenses.filter((e) => e.step === toStep && e.id !== id).length;
+    const position = expenses.filter((e) => !e.archived_at && e.step === toStep && e.id !== id).length;
     void (async () => {
       try {
         await data.moveExpense(id, toStep, position);
@@ -354,6 +384,40 @@ export default function ExpenseBoard() {
                         {t('expenses.emptyState', { column: t(`expenseSteps.${s.id}`) })}
                       </p>
                     )}
+                    {s.id === 'hecho' && archivedList.length > 0 && (
+                      <div className="pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setShowArchived((o) => !o)}
+                          aria-expanded={showArchived}
+                          className="inline-flex items-center gap-1 rounded-full px-2.5 py-1.5 text-[13px] font-medium text-faint hover:text-muted"
+                        >
+                          <ChevronDown
+                            className={`w-4 h-4 transition-transform duration-200 ${
+                              showArchived ? 'rotate-180' : ''
+                            }`}
+                            aria-hidden="true"
+                          />
+                          {showArchived
+                            ? t('board.hideArchived')
+                            : t('board.showArchived', { count: archivedList.length })}
+                        </button>
+                        {showArchived && (
+                          <div className="mt-2 space-y-3" aria-label={t('expenses.archivedListAria')}>
+                            {archivedList.map((exp, i) => (
+                              <ExpenseCardMobile
+                                key={exp.id}
+                                expense={exp}
+                                index={i}
+                                onOpen={(id) => setDetailExpense({ id })}
+                                archived
+                                onUnarchive={doUnarchive}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -418,6 +482,7 @@ export default function ExpenseBoard() {
                           expense={exp}
                           index={i}
                           onOpen={(id) => setDetailExpense({ id })}
+                          onArchive={st.id === 'hecho' ? doArchive : undefined}
                         />
                       ))}
                       {list.length === 0 && (
@@ -429,6 +494,47 @@ export default function ExpenseBoard() {
                         </p>
                       )}
                     </div>
+
+                    {/* Archivadas bajo la columna Pagado: ocultas por defecto */}
+                    {st.id === 'hecho' && archivedList.length > 0 && (
+                      <div className="mt-2 px-1">
+                        <button
+                          type="button"
+                          onClick={() => setShowArchived((o) => !o)}
+                          aria-expanded={showArchived}
+                          aria-controls="archived-expenses"
+                          className="inline-flex items-center gap-1 rounded-full px-2.5 py-1.5 text-[12px] font-medium text-faint hover:text-muted hover:bg-surface2"
+                        >
+                          <ChevronDown
+                            className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                              showArchived ? 'rotate-180' : ''
+                            }`}
+                            aria-hidden="true"
+                          />
+                          {showArchived
+                            ? t('board.hideArchived')
+                            : t('board.showArchived', { count: archivedList.length })}
+                        </button>
+                        {showArchived && (
+                          <div
+                            id="archived-expenses"
+                            className="mt-2 space-y-3"
+                            aria-label={t('expenses.archivedListAria')}
+                          >
+                            {archivedList.map((exp, i) => (
+                              <ExpenseCard
+                                key={exp.id}
+                                expense={exp}
+                                index={i}
+                                onOpen={(id) => setDetailExpense({ id })}
+                                archived
+                                onUnarchive={doUnarchive}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </section>
                 );
               })}

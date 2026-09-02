@@ -1,4 +1,4 @@
-import { MessageCircle, Paperclip, Check } from 'lucide-react';
+import { MessageCircle, Paperclip, Check, Archive, ArchiveRestore } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { Expense } from '@/data/types';
 import { Avatar } from '@/components/Avatar';
@@ -9,6 +9,11 @@ interface CardProps {
   expense: Expense;
   index: number;
   onOpen: (id: string) => void;
+  /** Gasto archivado: sin drag, con acción de desarchivar. */
+  archived?: boolean;
+  /** Archivado manual (solo gastos en Pagado). */
+  onArchive?: (id: string) => void;
+  onUnarchive?: (id: string) => void;
 }
 
 /* Mismos pares claro/oscuro que PRIORITY_BADGE (lib/constants). */
@@ -34,11 +39,14 @@ function SharesBadge({ expense, big }: { expense: Expense; big?: boolean }) {
   );
 }
 
-/** Tarjeta desktop (completa): categoría, importe, badges de pago, contadores, avatar. */
-export function ExpenseCard({ expense, index, onOpen }: CardProps) {
+/** Tarjeta desktop (completa): categoría, importe, badges de pago, contadores, avatar.
+ *  Div role=button (no <button>) para anidar archivar/desarchivar sin elementos
+ *  interactivos anidados inválidos. */
+export function ExpenseCard({ expense, index, onOpen, archived, onArchive, onUnarchive }: CardProps) {
   const { t, i18n } = useTranslation();
   const done = expense.step === 'hecho';
   const delay = Math.min(index, 10) * 40;
+  const canArchive = !archived && done && onArchive !== undefined;
   const label = expense.label_id
     ? {
         id: expense.label_id,
@@ -47,13 +55,23 @@ export function ExpenseCard({ expense, index, onOpen }: CardProps) {
       }
     : null;
   return (
-    <button
-      type="button"
-      data-task={expense.id}
-      draggable
+    <div
+      role="button"
+      tabIndex={0}
+      data-task={archived ? undefined : expense.id}
+      data-archived={archived ? expense.id : undefined}
+      draggable={!archived}
       onClick={() => onOpen(expense.id)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onOpen(expense.id);
+        }
+      }}
       style={{ animationDelay: `${delay}ms` }}
-      className={`card w-full text-left rounded-2xl bg-surface border border-app shadow-soft p-3.5 transition-transform duration-150 hover:-translate-y-0.5 hover:shadow-md ${done ? 'opacity-60' : ''}`}
+      className={`card w-full text-left rounded-2xl bg-surface border border-app shadow-soft p-3.5 transition-transform duration-150 hover:-translate-y-0.5 hover:shadow-md cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-brand ${
+        done ? 'opacity-60' : ''
+      } ${archived ? 'opacity-50 bg-surface2/60' : ''}`}
     >
       {label && (
         <div className="flex flex-wrap gap-1.5 mb-2">
@@ -93,39 +111,85 @@ export function ExpenseCard({ expense, index, onOpen }: CardProps) {
             </span>
           )}
         </span>
-        {expense.payer_username ? (
-          <Avatar name={expense.payer_username} color={expense.payer_color} />
-        ) : (
-          <UnassignedAvatar />
-        )}
+        <span className="flex items-center gap-2">
+          {canArchive && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onArchive(expense.id);
+              }}
+              className="w-7 h-7 -mr-1 rounded-lg text-faint hover:bg-surface2 hover:text-muted flex items-center justify-center"
+              aria-label={t('expenses.archiveAria', { title: expense.title })}
+              title={t('expenses.archive')}
+            >
+              <Archive className="w-4 h-4" aria-hidden="true" />
+            </button>
+          )}
+          {archived && onUnarchive && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onUnarchive(expense.id);
+              }}
+              className="w-7 h-7 -mr-1 rounded-lg text-faint hover:bg-surface2 hover:text-muted flex items-center justify-center"
+              aria-label={t('expenses.unarchiveAria', { title: expense.title })}
+              title={t('expenses.unarchive')}
+            >
+              <ArchiveRestore className="w-4 h-4" aria-hidden="true" />
+            </button>
+          )}
+          {expense.payer_username ? (
+            <Avatar name={expense.payer_username} color={expense.payer_color} />
+          ) : (
+            <UnassignedAvatar />
+          )}
+        </span>
       </div>
-    </button>
+    </div>
   );
 }
 
 /** Tarjeta MÓVIL simplificada: título (17px/600, 2 líneas), importe y estado del split. */
-export function ExpenseCardMobile({ expense, index, onOpen }: CardProps) {
-  const { i18n } = useTranslation();
+export function ExpenseCardMobile({ expense, index, onOpen, archived, onUnarchive }: CardProps) {
+  const { t, i18n } = useTranslation();
   const done = expense.step === 'hecho';
   const delay = Math.min(index, 10) * 40;
   return (
-    <button
-      type="button"
-      onClick={() => onOpen(expense.id)}
-      style={{ animationDelay: `${delay}ms` }}
-      className={`card w-full text-left rounded-2xl bg-surface border border-app shadow-soft px-4 py-3.5 min-h-[64px] flex flex-col justify-center gap-2 ${done ? 'opacity-60' : ''}`}
-    >
-      <h3
-        className={`text-[17px] font-semibold leading-snug line-clamp-2 ${done ? 'line-through decoration-1' : ''}`}
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => onOpen(expense.id)}
+        style={{ animationDelay: `${delay}ms` }}
+        className={`card w-full text-left rounded-2xl bg-surface border border-app shadow-soft px-4 py-3.5 min-h-[64px] flex flex-col justify-center gap-2 ${
+          done ? 'opacity-60' : ''
+        } ${archived ? 'opacity-50 bg-surface2/60' : ''}`}
       >
-        {expense.title}
-      </h3>
-      <div className="flex items-center gap-x-3 gap-y-1.5 flex-wrap">
-        <span className="tnum text-[13px] font-semibold">
-          {fmtMoney(expense.amount_cents, i18n.language)}
-        </span>
-        <SharesBadge expense={expense} big />
-      </div>
-    </button>
+        <h3
+          className={`text-[17px] font-semibold leading-snug line-clamp-2 ${done ? 'line-through decoration-1' : ''}`}
+        >
+          {expense.title}
+        </h3>
+        <div className="flex items-center gap-x-3 gap-y-1.5 flex-wrap">
+          <span className="tnum text-[13px] font-semibold">
+            {fmtMoney(expense.amount_cents, i18n.language)}
+          </span>
+          <SharesBadge expense={expense} big />
+        </div>
+      </button>
+
+      {/* Archivado (móvil): acción de desarchivar bajo la tarjeta */}
+      {archived && onUnarchive && (
+        <button
+          type="button"
+          onClick={() => onUnarchive(expense.id)}
+          className="mt-1 w-full inline-flex items-center justify-center gap-1.5 rounded-xl border border-app bg-surface px-3 py-2 text-[13px] font-medium text-muted hover:text-text"
+        >
+          <ArchiveRestore className="w-4 h-4" aria-hidden="true" />
+          {t('expenses.unarchive')}
+        </button>
+      )}
+    </div>
   );
 }

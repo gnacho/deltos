@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Info, Paperclip, MessageCircle, Clock, Trash2 } from 'lucide-react';
+import { X, Info, Paperclip, MessageCircle, Clock, Trash2, Archive, ArchiveRestore } from 'lucide-react';
 import type { FormEvent } from 'react';
 import { useData } from '@/data/data-context';
 import { useSession } from '@/auth/session-context';
@@ -645,6 +645,48 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
                   sharesCents={(expense.shares ?? []).reduce((s, sh) => s + sh.share_cents, 0)}
                 />
               </div>
+
+              {/* Archivar / Desarchivar (creador o pagador; solo pagados) */}
+              {(isCreator || expense.payer_id === user?.id) &&
+                (expense.archived_at ? (
+                  <div className="pt-4 border-t border-app flex items-center justify-between gap-3">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-surface2 text-muted">
+                      <Archive className="w-3 h-3" aria-hidden="true" />
+                      {t('expenses.archived')}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void data
+                          .unarchiveExpense(expense.id)
+                          .then(() => announce(t('expenses.unarchivedAnnounce', { title: expense.title })))
+                          .catch(() => announce(t('common.error')))
+                      }
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-medium bg-surface border border-app text-muted hover:bg-surface2"
+                    >
+                      <ArchiveRestore className="w-4 h-4" aria-hidden="true" />
+                      {t('expenses.unarchive')}
+                    </button>
+                  </div>
+                ) : (
+                  expense.step === 'hecho' && (
+                    <div className="pt-4 border-t border-app flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void data
+                            .archiveExpense(expense.id)
+                            .then(() => announce(t('expenses.archivedAnnounce', { title: expense.title })))
+                            .catch(() => announce(t('common.error')))
+                        }
+                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-medium bg-surface border border-app text-muted hover:bg-surface2"
+                      >
+                        <Archive className="w-4 h-4" aria-hidden="true" />
+                        {t('expenses.archive')}
+                      </button>
+                    </div>
+                  )
+                ))}
 
               {/* Delete */}
               {isCreator && (
