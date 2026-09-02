@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { X, ChevronDown, Plus } from 'lucide-react';
+import { X, ChevronDown, Plus, Wand2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useData } from '@/data/data-context';
 import { useSession } from '@/auth/session-context';
@@ -76,8 +76,18 @@ export function ExpenseModal(props: Props) {
   const [saving, setSaving] = useState(false);
   const [deleteArmed, setDeleteArmed] = useState(false);
   const [projectOpen, setProjectOpen] = useState(false);
-  /** Tras crear (solo modo create): id del gasto recién creado → vista de invitación. */
   const [createdId, setCreatedId] = useState<string | null>(null);
+  // NLP: sugerencia de fecha/importe desde el concepto (solo en creación y
+  // mientras el usuario no haya fijado esos campos a mano).
+  const [parsing, setParsing] = useState(false);
+  const [amountTouched, setAmountTouched] = useState(false);
+  const [dateTouched, setDateTouched] = useState(false);
+  const [suggested, setSuggested] = useState<{
+    spent_at?: string | null;
+    amount_cents?: number | null;
+    cleanedTitle?: string;
+  } | null>(null);
+  const lang: 'es' | 'en' = i18n.language?.startsWith('en') ? 'en' : 'es';
 
   const amountCents = toCents(amountStr);
   const participants = useMemo(() => [...shareStr.keys()], [shareStr]);
@@ -120,6 +130,32 @@ export function ExpenseModal(props: Props) {
       return next;
     });
   };
+
+  // Parseo automático del concepto en lenguaje natural (debounce), espejo del
+  // modal de tarea: solo sugiere si aún no hay importe/fecha fijados a mano.
+  useEffect(() => {
+    if (isEdit || !title.trim() || (amountTouched && dateTouched)) {
+      setSuggested(null);
+      return;
+    }
+    setParsing(true);
+    const id = window.setTimeout(async () => {
+      try {
+        const res = await data.parseExpenseText(title.trim(), lang);
+        const useful =
+          res.parsed &&
+          res.cleanedTitle &&
+          ((res.spent_at && !dateTouched) || (res.amount_cents != null && !amountTouched));
+        setSuggested(useful ? res : null);
+      } catch {
+        setSuggested(null);
+      } finally {
+        setParsing(false);
+      }
+    }, 450);
+    return () => window.clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [title, amountTouched, dateTouched, lang, isEdit]);
 
   const sharesSum = participants.reduce(
     (sum, uid) => sum + (toCents(shareStr.get(uid) ?? '') ?? 0),
@@ -290,6 +326,57 @@ export function ExpenseModal(props: Props) {
               className="w-full bg-surface2 border border-app rounded-xl px-3.5 py-2.5 text-[15px] font-medium outline-none focus:border-brand"
               placeholder={t('expenses.form.titlePlaceholder')}
             />
+            {parsing && (
+              <p className="text-[12px] text-faint mt-1.5 flex items-center gap-1">
+                <Wand2 className="w-3 h-3" aria-hidden="true" />
+                {t('newTask.parsing')}
+              </p>
+            )}
+            {!parsing && suggested && (
+              <div className="mt-2 rounded-xl border border-brand/30 bg-brand/5 px-3 py-2.5">
+                <div className="flex items-start justify-between gap-3">
+                  <p className="text-[13px] text-muted leading-snug">
+                    {[
+                      suggested.spent_at &&
+                        !dateTouched &&
+                        t('expenses.form.suggestDate', {
+                          date: new Date(`${suggested.spent_at}T12:00:00`).toLocaleDateString(lang, { day: 'numeric', month: 'short' }),
+                        }),
+                      suggested.amount_cents != null &&
+                        !amountTouched &&
+                        t('expenses.form.suggestAmount', { amount: fmtMoney(suggested.amount_cents, lang) }),
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </p>
+                  <div className="flex shrink-0 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTitle(suggested.cleanedTitle ?? title);
+                        if (suggested.spent_at && !dateTouched) setSpentAt(suggested.spent_at);
+                        if (suggested.amount_cents != null && !amountTouched) {
+                          setAmountStr(fromCents(suggested.amount_cents));
+                        }
+                        setSuggested(null);
+                      }}
+                      className="inline-flex items-center gap-1 rounded-lg bg-brand px-2.5 py-1.5 text-[12px] font-semibold text-brandfg hover:brightness-110"
+                    >
+                      <Wand2 className="w-3 h-3" aria-hidden="true" />
+                      {t('newTask.applySuggestion')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSuggested(null)}
+                      aria-label={t('common.close')}
+                      className="w-7 h-7 rounded-lg text-faint hover:bg-surface2 flex items-center justify-center"
+                    >
+                      <X className="w-4 h-4" aria-hidden="true" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Importe + fecha */}
@@ -303,7 +390,10 @@ export function ExpenseModal(props: Props) {
                 type="text"
                 inputMode="decimal"
                 value={amountStr}
-                onChange={(e) => setAmountStr(e.target.value)}
+                onChange={(e) => {
+                  setAmountStr(e.target.value);
+                  setAmountTouched(true);
+                }}
                 className="w-full bg-surface2 border border-app rounded-xl px-3.5 py-2.5 text-[15px] font-medium outline-none focus:border-brand tnum"
                 placeholder="0,00"
               />
@@ -316,7 +406,10 @@ export function ExpenseModal(props: Props) {
                 id="exp-date"
                 type="date"
                 value={spentAt}
-                onChange={(e) => setSpentAt(e.target.value)}
+                onChange={(e) => {
+                  setSpentAt(e.target.value);
+                  setDateTouched(true);
+                }}
                 className="w-full bg-surface2 border border-app rounded-xl px-3.5 py-2.5 text-[15px] font-medium outline-none focus:border-brand tnum"
               />
             </div>

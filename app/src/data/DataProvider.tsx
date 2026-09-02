@@ -207,6 +207,18 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const parseExpenseText = useCallback(
+    async (text: string, lang: 'es' | 'en') => {
+      return apiPost<{
+        parsed: boolean;
+        spent_at?: string | null;
+        amount_cents?: number | null;
+        cleanedTitle?: string;
+      }>('/api/expenses/parse', { text, lang });
+    },
+    [],
+  );
+
   const moveTask = useCallback(
     async (id: string, column: string, position: number): Promise<void> => {
       await apiPost<{ task: Task }>(`/api/tasks/${encodeURIComponent(id)}/move`, {
@@ -515,6 +527,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       unarchiveTask,
       deleteTask,
       parseTaskText,
+      parseExpenseText,
       addSubtask,
       updateSubtask,
       deleteSubtask,

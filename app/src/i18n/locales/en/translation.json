@@ -306,6 +306,8 @@
       "method": "Payment method",
       "step": "Stage",
       "title": "Title",
+      "suggestDate": "date {{date}}",
+      "suggestAmount": "amount {{amount}}",
       "createdTitle": "Expense created",
       "createdHint": "The expense is saved. Share the link with anyone who still has to pay their share:"
     },
