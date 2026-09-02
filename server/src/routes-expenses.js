@@ -6,6 +6,7 @@ import { zValidator } from '@hono/zod-validator'
 import { kvGet, kvSet } from './db.js'
 import { httpError, validationHook } from './errors.js'
 import { ERROR_CODES } from './error-codes.js'
+import { parseExpenseText } from './nlp.js'
 import { notifyUsers } from './push.js'
 import { logger } from './logger.js'
 
@@ -311,6 +312,18 @@ export function registerExpenseRoutes(app, { prod, hub, uploadsDir }) {
   })
 
   // --- Crear gasto ---
+  // --- Parseo de lenguaje natural del concepto: sugiere spent_at/amount ---
+  const parseSchema = z.object({
+    text: z.string().min(1).max(200),
+    lang: z.enum(['es', 'en']).default('es'),
+  })
+  app.post('/api/expenses/parse', zValidator('json', parseSchema, validationHook), (c) => {
+    const { text, lang } = c.req.valid('json')
+    const result = parseExpenseText(text, lang)
+    if (!result) return c.json({ parsed: false })
+    return c.json({ parsed: true, ...result })
+  })
+
   app.post('/api/expenses', zValidator('json', createSchema, validationHook), async (c) => {
     const db = c.get('db')
     const user = c.get('user')

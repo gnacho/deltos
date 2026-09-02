@@ -53,6 +53,16 @@ function nextWeekday(fromISO, weekday) {
   return fmtISO(d)
 }
 
+// "el viernes" de un GASTO: el más reciente (hoy cuenta). Los gastos se
+// cuentan hacia atrás, a diferencia de los vencimientos.
+function lastWeekday(fromISO, weekday) {
+  const base = new Date(fromISO + 'T12:00:00')
+  const diff = (base.getDay() - weekday + 7) % 7
+  const d = new Date(fromISO + 'T12:00:00')
+  d.setDate(d.getDate() - diff)
+  return fmtISO(d)
+}
+
 function todayLocal() {
   const d = new Date()
   return fmtISO(d)
@@ -192,5 +202,100 @@ export function parseTaskText(text, lang, today = todayLocal()) {
     due_date: found.due_date,
     recurrence: found.recurrence,
     cleanedTitle,
+  }
+}
+
+/**
+ * Extrae fecha (spent_at) y/o importe de un concepto de gasto en prosa.
+ * Mínima sorpresa: la fecha solo sale de expresiones pasadas (ayer, hace N
+ * días, el viernes, last friday, ISO); el importe exige marca de divisa
+ * (€ / euro(s) / eur). Devuelve null si no hay nada inequívoco.
+ * @returns {{spent_at: string|null, amount_cents: number|null, cleanedTitle: string}|null}
+ */
+export function parseExpenseText(text, lang, today = todayLocal()) {
+  if (!text || typeof text !== 'string') return null
+  const low = text.toLowerCase()
+  const dict = lang === 'en' ? DAYS.en : DAYS.es
+  const found = { spent_at: null, amount_cents: null, parts: [] }
+
+  // --- Fecha explícita ISO ---
+  const iso = low.match(/\b(\d{4})-(\d{2})-(\d{2})\b/)
+  if (iso) {
+    found.spent_at = iso[0]
+    found.parts.push(iso[0])
+  }
+
+  // --- hoy / ayer / anteayer (pasado) ---
+  const rel = lang === 'en'
+    ? { 'day before yesterday': -2, 'yesterday': -1, 'today': 0 }
+    : { 'anteayer': -2, 'ayer': -1, 'hoy': 0 }
+  for (const [word, n] of Object.entries(rel)) {
+    if (!found.spent_at && new RegExp(`\\b${word}\\b`, 'i').test(text)) {
+      found.spent_at = addDays(today, n)
+      found.parts.push(word)
+      break
+    }
+  }
+
+  // --- hace N días/semanas / N days/weeks ago ---
+  const ago = low.match(
+    lang === 'en'
+      ? /\b(\d+)\s+(days?|weeks?)\s+ago\b/
+      : /\bhace\s+(\d+)\s+(d[ií]as?|semanas?)\b/
+  )
+  if (!found.spent_at && ago) {
+    const n = parseInt(ago[1], 10)
+    const days = ago[2].startsWith('sem') || ago[2].startsWith('week') ? n * 7 : n
+    found.spent_at = addDays(today, -days)
+    found.parts.push(ago[0])
+  }
+
+  // --- "el <día> (pasado)" / "last|on <weekday>" → el más reciente ---
+  for (const [day, idx] of Object.entries(dict)) {
+    if (found.spent_at) break
+    const re = lang === 'en'
+      ? new RegExp(`\\b(?:last|on)\\s+${day}\\b`, 'i')
+      : new RegExp(`\\bel\\s+${day}(?:\\s+pasado)?\\b`, 'i')
+    const m = text.match(re)
+    if (m) {
+      found.spent_at = lastWeekday(today, idx)
+      found.parts.push(m[0])
+      break
+    }
+  }
+
+  // --- Importe con marca de divisa: "45,50 €", "45€", "20 euros", "€30.5" ---
+  // Ambigüedad de miles: si los decimales tienen 3 dígitos ("1.250 €") NO se
+  // extrae el importe (podría ser 1,25 € o 1.250 €).
+  const amount = low.match(
+    /(?:€\s*(\d{1,6})(?:[.,](\d{1,3}))?)|(?:\b(\d{1,6})(?:[.,](\d{1,3}))?\s*(?:€|euros?\b|eur\b))/
+  )
+  if (amount) {
+    const whole = amount[1] ?? amount[3]
+    const frac = amount[2] ?? amount[4]
+    if (!frac || frac.length <= 2) {
+      found.amount_cents = parseInt(whole, 10) * 100 + (frac ? parseInt(frac.padEnd(2, '0'), 10) : 0)
+      found.parts.push(amount[0])
+    }
+  }
+
+  if (!found.spent_at && !found.amount_cents) return null
+
+  // Limpieza propia: stripParts usa \b en los extremos y las partes con divisa
+  // ("45,50 €") acaban en no-palabra (€), donde \b no existe.
+  let cleaned = text
+  for (const p of found.parts.sort((a, b) => b.length - a.length)) {
+    const esc = p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const pre = /^\w/.test(p) ? '\\b' : ''
+    const post = /\w$/.test(p) ? '\\b' : ''
+    cleaned = cleaned.replace(new RegExp(pre + esc + post, 'gi'), ' ')
+  }
+  cleaned = cleaned.replace(/\s+/g, ' ').trim().replace(/[,\s]+$/g, '')
+  if (!cleaned) return null
+
+  return {
+    spent_at: found.spent_at,
+    amount_cents: found.amount_cents,
+    cleanedTitle: cleaned,
   }
 }

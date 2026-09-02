@@ -36,6 +36,26 @@ async function createExpense(app, session, extra = {}) {
 }
 
 describe('expenses v2 — gate y básicos', () => {
+  it('parse: concepto con fecha e importe en lenguaje natural', async () => {
+    const { app, admin } = await makeExpenseInstance()
+    const res = await app.request(
+      '/api/expenses/parse',
+      jsonReq(admin, 'POST', '', { text: 'cena aniversario ayer 89,90 €', lang: 'es' })
+    )
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.parsed).toBe(true)
+    expect(body.spent_at).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+    expect(body.amount_cents).toBe(8990)
+    expect(body.cleanedTitle).toBe('cena aniversario')
+
+    const none = await app.request(
+      '/api/expenses/parse',
+      jsonReq(admin, 'POST', '', { text: 'cena normal', lang: 'es' })
+    )
+    expect((await none.json()).parsed).toBe(false)
+  })
+
   it('plugin OFF → 404; ON → listado vacío', async () => {
     const inst = await makeInstance({ seedDemoData: false })
     const admin = await loginAdmin(inst.app)

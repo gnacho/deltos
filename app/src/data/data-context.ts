@@ -64,6 +64,12 @@ export interface DataApi {
     recurrence?: TaskRecurrence | null;
     cleanedTitle?: string;
   }>;
+  parseExpenseText: (text: string, lang: 'es' | 'en') => Promise<{
+    parsed: boolean;
+    spent_at?: string | null;
+    amount_cents?: number | null;
+    cleanedTitle?: string;
+  }>;
   addSubtask: (taskId: string, title: string, parentId?: string | null) => Promise<void>;
   updateSubtask: (taskId: string, subtaskId: string, patch: { title?: string; done?: boolean }) => Promise<void>;
   deleteSubtask: (taskId: string, subtaskId: string) => Promise<void>;

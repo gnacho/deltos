@@ -306,6 +306,8 @@
       "method": "Método de pago",
       "step": "Etapa",
       "title": "Concepto",
+      "suggestDate": "fecha {{date}}",
+      "suggestAmount": "importe {{amount}}",
       "createdTitle": "Gasto creado",
       "createdHint": "El gasto ya está registrado. Invita por enlace a quien deba pagar su parte:"
     },
