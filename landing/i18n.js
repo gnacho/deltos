@@ -13,6 +13,28 @@
   const esAria = {};
   document.querySelectorAll('[data-i18n-aria]').forEach(function (el) { esAria[el.dataset.i18nAria] = el.getAttribute('aria-label'); });
 
+  /* Capturas: el DOM solo lleva la del tablero (la inicial), así que el resto
+     del ES del carrusel vive aquí. Sin esto, el caption en ES quedaba vacío
+     para todas menos la primera. */
+  Object.assign(esDict, {
+    'shot.board.cap': 'El tablero, con las tres etapas y los filtros',
+    'shot.casa.cap': 'El proyecto Casa, con etiquetas y prioridades',
+    'shot.viaje.cap': 'El viaje a Lisboa, con fechas y responsables',
+    'shot.trabajo.cap': 'El tablero de Trabajo, para equipos pequeños',
+    'shot.expenses.cap': 'Gastos compartidos, con su reparto',
+    'shot.invite.cap': 'Invitar sin cuenta: enlace, tu parte y pago',
+    'shot.settings.cap': 'Ajustes: tema, acento, densidad y etiquetas'
+  });
+  Object.assign(esAlt, {
+    'shot.board.alt': 'Tablero de Deltos en modo demo con las etapas Nuevo, En curso y Hecho, y tarjetas de casa, trabajo y viaje',
+    'shot.casa.alt': 'Tablero del proyecto Casa con tarjetas como pedir cita para la ITV o revisar el presupuesto de la reforma',
+    'shot.viaje.alt': 'Tablero del viaje a Lisboa con la reserva del hotel, los trenes y una lista de restaurantes',
+    'shot.trabajo.alt': 'Tablero de Trabajo con la presentación del trimestre, una factura y un bug de login',
+    'shot.expenses.alt': 'Tablero de gastos con la compra del súper, una cena y la factura de la luz, con el reparto de pagos',
+    'shot.invite.alt': 'Página pública de invitación de Deltos: saludo a la persona invitada, su parte del gasto y el botón de marcar como pagado',
+    'shot.settings.alt': 'Ajustes de Deltos: tema claro, oscuro o auto, color de acento, densidad y editor de etiquetas'
+  });
+
   const enDict = {
     "misc.skip": "Skip to content",
     "appearance.theme": "Toggle theme",
@@ -54,6 +76,7 @@
     "shot.viaje.cap": "The Lisbon trip, with dates and owners",
     "shot.trabajo.cap": "The Work board, for small teams",
     "shot.expenses.cap": "Shared expenses, with their splits",
+    "shot.invite.cap": "Invite without an account: link, your share and payment",
     "shot.settings.cap": "Settings: theme, accent, density and labels",
     "shots.close": "Close",
     "feat.eyebrow": "What's in it", "feat.title": "Everything the board can do",
@@ -134,6 +157,7 @@
     "shot.viaje.alt": "Deltos Trip to Lisbon project board with hotel bookings, tickets and a restaurant list",
     "shot.trabajo.alt": "Deltos Work project board with the quarterly presentation, an invoice and a login bug",
     "shot.expenses.alt": "Deltos expenses board with the supermarket shopping, a dinner and the power bill, with payment splits",
+    "shot.invite.alt": "Deltos public invite page: greeting to the invited person, their share of the expense and the mark-as-paid button",
     "shot.settings.alt": "Deltos settings: light, dark or auto theme, accent color, density and label editor"
   };
 
