@@ -97,7 +97,7 @@ function FilterDropdown({
     : items;
 
   return (
-    <div className="relative" onKeyDown={(e) => e.key === 'Escape' && setOpen(false)}>
+    <div className={`relative ${open ? 'z-30' : ''}`} onKeyDown={(e) => e.key === 'Escape' && setOpen(false)}>
       <button
         type="button"
         aria-haspopup="listbox"
