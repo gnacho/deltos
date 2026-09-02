@@ -553,9 +553,16 @@
         "generating": "Generating…",
         "revoke": "Revoke token",
         "enabled": "Integration enabled",
-        "tokenLabel": "Token (shown once)",
-        "tokenHint": "Copy the token and use it as Bearer in the Home Assistant REST integration. If you lose it, generate a new one (revokes the previous).",
-        "error": "Could not manage the Home Assistant integration"
+        "tokenLabel": "Token (show it once)",
+        "tokenHint": "Copy the token and use it as Bearer in the Home Assistant REST integration. If you lose it, generate a new one (the previous one will be revoked).",
+        "error": "Could not manage Home Assistant integration"
+      },
+      "archive": {
+        "button": "Archive",
+        "title": "Auto-archive",
+        "hint": "Days before finished tasks and expenses are archived.",
+        "days": "Archive after",
+        "daysUnit": "days"
       }
     },
     "about": {
