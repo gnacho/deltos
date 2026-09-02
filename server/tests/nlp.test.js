@@ -1,6 +1,6 @@
-// nlp.test.js — parser de lenguaje natural para tareas (ES/EN).
+// nlp.test.js — parser de lenguaje natural para tareas y gastos (ES/EN).
 import { describe, it, expect } from 'vitest'
-import { parseTaskText } from '../src/nlp.js'
+import { parseTaskText, parseExpenseText } from '../src/nlp.js'
 
 const TODAY = '2026-08-22' // sábado
 
@@ -101,5 +101,67 @@ describe('nlp — combinado y sin match', () => {
 
   it('texto que es solo la parte temporal → null (no queda título)', () => {
     expect(parseTaskText('mañana', 'es', TODAY)).toBeNull()
+  })
+})
+
+describe('nlp gastos — fechas pasadas', () => {
+  it('ayer / anteayer / hoy', () => {
+    expect(parseExpenseText('cena ayer', 'es', TODAY).spent_at).toBe('2026-08-21')
+    expect(parseExpenseText('compra anteayer', 'es', TODAY).spent_at).toBe('2026-08-20')
+    expect(parseExpenseText('café hoy', 'es', TODAY).spent_at).toBe(TODAY)
+  })
+
+  it('hace N días / semanas', () => {
+    expect(parseExpenseText('cenó hace 3 días', 'es', TODAY).spent_at).toBe('2026-08-19')
+    expect(parseExpenseText('hace 2 semanas', 'es', TODAY)).toBeNull() // sin título
+    expect(parseExpenseText('gas hace 2 semanas', 'es', TODAY).spent_at).toBe('2026-08-08')
+    expect(parseExpenseText('dinner 3 days ago', 'en', TODAY).spent_at).toBe('2026-08-19')
+  })
+
+  it('el <día> → el más reciente (no el próximo, a diferencia de tareas)', () => {
+    // hoy sábado: "el viernes" → ayer (2026-08-21); "el domingo" → hace 6 días
+    expect(parseExpenseText('cena el viernes', 'es', TODAY).spent_at).toBe('2026-08-21')
+    expect(parseExpenseText('compra el domingo', 'es', TODAY).spent_at).toBe('2026-08-16')
+    expect(parseExpenseText('cena el viernes pasado', 'es', TODAY).spent_at).toBe('2026-08-21')
+    expect(parseExpenseText('dinner last friday', 'en', TODAY).spent_at).toBe('2026-08-21')
+    // "el viernes" cuando HOY es viernes → hoy (los gastos miran atrás)
+    expect(parseExpenseText('cena el viernes', 'es', '2026-08-21').spent_at).toBe('2026-08-21')
+  })
+
+  it('ISO explícita gana', () => {
+    const r = parseExpenseText('cena 2026-08-01', 'es', TODAY)
+    expect(r.spent_at).toBe('2026-08-01')
+    expect(r.cleanedTitle).toBe('cena')
+  })
+
+  it('sin marca temporal conocida → sin fecha', () => {
+    const r = parseExpenseText('cena con los suegros', 'es', TODAY)
+    expect(r).toBeNull()
+  })
+})
+
+describe('nlp gastos — importes', () => {
+  it('formas con € y euros', () => {
+    expect(parseExpenseText('cena 45,50 €', 'es', TODAY).amount_cents).toBe(4550)
+    expect(parseExpenseText('taxi 12€', 'es', TODAY).amount_cents).toBe(1200)
+    expect(parseExpenseText('mercado 20 euros', 'es', TODAY).amount_cents).toBe(2000)
+    expect(parseExpenseText('€30.5 taxi', 'en', TODAY).amount_cents).toBe(3050)
+    expect(parseExpenseText('lunch 30.50 eur', 'en', TODAY).amount_cents).toBe(3050)
+  })
+
+  it('número suelto NO es importe (mínima sorpresa)', () => {
+    expect(parseExpenseText('cena para 4 personas', 'es', TODAY)).toBeNull()
+  })
+
+  it('miles ambiguos (3 decimales) no se extraen', () => {
+    // "1.250 €" podría ser 1,25 € o 1.250 €: no hay sugerencia
+    expect(parseExpenseText('mando 1.250 €', 'es', TODAY)).toBeNull()
+  })
+
+  it('importe + fecha juntos, limpia el título', () => {
+    const r = parseExpenseText('cena aniversario ayer 89,90 €', 'es', TODAY)
+    expect(r.spent_at).toBe('2026-08-21')
+    expect(r.amount_cents).toBe(8990)
+    expect(r.cleanedTitle).toBe('cena aniversario')
   })
 })
