@@ -6,6 +6,7 @@ import {
   LayoutGrid,
   Folder,
   ListTodo,
+  Repeat,
   Settings,
   Sun,
   Moon,
@@ -50,7 +51,7 @@ const UPDATE_DISMISS_KEY = 'deltos-release-dismissed';
 const UPDATE_URL = 'https://github.com/gnacho/deltos/releases';
 
 /** Rutas del bottom-nav móvil en orden (para la dirección del deslizamiento). */
-const BOTTOM_NAV_ORDER = ['/', '/projects', '/expenses', '/summary', '/settings'];
+const BOTTOM_NAV_ORDER = ['/', '/projects', '/expenses', '/summary', '/routines', '/settings'];
 
 function isActivePath(pathname: string, to: string): boolean {
   if (to === '/') return pathname === '/';
@@ -358,6 +359,7 @@ const TITLE_KEYS: [RegExp, string][] = [
   [/^\/$/, 'nav.todo'],
   [/^\/projects/, 'nav.projects'],
   [/^\/summary/, 'nav.summary'],
+  [/^\/routines/, 'nav.routines'],
   [/^\/expenses/, 'nav.expenses'],
   [/^\/settings/, 'nav.settings'],
 ];
@@ -588,6 +590,9 @@ export default function Layout() {
             <IconNavLink to="/summary" label={t('nav.summary')}>
               <ListTodo className="w-[18px] h-[18px]" aria-hidden="true" />
             </IconNavLink>
+            <IconNavLink to="/routines" label={t('nav.routines')}>
+              <Repeat className="w-[18px] h-[18px]" aria-hidden="true" />
+            </IconNavLink>
             {showExpenses && (
               <IconNavLink to="/expenses" label={t('nav.expenses')}>
                 <Receipt className="w-[18px] h-[18px]" aria-hidden="true" />
@@ -655,6 +660,12 @@ export default function Layout() {
                   <ListTodo className="w-4 h-4" aria-hidden="true" />
                 </span>
                 <span className="flex-1 text-left">{t('nav.summary')}</span>
+              </NavLink>
+              <NavLink to="/routines" className={sideItemCls}>
+                <span className="text-faint">
+                  <Repeat className="w-4 h-4" aria-hidden="true" />
+                </span>
+                <span className="flex-1 text-left">{t('nav.routines')}</span>
               </NavLink>
               {showExpenses && (
                 <NavLink to="/expenses" className={sideItemCls}>
@@ -750,6 +761,9 @@ export default function Layout() {
           <IconNavLink to="/summary" label={t('nav.summary')}>
             <ListTodo className="w-[18px] h-[18px]" aria-hidden="true" />
           </IconNavLink>
+          <IconNavLink to="/routines" label={t('nav.routines')}>
+            <Repeat className="w-[18px] h-[18px]" aria-hidden="true" />
+          </IconNavLink>
           {showExpenses && (
             <IconNavLink to="/expenses" label={t('nav.expenses')}>
               <Receipt className="w-[18px] h-[18px]" aria-hidden="true" />
@@ -813,7 +827,7 @@ export default function Layout() {
         className="bottom-nav md:hidden fixed bottom-0 inset-x-0 z-40 bg-surface border-t border-app [view-transition-name:deltos-nav]"
         aria-label={t('nav.main')}
       >
-        <div className="h-16 grid grid-cols-5">
+        <div className="h-16 grid grid-cols-6">
           <NavLink
             to="/"
             end
@@ -852,6 +866,15 @@ export default function Layout() {
           >
             <ListTodo className="w-5 h-5" aria-hidden="true" />
             <span className="text-[11px] font-medium">{t('nav.summary')}</span>
+          </NavLink>
+          <NavLink
+            to="/routines"
+            className={({ isActive }) => bnCls(isActive)}
+            aria-label={t('nav.routines')}
+            onClick={handleMobileNav('/routines')}
+          >
+            <Repeat className="w-5 h-5" aria-hidden="true" />
+            <span className="text-[11px] font-medium">{t('nav.routines')}</span>
           </NavLink>
           <NavLink
             to="/settings"

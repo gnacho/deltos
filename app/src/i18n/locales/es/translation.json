@@ -41,7 +41,8 @@
     "collapse": "Plegar menú",
     "expand": "Desplegar menú",
     "expenses": "Gastos",
-    "summary": "Resumen"
+    "summary": "Resumen",
+    "routines": "Periódicas"
   },
   "columns": {
     "nuevo": "Nuevo",
@@ -86,6 +87,7 @@
     "scopeAll": "Todas",
     "scopeMine": "Mías",
     "scopeOthers": "De otras",
+    "recurringOnly": "Periódicas",
     "showArchived": "Mostrar archivadas ({{count}})",
     "hideArchived": "Ocultar archivadas",
     "archivedListAria": "Tareas archivadas",
@@ -773,5 +775,33 @@
     "expenses.empty": "Sin gastos pendientes.",
     "expenses.youOwe": "Debes",
     "expenses.owedToYou": "Te deben"
+  },
+  "routines": {
+    "title": "Periódicas",
+    "subtitle": "Tareas recurrentes y su próxima aparición.",
+    "loadError": "No se pudo cargar las tareas periódicas",
+    "empty": "No hay tareas recurrentes.",
+    "groups": {
+      "daily": "Diarias",
+      "weekly": "Semanales",
+      "monthly": "Mensuales",
+      "custom": "Personalizadas"
+    },
+    "nextDue": "Próxima: {{date}}",
+    "noDue": "Sin fecha",
+    "interval": "cada {{days}} días",
+    "status": {
+      "open": "Activa",
+      "paused": "Pausada",
+      "waiting": "Esperando"
+    },
+    "complete": "Completar",
+    "completeAria": "Completar tarea {{title}}",
+    "pause": "Pausar",
+    "pauseAria": "Pausar serie {{title}}",
+    "resume": "Reanudar",
+    "resumeAria": "Reanudar serie {{title}}",
+    "edit": "Editar",
+    "editAria": "Editar serie {{title}}"
   }
 }

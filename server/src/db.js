@@ -375,6 +375,10 @@ export function migrateSchema(db) {
     db.exec('ALTER TABLE tasks ADD COLUMN archived_at INTEGER')
     log.info('schema_migrated', { table: 'tasks', column: 'archived_at' })
   }
+  if (!taskCols.includes('recurrence_paused')) {
+    db.exec('ALTER TABLE tasks ADD COLUMN recurrence_paused INTEGER DEFAULT 0')
+    log.info('schema_migrated', { table: 'tasks', column: 'recurrence_paused' })
+  }
   // Project membership: owner_id en projects + backfill de project_members.
   // Los proyectos existentes (creados antes de esta feature) no tenían
   // membresía: para no dejarlos invisibles, sembramos a TODOS los usuarios

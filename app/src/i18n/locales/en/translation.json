@@ -41,7 +41,8 @@
     "collapse": "Collapse menu",
     "expand": "Expand menu",
     "expenses": "Expenses",
-    "summary": "Summary"
+    "summary": "Summary",
+    "routines": "Routines"
   },
   "columns": {
     "nuevo": "New",
@@ -86,6 +87,7 @@
     "scopeAll": "All",
     "scopeMine": "Mine",
     "scopeOthers": "Others",
+    "recurringOnly": "Recurring",
     "showArchived": "Show archived ({{count}})",
     "hideArchived": "Hide archived",
     "archivedListAria": "Archived tasks",
@@ -773,5 +775,33 @@
     "expenses.empty": "No pending expenses.",
     "expenses.youOwe": "You owe",
     "expenses.owedToYou": "Owed to you"
+  },
+  "routines": {
+    "title": "Routines",
+    "subtitle": "Recurring tasks and when they come up next.",
+    "loadError": "Could not load recurring tasks",
+    "empty": "No recurring tasks.",
+    "groups": {
+      "daily": "Daily",
+      "weekly": "Weekly",
+      "monthly": "Monthly",
+      "custom": "Custom"
+    },
+    "nextDue": "Next: {{date}}",
+    "noDue": "No date",
+    "interval": "every {{days}} days",
+    "status": {
+      "open": "Active",
+      "paused": "Paused",
+      "waiting": "Waiting"
+    },
+    "complete": "Complete",
+    "completeAria": "Complete task {{title}}",
+    "pause": "Pause",
+    "pauseAria": "Pause series {{title}}",
+    "resume": "Resume",
+    "resumeAria": "Resume series {{title}}",
+    "edit": "Edit",
+    "editAria": "Edit series {{title}}"
   }
 }
