@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.24] - 2026-09-02
+
+### Added
+
+- **Task archiving (#200).** Done tasks older than 3 days are archived
+  automatically (on boot and hourly, with SSE broadcast). Manual archive from
+  the card, the mobile move sheet and the task detail; archived tasks are
+  hidden from the board and revealed by a "Show archived" toggle under the
+  Done column. Unarchiving grants a fresh 3-day window and moving an archived
+  task reactivates it. Project counters ignore archived tasks.
+- **Expense archiving (#203).** Same mechanics for paid expenses: 3-day
+  auto-archive, manual archive (creator or payer), show-archived toggle under
+  the Paid column. Money summaries keep counting archived expenses: archiving
+  cleans the board, not the history.
+
+### Changed
+
+- **Wider task modal on large screens (#201).** The detail panel scales up to
+  `max-w-4xl` on 2xl viewports (896px at 1920, up from 672px).
+- **Scalable filter bar (#202).** The Project and Label filter groups are now
+  multi-select dropdowns with a selected-count badge, a search box past 8
+  items and per-group clear; the popover is anchored to the viewport so the
+  collapse wrapper cannot clip it. Person and Priority remain chips.
+
+### Internal
+
+- New `archived_at`/`done_at` columns on tasks and expenses (auto-migrated;
+  `done_at` self-heals from `updated_at` for pre-migration rows). Positions
+  are sequenced among active cards only. New endpoints
+  `POST /api/{tasks,expenses}/:id/{archive,unarchive}` with 422 codes when
+  the item is not done yet. Server suite 202/202, Playwright E2E 36/36.
+
 ## [2.6.22] - 2026-08-30
 
 ### Security
