@@ -5,7 +5,7 @@ import path from 'node:path'
 import fs from 'node:fs'
 import { serve } from '@hono/node-server'
 import { loadConfig } from './config.js'
-import { openDb, hourlyMaintenance, kvSet, kvGet, archiveStaleDoneTasks } from './db.js'
+import { openDb, hourlyMaintenance, kvSet, kvGet, archiveStaleDoneTasks, archiveStaleDoneExpenses } from './db.js'
 import * as auth from './auth.js'
 import { createHub } from './sse.js'
 import { seedDemo } from './demo.js'
@@ -45,10 +45,11 @@ const secret = auth.getSecret(prod, config.SESSION_SECRET)
 await auth.ensureBootstrapAdmin(prod, config.AUTH_USER, config.AUTH_PASS)
 seedDemo(demo, uploadsDir) // idempotente: solo si la BD demo está vacía
 
-// Auto-archivo de tareas hechas con más de 3 días (al arrancar; luego horario)
+// Auto-archivo de tareas/gastos hechos con más de 3 días (arranque + horario)
 for (const [db, label] of [[prod, 'prod'], [demo, 'demo']]) {
   try {
     archiveStaleDoneTasks(db)
+    archiveStaleDoneExpenses(db)
   } catch (err) {
     log.error('auto_archive_failed', { db: label, error: err })
   }
@@ -95,9 +96,12 @@ const maintenance = setInterval(() => {
     hourlyMaintenance(prod, 'prod')
     hourlyMaintenance(demo, 'demo')
     // Auto-archivo horario: si archiva algo, avisa a los clientes SSE abiertos.
-    if (archiveStaleDoneTasks(prod) + archiveStaleDoneTasks(demo) > 0) {
-      hub.broadcast('tasks')
-    }
+    let archivedAny = false
+    if (archiveStaleDoneTasks(prod) > 0) { hub.broadcast('tasks'); archivedAny = true }
+    if (archiveStaleDoneTasks(demo) > 0) { hub.broadcast('tasks'); archivedAny = true }
+    if (archiveStaleDoneExpenses(prod) > 0) { hub.broadcast('expenses'); archivedAny = true }
+    if (archiveStaleDoneExpenses(demo) > 0) { hub.broadcast('expenses'); archivedAny = true }
+    void archivedAny
     flushNotificationQueue(prod).catch((err) =>
       log.error('push_queue_flush_failed', { error: err })
     )

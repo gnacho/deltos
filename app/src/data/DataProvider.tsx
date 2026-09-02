@@ -447,6 +447,24 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [fetchExpenses, fetchExpenseDetail],
   );
 
+  const archiveExpense = useCallback(
+    async (id: string): Promise<void> => {
+      await apiPost<{ expense: Expense }>(`/api/expenses/${encodeURIComponent(id)}/archive`, {});
+      await fetchExpenses();
+      if (expenseDetailCache.current.has(id)) await fetchExpenseDetail(id);
+    },
+    [fetchExpenses, fetchExpenseDetail],
+  );
+
+  const unarchiveExpense = useCallback(
+    async (id: string): Promise<void> => {
+      await apiPost<{ expense: Expense }>(`/api/expenses/${encodeURIComponent(id)}/unarchive`, {});
+      await fetchExpenses();
+      if (expenseDetailCache.current.has(id)) await fetchExpenseDetail(id);
+    },
+    [fetchExpenses, fetchExpenseDetail],
+  );
+
   const refreshExpenseDetail = useCallback(
     (id: string) => { expenseDetailCache.current.delete(id); void fetchExpenseDetail(id); },
     [fetchExpenseDetail],
@@ -514,6 +532,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       createExpense,
       updateExpense,
       moveExpense,
+      archiveExpense,
+      unarchiveExpense,
       deleteExpense,
       getExpenseDetail: (id) => {
         const cached = expenseDetailCache.current.get(id);

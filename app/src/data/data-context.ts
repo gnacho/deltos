@@ -82,6 +82,8 @@ export interface DataApi {
   createExpense: (input: ExpenseInput) => Promise<Expense>;
   updateExpense: (id: string, patch: ExpensePatch) => Promise<void>;
   moveExpense: (id: string, step: string, position: number) => Promise<void>;
+  archiveExpense: (id: string) => Promise<void>;
+  unarchiveExpense: (id: string) => Promise<void>;
   deleteExpense: (id: string) => Promise<void>;
   getExpenseDetail: (id: string) => ExpenseDetail | null;
   refreshExpenseDetail: (id: string) => void;

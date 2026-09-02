@@ -344,7 +344,15 @@
     "addParticipant": "Añadir persona",
     "allUsersAdded": "Todas las personas añadidas",
     "moveConfirm": "¿Quieres mover este gasto de «{{from}}» a «{{to}}»?",
-    "moveConfirmReopen": "Se reabrirá el gasto. ¿Confirmas?"
+    "moveConfirmReopen": "Se reabrirá el gasto. ¿Confirmas?",
+    "archive": "Archivar",
+    "unarchive": "Desarchivar",
+    "archived": "Archivado",
+    "archiveAria": "Archivar {{title}}",
+    "unarchiveAria": "Desarchivar {{title}}",
+    "archivedListAria": "Gastos archivados",
+    "archivedAnnounce": "Gasto «{{title}}» archivado",
+    "unarchivedAnnounce": "Gasto «{{title}}» desarchivado"
   },
   "expenseEvents": {
     "created": "creó el gasto",

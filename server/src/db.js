@@ -227,7 +227,9 @@ CREATE TABLE IF NOT EXISTS expenses (
   created_by TEXT NOT NULL REFERENCES users(id),
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
-  deleted_at INTEGER
+  deleted_at INTEGER,
+  done_at INTEGER,       -- epoch ms de la última entrada en 'hecho' (para auto-archivo)
+  archived_at INTEGER    -- epoch ms de archivado; NULL = gasto activo en el tablero
 );
 
 CREATE INDEX IF NOT EXISTS idx_expenses_step ON expenses(step, position);
@@ -423,6 +425,14 @@ export function migrateSchema(db) {
     db.exec('ALTER TABLE expenses ADD COLUMN deleted_at INTEGER')
     log.info('schema_migrated', { table: 'expenses', column: 'deleted_at' })
   }
+  if (!expenseCols.includes('done_at')) {
+    db.exec('ALTER TABLE expenses ADD COLUMN done_at INTEGER')
+    log.info('schema_migrated', { table: 'expenses', column: 'done_at' })
+  }
+  if (!expenseCols.includes('archived_at')) {
+    db.exec('ALTER TABLE expenses ADD COLUMN archived_at INTEGER')
+    log.info('schema_migrated', { table: 'expenses', column: 'archived_at' })
+  }
   if (!expenseCols.includes('payment_method')) {
     db.exec("ALTER TABLE expenses ADD COLUMN payment_method TEXT CHECK (payment_method IN ('bizum','transfer','efectivo'))")
     log.info('schema_migrated', { table: 'expenses', column: 'payment_method' })
@@ -513,6 +523,39 @@ export function archiveStaleDoneTasks(db) {
   })
   const archived = tx()
   if (archived > 0) log.info('tasks_auto_archived', { count: archived })
+  return archived
+}
+
+// Auto-archivo de GASTOS: espejo del de tareas, sobre el paso 'hecho' (Pagado).
+export function archiveStaleDoneExpenses(db) {
+  const cutoff = Date.now() - ARCHIVE_AFTER_DAYS * 24 * 60 * 60 * 1000
+  const tx = db.transaction(() => {
+    db.prepare(
+      `UPDATE expenses SET done_at = updated_at
+       WHERE step = 'hecho' AND done_at IS NULL AND archived_at IS NULL AND deleted_at IS NULL`
+    ).run()
+    const stale = db
+      .prepare(
+        `SELECT id, position FROM expenses
+         WHERE step = 'hecho' AND archived_at IS NULL AND deleted_at IS NULL
+           AND done_at IS NOT NULL AND done_at < ?`
+      )
+      .all(cutoff)
+    if (stale.length === 0) return 0
+    const now = Date.now()
+    const archive = db.prepare('UPDATE expenses SET archived_at = ? WHERE id = ?')
+    const compact = db.prepare(
+      `UPDATE expenses SET position = position - 1
+       WHERE step = ? AND position > ? AND archived_at IS NULL AND deleted_at IS NULL`
+    )
+    for (const e of stale) {
+      archive.run(now, e.id)
+      compact.run('hecho', e.position)
+    }
+    return stale.length
+  })
+  const archived = tx()
+  if (archived > 0) log.info('expenses_auto_archived', { count: archived })
   return archived
 }
 

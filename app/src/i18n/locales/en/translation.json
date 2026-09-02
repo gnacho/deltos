@@ -344,7 +344,15 @@
     "addParticipant": "Add person",
     "allUsersAdded": "Everyone added",
     "moveConfirm": "Move this expense from \"{{from}}\" to \"{{to}}\"?",
-    "moveConfirmReopen": "This will reopen the expense. Confirm?"
+    "moveConfirmReopen": "This will reopen the expense. Confirm?",
+    "archive": "Archive",
+    "unarchive": "Unarchive",
+    "archived": "Archived",
+    "archiveAria": "Archive {{title}}",
+    "unarchiveAria": "Unarchive {{title}}",
+    "archivedListAria": "Archived expenses",
+    "archivedAnnounce": "Expense \"{{title}}\" archived",
+    "unarchivedAnnounce": "Expense \"{{title}}\" unarchived"
   },
   "expenseEvents": {
     "created": "created the expense",
