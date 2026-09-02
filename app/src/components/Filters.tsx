@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Funnel, ChevronDown, X, Check, Search } from 'lucide-react';
 import type { Priority } from '@/data/types';
@@ -91,14 +91,39 @@ function FilterDropdown({
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const showSearch = items.length > 8;
   const filtered = query
     ? items.filter((i) => i.name.toLowerCase().includes(query.toLowerCase()))
     : items;
 
+  /* El popover va anclado al viewport (position: fixed): el panel de filtros
+   * vive dentro de un wrapper overflow-hidden (animación de plegado) que
+   * recortaría cualquier popover absoluto. Se recoloca al abrir y en cada
+   * scroll/resize mientras esté abierto. */
+  const place = () => {
+    const r = triggerRef.current?.getBoundingClientRect();
+    if (!r) return;
+    const left = Math.max(8, Math.min(r.left, window.innerWidth - 288 - 8));
+    setPos({ top: r.bottom + 6, left });
+  };
+  useEffect(() => {
+    if (!open) return;
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
   return (
-    <div className={`relative ${open ? 'z-30' : ''}`} onKeyDown={(e) => e.key === 'Escape' && setOpen(false)}>
+    <div className="relative" onKeyDown={(e) => e.key === 'Escape' && setOpen(false)}>
       <button
+        ref={triggerRef}
         type="button"
         aria-haspopup="listbox"
         aria-expanded={open}
@@ -122,12 +147,13 @@ function FilterDropdown({
       </button>
       {open && (
         <>
-          <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} aria-hidden="true" />
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} aria-hidden="true" />
           <div
             role="listbox"
             aria-multiselectable="true"
             aria-label={label}
-            className="absolute z-30 left-0 mt-1.5 w-72 max-w-[calc(100vw-3rem)] rounded-xl bg-surface border border-app shadow-2xl p-2"
+            style={pos ? { top: pos.top, left: pos.left } : { visibility: 'hidden' }}
+            className="fixed z-50 w-72 max-w-[calc(100vw-1rem)] rounded-xl bg-surface border border-app shadow-2xl p-2"
           >
             {showSearch && (
               <div className="relative mb-1.5">
