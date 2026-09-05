@@ -4,7 +4,7 @@
   "description": "Backend de Deltos \u2014 PWA de gesti\u00f3n de tareas para pareja (Hono + better-sqlite3)",
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": ">=24 <25"
   },
   "scripts": {
     "start": "node src/index.js",
