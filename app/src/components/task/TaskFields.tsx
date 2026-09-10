@@ -1,12 +1,11 @@
 import type { ReactNode, Ref } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowUp, ArrowRight, ArrowDown, User } from 'lucide-react';
+import { ArrowUp, ArrowRight, ArrowDown } from 'lucide-react';
 import type { Label, Priority, Project, TaskRecurrence } from '@/data/types';
 import { PRIORITIES, PRIORITY_BADGE } from '@/lib/constants';
-import { colorOf } from '@/lib/colors';
-import { Avatar } from '@/components/Avatar';
 import { ProjectSelect } from '@/components/task/ProjectSelect';
 import { LabelsSelect } from '@/components/task/LabelsSelect';
+import { AssigneeSelect } from '@/components/task/AssigneeSelect';
 import { RecurrenceField } from '@/components/task/RecurrenceField';
 
 export interface TaskFieldsValue {
@@ -38,7 +37,10 @@ function FieldLabel({ children }: { children: ReactNode }) {
 
 /** Formulario de campos de tarea compartido por el modal de creación y la
  *  pestaña Detalles (paridad de campos y layout). Presentacional: el padre
- *  decide cómo persiste cada cambio. */
+ *  decide cómo persiste cada cambio.
+ *
+ *  Orden de filas: etapa | prioridad · asignado | etiquetas · proyecto |
+ *  vencimiento · subtareas | repite. */
 export function TaskFields({
   value,
   onChange,
@@ -50,7 +52,7 @@ export function TaskFields({
   users,
   titleInputRef,
   titleExtra,
-  columnSlot,
+  stageSlot,
   subtasksSlot,
   children,
 }: {
@@ -64,7 +66,7 @@ export function TaskFields({
   users: FieldUser[];
   titleInputRef?: Ref<HTMLInputElement>;
   titleExtra?: ReactNode;
-  columnSlot?: ReactNode;
+  stageSlot?: ReactNode;
   subtasksSlot?: ReactNode;
   children?: ReactNode;
 }) {
@@ -102,23 +104,20 @@ export function TaskFields({
         {titleExtra}
       </div>
 
-      {columnSlot}
-
       <div className="grid grid-cols-2 gap-x-4 gap-y-5">
         <div>
-          <FieldLabel>{t('task.project')}</FieldLabel>
-          <ProjectSelect
-            id={`${idPrefix}-project`}
-            value={value.project_id}
-            onChange={(projectId) => onChange({ project_id: projectId })}
-            projects={projects}
-            ariaLabel={t('task.project')}
-          />
+          <FieldLabel>{t('task.stage')}</FieldLabel>
+          {stageSlot}
         </div>
 
         <div>
           <FieldLabel>{t('task.priority')}</FieldLabel>
-          <div className="flex flex-wrap gap-1.5" role="group" aria-label={t('task.priority')}>
+          <div
+            id={`${idPrefix}-priority`}
+            className="flex flex-wrap gap-1.5"
+            role="group"
+            aria-label={t('task.priority')}
+          >
             {PRIORITIES.map((pr) => {
               const Icon = PR_ICON[pr];
               const active = value.priority === pr;
@@ -156,56 +155,15 @@ export function TaskFields({
 
         <div>
           <FieldLabel>{t('task.assignee')}</FieldLabel>
-          <div className="flex flex-wrap gap-1.5" role="group" aria-label={t('task.assignee')}>
-            {users.map((u) => {
-              const active = value.assignee_id === u.id;
-              return (
-                <button
-                  key={u.id}
-                  type="button"
-                  aria-pressed={active}
-                  onClick={() => onChange({ assignee_id: active ? null : u.id })}
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs ${
-                    active
-                      ? `${colorOf(u.color).chip} ring-1 ring-current font-medium`
-                      : 'bg-surface border border-app text-muted hover:bg-surface2'
-                  }`}
-                >
-                  <Avatar name={u.username} color={u.color} />
-                  {u.username}
-                </button>
-              );
-            })}
-            <button
-              type="button"
-              aria-pressed={value.assignee_id === null}
-              onClick={() => onChange({ assignee_id: null })}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs ${
-                value.assignee_id === null
-                  ? 'bg-slate-200/70 text-slate-600 dark:bg-slate-500/20 dark:text-slate-300 ring-1 ring-current font-medium'
-                  : 'bg-surface border border-app text-muted hover:bg-surface2'
-              }`}
-            >
-              <User className="w-3 h-3" aria-hidden="true" />
-              {t('filters.unassigned')}
-            </button>
-          </div>
-        </div>
-
-        <div>
-          <FieldLabel>{t('task.dueDate')}</FieldLabel>
-          <input
-            id={`${idPrefix}-due`}
-            type="date"
-            value={value.due_date ?? ''}
-            onChange={(e) => onChange({ due_date: e.target.value || null })}
-            className="w-full bg-surface2 border border-app rounded-xl px-3 py-2 text-[14px] outline-none focus:border-brand"
+          <AssigneeSelect
+            id={`${idPrefix}-assignee`}
+            users={users}
+            value={value.assignee_id}
+            onChange={(userId) => onChange({ assignee_id: userId })}
+            ariaLabel={t('task.assignee')}
           />
         </div>
-      </div>
 
-      {/* Fila compacta: etiquetas (desplegable) + subtareas + repetición */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-x-4 gap-y-5">
         <div>
           <FieldLabel>{t('task.labels')}</FieldLabel>
           <LabelsSelect
@@ -216,6 +174,32 @@ export function TaskFields({
             ariaLabel={t('task.labels')}
           />
         </div>
+
+        <div>
+          <FieldLabel>{t('task.project')}</FieldLabel>
+          <ProjectSelect
+            id={`${idPrefix}-project`}
+            value={value.project_id}
+            onChange={(projectId) => onChange({ project_id: projectId })}
+            projects={projects}
+            ariaLabel={t('task.project')}
+          />
+        </div>
+
+        <div>
+          <FieldLabel>{t('task.dueDate')}</FieldLabel>
+          <input
+            id={`${idPrefix}-due`}
+            type="date"
+            value={value.due_date ?? ''}
+            onChange={(e) => onChange({ due_date: e.target.value || null })}
+            className="w-full bg-surface2 border border-app rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-brand"
+          />
+        </div>
+      </div>
+
+      {/* Subtareas y repetición en su propia fila */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-4 gap-y-5">
         <div>
           <FieldLabel>{t('task.subtasks')}</FieldLabel>
           {subtasksSlot}

@@ -6,12 +6,12 @@ import { X, Wand2 } from 'lucide-react';
 import { z } from 'zod';
 import type { ColumnId, Priority } from '@/data/types';
 import { useData } from '@/data/data-context';
+import { useSession } from '@/auth/session-context';
 import type { NewTaskDefaults } from '@/components/modal-context';
-import { COLUMNS } from '@/lib/constants';
-import { colorOf } from '@/lib/colors';
 import { inboxProject } from '@/lib/projects';
 import { apiErrorText } from '@/lib/errors';
 import { TaskFields, type TaskFieldsValue } from '@/components/task/TaskFields';
+import { StageSelect } from '@/components/task/StageSelect';
 import { DraftSubtaskList } from '@/components/task/DraftSubtaskList';
 import type { TaskRecurrence } from '@/data/types';
 
@@ -32,6 +32,7 @@ export function NewTaskModal({
 }) {
   const { t } = useTranslation();
   const data = useData();
+  const { user: me } = useSession();
   const projects = data.getProjects();
   const labels = data.getLabels();
   const inbox = inboxProject(projects);
@@ -47,7 +48,8 @@ export function NewTaskModal({
   const [priority, setPriority] = useState<Priority | null>(null);
   const [dueDate, setDueDate] = useState<string | null>(null);
   const [recurrence, setRecurrence] = useState<TaskRecurrence | null>(null);
-  const [assigneeId, setAssigneeId] = useState<string | null>(null);
+  // Por defecto la tarea se asigna a uno mismo (editable).
+  const [assigneeId, setAssigneeId] = useState<string | null>(me?.id ?? null);
   const [labelIds, setLabelIds] = useState<string[]>([]);
   const [description, setDescription] = useState('');
   const [subtasks, setSubtasks] = useState<string[]>([]);
@@ -207,37 +209,6 @@ export function NewTaskModal({
     </>
   );
 
-  const columnSlot = (
-    <div>
-      <p className="text-[12px] font-semibold tracking-wide uppercase text-faint mb-1.5">
-        {t('newTask.column')}
-      </p>
-      <div
-        className="flex gap-1 rounded-full bg-surface2 p-1"
-        role="group"
-        aria-label={t('newTask.column')}
-      >
-        {COLUMNS.map((c) => {
-          const active = column === c.id;
-          return (
-            <button
-              key={c.id}
-              type="button"
-              aria-pressed={active}
-              onClick={() => setColumn(c.id)}
-              className={`flex-1 flex items-center justify-center gap-1.5 rounded-full px-2 h-10 text-[13px] font-medium ${
-                active ? 'bg-surface shadow-soft' : 'text-muted'
-              }`}
-            >
-              <span className={`w-2 h-2 rounded-full ${colorOf(c.color).dot}`} aria-hidden="true" />
-              {t(`columns.${c.id}`)}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-
   return (
     <div
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
@@ -282,7 +253,7 @@ export function NewTaskModal({
             users={users}
             titleInputRef={titleRef}
             titleExtra={titleExtra}
-            columnSlot={columnSlot}
+            stageSlot={<StageSelect id="nt-stage" value={column} onChange={setColumn} />}
             subtasksSlot={<DraftSubtaskList subtasks={subtasks} onChange={setSubtasks} />}
           >
             {error && (
