@@ -12,7 +12,7 @@ import bcrypt from 'bcryptjs'
 import { zValidator } from '@hono/zod-validator'
 import { SqliteError } from 'better-sqlite3'
 import { requireAdmin } from './auth.js'
-import { kvGet, kvSet } from './db.js'
+import { kvGet, kvSet, ensureUserInInbox } from './db.js'
 import { notifyUsers, notifyAllExcept, notifyInterested } from './push.js'
 import { httpError, validationHook } from './errors.js'
 import { ERROR_CODES } from './error-codes.js'
@@ -98,6 +98,9 @@ const taskCreateSchema = z.object({
   assignee_id: z.string().max(64).nullable().optional(),
   labels: z.array(z.string().max(64)).max(20).default([]),
   recurrence: recurrenceSchema.nullable().optional(),
+  // Subtareas recogidas en el modal de creación (raíz, sin anidar): se
+  // insertan en la misma transacción que la tarea.
+  subtasks: z.array(z.string().min(1).max(200)).max(50).default([]),
 })
 
 const taskPatchSchema = z
@@ -373,7 +376,7 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
     const users = db.prepare('SELECT id, username, color FROM users ORDER BY username').all()
     const projects = db
       .prepare(
-        `SELECT p.id, p.name, p.emoji, p.color, p.position, p.owner_id,
+        `SELECT p.id, p.name, p.emoji, p.color, p.position, p.owner_id, p.is_inbox,
                 COALESCE(SUM(CASE WHEN t."column" = 'nuevo' THEN 1 ELSE 0 END), 0) AS nuevo,
                 COALESCE(SUM(CASE WHEN t."column" = 'encurso' THEN 1 ELSE 0 END), 0) AS encurso,
                 COALESCE(SUM(CASE WHEN t."column" = 'hecho' THEN 1 ELSE 0 END), 0) AS hecho
@@ -389,6 +392,7 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
         color: p.color,
         position: p.position,
         owner_id: p.owner_id,
+        is_inbox: p.is_inbox === 1,
         counts: { nuevo: p.nuevo, encurso: p.encurso, hecho: p.hecho },
         members: [],
       }))
@@ -459,6 +463,7 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
       const user = c.get('user')
       const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(c.req.valid('param').id)
       if (!project) httpError(404, ERROR_CODES.PROJECT_NOT_FOUND)
+      if (project.is_inbox) httpError(403, ERROR_CODES.PROJECT_INBOX)
       requireProjectOwner(db, user, project)
       const data = c.req.valid('json')
       db.prepare('UPDATE projects SET name = ?, emoji = ?, color = ? WHERE id = ?').run(
@@ -475,8 +480,9 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
   app.delete('/api/projects/:id', zValidator('param', idParamSchema, validationHook), (c) => {
     const db = c.get('db')
     const user = c.get('user')
-    const project = db.prepare('SELECT id, owner_id FROM projects WHERE id = ?').get(c.req.valid('param').id)
+    const project = db.prepare('SELECT id, owner_id, is_inbox FROM projects WHERE id = ?').get(c.req.valid('param').id)
     if (!project) httpError(404, ERROR_CODES.PROJECT_NOT_FOUND)
+    if (project.is_inbox) httpError(403, ERROR_CODES.PROJECT_INBOX)
     requireProjectOwner(db, user, project)
     const taskIds = db.prepare('SELECT id FROM tasks WHERE project_id = ?').all(project.id)
     for (const t of taskIds) removeAttachmentFiles(db, uploadsDir, t.id)
@@ -499,6 +505,7 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
       const user = c.get('user')
       const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(c.req.valid('param').id)
       if (!project) httpError(404, ERROR_CODES.PROJECT_NOT_FOUND)
+      if (project.is_inbox) httpError(403, ERROR_CODES.PROJECT_INBOX)
       requireProjectOwner(db, user, project)
       const data = c.req.valid('json')
       const validIds = validUserIds(db, data.member_ids)
@@ -621,6 +628,12 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
         data.column === 'hecho' ? now : null
       )
       replaceTaskLabels(db, id, data.labels)
+      if (data.subtasks.length > 0) {
+        const insSub = db.prepare(
+          'INSERT INTO task_subtasks (id, task_id, parent_id, title, done, position, created_at) VALUES (?, ?, NULL, ?, 0, ?, ?)'
+        )
+        data.subtasks.forEach((title, i) => insSub.run(crypto.randomUUID(), id, title, i, now))
+      }
       addEvent(db, id, user.id, 'created')
     })
     create()
@@ -1446,6 +1459,8 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
       db.prepare(
         'INSERT INTO users (id, username, password_hash, color, language, role, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
       ).run(id, data.username, hash, data.color, 'auto', data.role, Date.now())
+      // Todo usuario nuevo entra en el proyecto "Sin proyecto" (bandeja común).
+      ensureUserInInbox(db, id)
     } catch (err) {
       if (err instanceof SqliteError && err.code === 'SQLITE_CONSTRAINT_UNIQUE') {
         httpError(409, ERROR_CODES.USER_ALREADY_EXISTS)

@@ -28,6 +28,7 @@ import { ConnectionDot } from '@/components/ConnectionDot';
 import { colorOf } from '@/lib/colors';
 import { ProjectIcon } from '@/components/ProjectIcon';
 import { ModalContext, type NewTaskDefaults, type TaskTab } from '@/components/modal-context';
+import { projectDisplayName } from '@/lib/projects';
 import { TaskModal } from '@/components/TaskModal';
 import { useUpdateAvailable } from '@/hooks/useUpdateAvailable';
 import { setUpdateBanner, useUpdateBanner } from '@/hooks/update-banner-store';
@@ -465,7 +466,7 @@ export default function Layout() {
   const titleKey = TITLE_KEYS.find(([re]) => re.test(location.pathname))?.[1];
   const title =
     boardView === 'project'
-      ? (currentProject?.name ?? t('nav.projects'))
+      ? (projectDisplayName(currentProject, t) || t('nav.projects'))
       : t(titleKey ?? 'nav.todo');
 
   const sideItemCls = ({ isActive }: { isActive: boolean }) =>
@@ -500,7 +501,7 @@ export default function Layout() {
           {boardView === 'project' && currentProject ? (
             <>
               <ProjectIcon name={currentProject.emoji} className="w-4 h-4 text-muted shrink-0" />
-              <span className="truncate">{currentProject.name}</span>
+              <span className="truncate">{projectDisplayName(currentProject, t)}</span>
             </>
           ) : (
             <>
@@ -555,7 +556,7 @@ export default function Layout() {
                       }`}
                     >
                       <ProjectIcon name={p.emoji} className="w-4 h-4 shrink-0" />
-                      <span className="flex-1 truncate">{p.name}</span>
+                      <span className="flex-1 truncate">{projectDisplayName(p, t)}</span>
                     </button>
                   </li>
                 );
@@ -606,7 +607,7 @@ export default function Layout() {
               <IconNavLink
                 key={p.id}
                 to={`/p/${p.id}`}
-                label={p.name}
+                label={projectDisplayName(p, t)}
                 active={currentProjectId === p.id}
               >
                 <span
@@ -712,7 +713,7 @@ export default function Layout() {
                       className={`w-2 h-2 rounded-full shrink-0 ${colorOf(p.color).dot}`}
                       aria-hidden="true"
                     />
-                    <span className="flex-1 text-left truncate">{p.name}</span>
+                    <span className="flex-1 text-left truncate">{projectDisplayName(p, t)}</span>
                     <span className="tnum text-xs text-faint">{open}</span>
                   </Link>
                 );

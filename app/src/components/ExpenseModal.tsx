@@ -7,6 +7,7 @@ import type { Expense, ExpenseStep, PaymentMethod } from '@/data/types';
 import { Avatar } from '@/components/Avatar';
 import { ExpenseInvitePanel } from '@/components/ExpenseInvitePanel';
 import { colorOf } from '@/lib/colors';
+import { realProjects } from '@/lib/projects';
 import { fmtMoney } from '@/lib/format';
 import { apiErrorText } from '@/lib/errors';
 
@@ -45,7 +46,8 @@ export function ExpenseModal(props: Props) {
   const isEdit = props.mode === 'edit';
   const expense = isEdit ? props.expense : null;
   const users = data.getUsers();
-  const projects = data.getProjects();
+  // El inbox ("Sin proyecto") no aplica a gastos: ya tienen su propia opción sin proyecto.
+  const projects = realProjects(data.getProjects());
   const labels = data.getLabels();
 
   const [title, setTitle] = useState(expense?.title ?? '');

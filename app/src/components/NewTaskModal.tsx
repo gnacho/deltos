@@ -2,18 +2,17 @@ import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import i18n from '@/i18n';
-import { X, User, ChevronDown, Wand2 } from 'lucide-react';
+import { X, Wand2 } from 'lucide-react';
 import { z } from 'zod';
 import type { ColumnId, Priority } from '@/data/types';
 import { useData } from '@/data/data-context';
 import type { NewTaskDefaults } from '@/components/modal-context';
-import { COLUMNS, PRIORITIES, PRIORITY_BADGE } from '@/lib/constants';
+import { COLUMNS } from '@/lib/constants';
 import { colorOf } from '@/lib/colors';
-import { ProjectIcon } from '@/components/ProjectIcon';
+import { inboxProject } from '@/lib/projects';
 import { apiErrorText } from '@/lib/errors';
-import { Avatar } from '@/components/Avatar';
-import { ArrowUp, ArrowRight, ArrowDown } from 'lucide-react';
-import { RecurrenceField } from '@/components/task/RecurrenceField';
+import { TaskFields, type TaskFieldsValue } from '@/components/task/TaskFields';
+import { DraftSubtaskList } from '@/components/task/DraftSubtaskList';
 import type { TaskRecurrence } from '@/data/types';
 
 const schema = z.object({
@@ -21,9 +20,9 @@ const schema = z.object({
   project_id: z.string().min(1),
 });
 
-const PR_ICON = { alta: ArrowUp, media: ArrowRight, baja: ArrowDown } as const;
-
-/** Modal de creación de tarea (botón + por columna en desktop, FAB en móvil). */
+/** Modal de creación de tarea (botón + por columna en desktop, FAB en móvil).
+ *  Comparte el formulario TaskFields con la pestaña Detalles para que crear y
+ *  editar ofrezcan los mismos campos. */
 export function NewTaskModal({
   defaults,
   onClose,
@@ -35,21 +34,25 @@ export function NewTaskModal({
   const data = useData();
   const projects = data.getProjects();
   const labels = data.getLabels();
+  const inbox = inboxProject(projects);
 
   const [title, setTitle] = useState('');
-  const [projectId, setProjectId] = useState(defaults.projectId ?? projects[0]?.id ?? '');
+  const [projectId, setProjectId] = useState(
+    defaults.projectId ?? inbox?.id ?? projects[0]?.id ?? '',
+  );
   // El asignable se restringe a miembros del proyecto elegido (los demás no
   // verían la tarea); fallback a todos los usuarios si no hay membresía.
   const users = projects.find((p) => p.id === projectId)?.members ?? data.getUsers();
   const [column, setColumn] = useState<ColumnId>(defaults.column ?? 'nuevo');
   const [priority, setPriority] = useState<Priority | null>(null);
-  const [dueDate, setDueDate] = useState('');
+  const [dueDate, setDueDate] = useState<string | null>(null);
   const [recurrence, setRecurrence] = useState<TaskRecurrence | null>(null);
   const [assigneeId, setAssigneeId] = useState<string | null>(null);
-  const [labelIds, setLabelIds] = useState<Set<string>>(new Set());
+  const [labelIds, setLabelIds] = useState<string[]>([]);
+  const [description, setDescription] = useState('');
+  const [subtasks, setSubtasks] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
-  const [projectOpen, setProjectOpen] = useState(false);
   const [parsing, setParsing] = useState(false);
   const [suggested, setSuggested] = useState<{
     due_date?: string | null;
@@ -103,6 +106,28 @@ export function NewTaskModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [title, dueDate, recurrence, lang]);
 
+  const value: TaskFieldsValue = {
+    title,
+    description,
+    project_id: projectId,
+    priority,
+    assignee_id: assigneeId,
+    due_date: dueDate,
+    recurrence,
+    labelIds,
+  };
+
+  const onFieldsChange = (p: Partial<TaskFieldsValue>) => {
+    if (p.title !== undefined) setTitle(p.title);
+    if (p.description !== undefined) setDescription(p.description);
+    if (p.project_id !== undefined) setProjectId(p.project_id);
+    if (p.priority !== undefined) setPriority(p.priority);
+    if (p.assignee_id !== undefined) setAssigneeId(p.assignee_id);
+    if (p.due_date !== undefined) setDueDate(p.due_date);
+    if (p.recurrence !== undefined) setRecurrence(p.recurrence);
+    if (p.labelIds !== undefined) setLabelIds(p.labelIds);
+  };
+
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -116,12 +141,14 @@ export function NewTaskModal({
       await data.createTask({
         project_id: parsed.data.project_id,
         title: parsed.data.title,
+        description,
         column,
         priority,
         due_date: dueDate || null,
         assignee_id: assigneeId,
-        labels: [...labelIds],
+        labels: labelIds,
         recurrence,
+        subtasks,
       });
       onClose();
     } catch (err) {
@@ -129,6 +156,87 @@ export function NewTaskModal({
       setCreating(false);
     }
   };
+
+  const titleExtra = (
+    <>
+      {parsing && (
+        <p className="text-[12px] text-faint mt-1.5 flex items-center gap-1">
+          <Wand2 className="w-3 h-3" aria-hidden="true" />
+          {t('newTask.parsing')}
+        </p>
+      )}
+      {!parsing && suggested && !dueDate && !recurrence && (
+        <div className="mt-2 rounded-xl border border-brand/30 bg-brand/5 px-3 py-2.5">
+          <div className="flex items-start justify-between gap-3">
+            <p className="text-[13px] text-muted leading-snug">
+              {t('newTask.suggestion', {
+                summary: [
+                  suggested.due_date && t('newTask.suggestionDue', { date: suggested.due_date }),
+                  suggested.recurrence && t(`task.recurrenceFreq.${suggested.recurrence.freq}`),
+                ]
+                  .filter(Boolean)
+                  .join(' · '),
+              })}
+            </p>
+            <div className="flex shrink-0 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setTitle(suggested.cleanedTitle ?? title);
+                  setDueDate(suggested.due_date ?? null);
+                  if (suggested.recurrence) setRecurrence(suggested.recurrence);
+                  setSuggested(null);
+                }}
+                className="inline-flex items-center gap-1 rounded-lg bg-brand px-2.5 py-1.5 text-[12px] font-semibold text-brandfg hover:brightness-110"
+              >
+                <Wand2 className="w-3 h-3" aria-hidden="true" />
+                {t('newTask.applySuggestion')}
+              </button>
+              <button
+                type="button"
+                onClick={() => setSuggested(null)}
+                aria-label={t('common.close')}
+                className="w-7 h-7 rounded-lg text-faint hover:bg-surface2 flex items-center justify-center"
+              >
+                <X className="w-4 h-4" aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+
+  const columnSlot = (
+    <div>
+      <p className="text-[12px] font-semibold tracking-wide uppercase text-faint mb-1.5">
+        {t('newTask.column')}
+      </p>
+      <div
+        className="flex gap-1 rounded-full bg-surface2 p-1"
+        role="group"
+        aria-label={t('newTask.column')}
+      >
+        {COLUMNS.map((c) => {
+          const active = column === c.id;
+          return (
+            <button
+              key={c.id}
+              type="button"
+              aria-pressed={active}
+              onClick={() => setColumn(c.id)}
+              className={`flex-1 flex items-center justify-center gap-1.5 rounded-full px-2 h-10 text-[13px] font-medium ${
+                active ? 'bg-surface shadow-soft' : 'text-muted'
+              }`}
+            >
+              <span className={`w-2 h-2 rounded-full ${colorOf(c.color).dot}`} aria-hidden="true" />
+              {t(`columns.${c.id}`)}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
 
   return (
     <div
@@ -145,7 +253,7 @@ export function NewTaskModal({
       <form
         onSubmit={submit}
         noValidate
-        className="relative w-full sm:max-w-lg bg-surface rounded-t-2xl sm:rounded-2xl border border-app shadow-2xl max-h-[92vh] overflow-y-auto nice-scroll"
+        className="relative w-full sm:max-w-lg lg:max-w-2xl xl:max-w-3xl 2xl:max-w-4xl bg-surface rounded-t-2xl sm:rounded-2xl border border-app shadow-2xl max-h-[92vh] overflow-y-auto nice-scroll"
       >
         <div className="sticky top-0 z-10 bg-surface/95 backdrop-blur border-b border-app px-5 py-4 flex items-center gap-3">
           <h2
@@ -164,295 +272,33 @@ export function NewTaskModal({
           </button>
         </div>
 
-        <div className="px-5 py-5 space-y-5">
-          <div>
-            <label
-              htmlFor="nt-title"
-              className="block text-[12px] font-semibold tracking-wide uppercase text-faint mb-1.5"
-            >
-              {t('newTask.titleLabel')}
-            </label>
-            <input
-              ref={titleRef}
-              id="nt-title"
-              type="text"
-              value={title}
-              maxLength={200}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder={t('newTask.titlePlaceholder')}
-              className="w-full bg-surface2 border border-app rounded-xl px-3.5 py-2.5 text-[15px] font-medium outline-none focus:border-brand"
-            />
-            {parsing && (
-              <p className="text-[12px] text-faint mt-1.5 flex items-center gap-1">
-                <Wand2 className="w-3 h-3" aria-hidden="true" />
-                {t('newTask.parsing')}
-              </p>
-            )}
-            {!parsing && suggested && !dueDate && !recurrence && (
-              <div className="mt-2 rounded-xl border border-brand/30 bg-brand/5 px-3 py-2.5">
-                <div className="flex items-start justify-between gap-3">
-                  <p className="text-[13px] text-muted leading-snug">
-                    {t('newTask.suggestion', {
-                      summary: [
-                        suggested.due_date && t('newTask.suggestionDue', { date: suggested.due_date }),
-                        suggested.recurrence && t(`task.recurrenceFreq.${suggested.recurrence.freq}`),
-                      ]
-                        .filter(Boolean)
-                        .join(' · '),
-                    })}
-                  </p>
-                  <div className="flex shrink-0 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setTitle(suggested.cleanedTitle ?? title);
-                        setDueDate(suggested.due_date ?? '');
-                        if (suggested.recurrence) setRecurrence(suggested.recurrence);
-                        setSuggested(null);
-                      }}
-                      className="inline-flex items-center gap-1 rounded-lg bg-brand px-2.5 py-1.5 text-[12px] font-semibold text-brandfg hover:brightness-110"
-                    >
-                      <Wand2 className="w-3 h-3" aria-hidden="true" />
-                      {t('newTask.applySuggestion')}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setSuggested(null)}
-                      aria-label={t('common.close')}
-                      className="w-7 h-7 rounded-lg text-faint hover:bg-surface2 flex items-center justify-center"
-                    >
-                      <X className="w-4 h-4" aria-hidden="true" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div>
-            <label
-              htmlFor="nt-project"
-              className="block text-[12px] font-semibold tracking-wide uppercase text-faint mb-1.5"
-            >
-              {t('newTask.project')}
-            </label>
-            <div className="relative">
-              <button
-                type="button"
-                id="nt-project"
-                aria-haspopup="listbox"
-                aria-expanded={projectOpen}
-                onClick={() => setProjectOpen((o) => !o)}
-                className="w-full inline-flex items-center gap-2 bg-surface2 border border-app rounded-xl px-3.5 py-2.5 text-[15px] font-medium outline-none focus:border-brand"
-              >
-                <ProjectIcon name={projects.find((p) => p.id === projectId)?.emoji ?? 'home'} className="w-4.5 h-4.5 text-muted shrink-0" />
-                <span className="flex-1 text-left truncate">
-                  {projects.find((p) => p.id === projectId)?.name ?? ''}
-                </span>
-                <ChevronDown
-                  className={`w-4 h-4 text-faint shrink-0 transition-transform duration-200 ${projectOpen ? 'rotate-180' : ''}`}
-                  aria-hidden="true"
-                />
-              </button>
-              {projectOpen && (
-                <>
-                  <div className="fixed inset-0 z-20" onClick={() => setProjectOpen(false)} aria-hidden="true" />
-                  <ul
-                    role="listbox"
-                    aria-label={t('newTask.project')}
-                    className="absolute z-30 left-0 right-0 mt-1.5 max-h-64 overflow-y-auto nice-scroll rounded-xl bg-surface border border-app shadow-2xl py-1"
-                  >
-                    {projects.map((p) => {
-                      const active = p.id === projectId;
-                      return (
-                        <li key={p.id} role="option" aria-selected={active}>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setProjectId(p.id);
-                              setProjectOpen(false);
-                            }}
-                            className={`w-full flex items-center gap-2.5 px-3.5 py-2 text-[14px] text-left hover:bg-surface2 ${
-                              active ? 'font-medium text-brand' : ''
-                            }`}
-                          >
-                            <ProjectIcon name={p.emoji} className="w-4 h-4 shrink-0" />
-                            <span className="flex-1 truncate">{p.name}</span>
-                            {active && (
-                              <span className="text-[12px] font-semibold">{t('task.current')}</span>
-                            )}
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </>
-              )}
-            </div>
-          </div>
-
-          <div>
-            <p className="text-[12px] font-semibold tracking-wide uppercase text-faint mb-1.5">
-              {t('newTask.column')}
-            </p>
-            <div
-              className="flex gap-1 rounded-full bg-surface2 p-1"
-              role="group"
-              aria-label={t('newTask.column')}
-            >
-              {COLUMNS.map((c) => {
-                const active = column === c.id;
-                return (
-                  <button
-                    key={c.id}
-                    type="button"
-                    aria-pressed={active}
-                    onClick={() => setColumn(c.id)}
-                    className={`flex-1 flex items-center justify-center gap-1.5 rounded-full px-2 h-10 text-[13px] font-medium ${
-                      active ? 'bg-surface shadow-soft' : 'text-muted'
-                    }`}
-                  >
-                    <span
-                      className={`w-2 h-2 rounded-full ${colorOf(c.color).dot}`}
-                      aria-hidden="true"
-                    />
-                    {t(`columns.${c.id}`)}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <p className="text-[12px] font-semibold tracking-wide uppercase text-faint mb-1.5">
-                {t('task.priority')}
-              </p>
-              <div className="flex flex-wrap gap-1.5" role="group" aria-label={t('task.priority')}>
-                {PRIORITIES.map((pr) => {
-                  const Icon = PR_ICON[pr];
-                  const active = priority === pr;
-                  return (
-                    <button
-                      key={pr}
-                      type="button"
-                      aria-pressed={active}
-                      onClick={() => setPriority(active ? null : pr)}
-                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs ${
-                        active
-                          ? `${PRIORITY_BADGE[pr]} ring-1 ring-current font-medium`
-                          : 'bg-surface border border-app text-muted hover:bg-surface2'
-                      }`}
-                    >
-                      <Icon className="w-3 h-3" aria-hidden="true" />
-                      {t(`priority.${pr}`)}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-            <div>
-              <label
-                htmlFor="nt-due"
-                className="block text-[12px] font-semibold tracking-wide uppercase text-faint mb-1.5"
-              >
-                {t('task.dueDate')}
-              </label>
-              <input
-                id="nt-due"
-                type="date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                className="w-full bg-surface2 border border-app rounded-xl px-3 py-2 text-[14px] outline-none focus:border-brand"
-              />
-            </div>
-          </div>
-
-          <RecurrenceField
-            value={recurrence}
-            onChange={setRecurrence}
+        <div className="px-5 py-5">
+          <TaskFields
+            value={value}
+            onChange={onFieldsChange}
             idPrefix="nt"
-          />
-
-          <div>
-            <p className="text-[12px] font-semibold tracking-wide uppercase text-faint mb-1.5">
-              {t('task.assignee')}
-            </p>
-            <div className="flex flex-wrap gap-1.5" role="group" aria-label={t('task.assignee')}>
-              {users.map((u) => {
-                const active = assigneeId === u.id;
-                return (
-                  <button
-                    key={u.id}
-                    type="button"
-                    aria-pressed={active}
-                    onClick={() => setAssigneeId(active ? null : u.id)}
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs ${
-                      active
-                        ? `${colorOf(u.color).chip} ring-1 ring-current font-medium`
-                        : 'bg-surface border border-app text-muted hover:bg-surface2'
-                    }`}
-                  >
-                    <Avatar name={u.username} color={u.color} />
-                    {u.username}
-                  </button>
-                );
-              })}
-              {users.length === 0 && (
-                <span className="inline-flex items-center gap-1.5 text-[13px] text-faint">
-                  <User className="w-3.5 h-3.5" aria-hidden="true" />
-                  {t('filters.unassigned')}
-                </span>
-              )}
-            </div>
-          </div>
-
-          {labels.length > 0 && (
-            <div>
-              <p className="text-[12px] font-semibold tracking-wide uppercase text-faint mb-1.5">
-                {t('task.labels')}
-              </p>
-              <div className="flex flex-wrap gap-1.5" role="group" aria-label={t('task.labels')}>
-                {labels.map((l) => {
-                  const active = labelIds.has(l.id);
-                  return (
-                    <button
-                      key={l.id}
-                      type="button"
-                      aria-pressed={active}
-                      onClick={() => {
-                        const next = new Set(labelIds);
-                        if (active) next.delete(l.id);
-                        else next.add(l.id);
-                        setLabelIds(next);
-                      }}
-                      className={`px-2.5 py-1 rounded-full text-xs ${
-                        active
-                          ? `${colorOf(l.color).chip} ring-1 ring-current font-medium`
-                          : 'bg-surface border border-app text-muted hover:bg-surface2'
-                      }`}
-                    >
-                      {l.name}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {error && (
-            <p role="alert" className="text-[13px] font-medium text-rose-600 dark:text-rose-400">
-              {error}
-            </p>
-          )}
-
-          <button
-            type="submit"
-            disabled={creating || projects.length === 0}
-            className="w-full h-12 rounded-xl bg-brand text-brandfg text-[15px] font-semibold hover:brightness-110 disabled:opacity-60 shadow-soft"
+            projects={projects}
+            labels={labels}
+            users={users}
+            titleInputRef={titleRef}
+            titleExtra={titleExtra}
+            columnSlot={columnSlot}
+            subtasksSlot={<DraftSubtaskList subtasks={subtasks} onChange={setSubtasks} />}
           >
-            {creating ? t('newTask.creating') : t('newTask.create')}
-          </button>
+            {error && (
+              <p role="alert" className="text-[13px] font-medium text-rose-600 dark:text-rose-400">
+                {error}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={creating || projects.length === 0}
+              className="w-full h-12 rounded-xl bg-brand text-brandfg text-[15px] font-semibold hover:brightness-110 disabled:opacity-60 shadow-soft"
+            >
+              {creating ? t('newTask.creating') : t('newTask.create')}
+            </button>
+          </TaskFields>
         </div>
       </form>
     </div>

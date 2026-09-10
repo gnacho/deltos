@@ -6,6 +6,7 @@ import { emptyFilters, type FilterState } from '@/components/filters-state';
 import { useData } from '@/data/data-context';
 import { PRIORITIES, PRIORITY_BADGE } from '@/lib/constants';
 import { colorOf } from '@/lib/colors';
+import { projectDisplayName } from '@/lib/projects';
 import { ArrowUp, ArrowRight, ArrowDown } from 'lucide-react';
 
 const PR_ICON: Record<Priority, typeof ArrowUp> = {
@@ -363,7 +364,7 @@ export function Filters({
           <div className="rounded-2xl bg-surface border border-app p-3.5 flex flex-wrap items-center gap-x-4 gap-y-2.5">
             <FilterDropdown
               label={t('filters.project')}
-              items={projects.map((p) => ({ id: p.id, name: p.name, color: p.color }))}
+              items={projects.map((p) => ({ id: p.id, name: projectDisplayName(p, t), color: p.color }))}
               selected={filters.projects}
               onToggle={(id) => toggle('projects', id)}
               onClear={() => clearGroup('projects')}

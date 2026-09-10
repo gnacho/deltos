@@ -4,6 +4,7 @@ import type { Label, Priority, Project } from '@/data/types';
 import { PRIORITY_BADGE } from '@/lib/constants';
 import { colorOf } from '@/lib/colors';
 import { dueInfo } from '@/lib/due';
+import { projectDisplayName } from '@/lib/projects';
 
 const PR_ICON: Record<Priority, typeof ArrowUp> = {
   alta: ArrowUp,
@@ -70,13 +71,14 @@ export function TagChip({ label, big }: { label: Label; big?: boolean }) {
 }
 
 export function ProjectChip({ project }: { project: Project }) {
+  const { t } = useTranslation();
   const c = colorOf(project.color);
   return (
     <span
       className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[12px] font-medium ${c.chip}`}
     >
       <span className={`w-1.5 h-1.5 rounded-full ${c.dot}`} aria-hidden="true" />
-      {project.name}
+      {projectDisplayName(project, t)}
     </span>
   );
 }
