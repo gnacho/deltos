@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.30] - 2026-09-13
+
+### Added
+
+- **Global search (#223).** Find a task from anywhere with Cmd/Ctrl+K, or from
+  the search button in the sidebar and the mobile header. It matches the title,
+  the description, the assignee, the project and the labels of the tasks in the
+  projects you belong to, and picking a result opens it.
+
 ## [2.6.28] - 2026-09-13
 
 ### Added
