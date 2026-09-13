@@ -5,7 +5,7 @@ import path from 'node:path'
 import fs from 'node:fs'
 import { serve } from '@hono/node-server'
 import { loadConfig } from './config.js'
-import { openDb, hourlyMaintenance, kvSet, kvGet, archiveStaleDoneTasks, archiveStaleDoneExpenses } from './db.js'
+import { openDb, hourlyMaintenance, kvSet, kvGet, archiveStaleDoneTasks, archiveStaleDoneExpenses, ensureInbox } from './db.js'
 import * as auth from './auth.js'
 import { createHub } from './sse.js'
 import { seedDemo } from './demo.js'
@@ -44,6 +44,9 @@ if (kvGet(prod, 'demo_enabled') === null) kvSet(prod, 'demo_enabled', '1')
 const secret = auth.getSecret(prod, config.SESSION_SECRET)
 await auth.ensureBootstrapAdmin(prod, config.AUTH_USER, config.AUTH_PASS)
 seedDemo(demo, uploadsDir) // idempotente: solo si la BD demo está vacía
+// Proyecto "Sin proyecto": se crea cuando ya existen usuarios (todos sus miembros).
+ensureInbox(prod)
+ensureInbox(demo)
 
 // Auto-archivo de tareas/gastos hechos con más de 3 días (arranque + horario)
 for (const [db, label] of [[prod, 'prod'], [demo, 'demo']]) {

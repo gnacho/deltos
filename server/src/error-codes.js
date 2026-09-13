@@ -39,6 +39,7 @@ export const ERROR_CODES = {
   PROJECT_NOT_FOUND: 'PROJECT_NOT_FOUND',
   PROJECT_NOT_MEMBER: 'PROJECT_NOT_MEMBER', // 403, no eres miembro del proyecto
   PROJECT_NOT_OWNER: 'PROJECT_NOT_OWNER', // 403, requiere ser owner (o admin)
+  PROJECT_INBOX: 'PROJECT_INBOX', // 403, el proyecto "Sin proyecto" no se puede modificar
   ASSIGNEE_NOT_MEMBER: 'ASSIGNEE_NOT_MEMBER', // 422, el asignado no es miembro del proyecto
   LABEL_NOT_FOUND: 'LABEL_NOT_FOUND',
   LABEL_NAME_TAKEN: 'LABEL_NAME_TAKEN', // 409, labels.name UNIQUE
@@ -96,6 +97,7 @@ export const ERROR_MESSAGES_ES = {
   [ERROR_CODES.PROJECT_NOT_FOUND]: 'Proyecto no encontrado',
   [ERROR_CODES.PROJECT_NOT_MEMBER]: 'No eres miembro de este proyecto',
   [ERROR_CODES.PROJECT_NOT_OWNER]: 'Solo el responsable del proyecto puede hacer esto',
+  [ERROR_CODES.PROJECT_INBOX]: 'El proyecto "Sin proyecto" no se puede modificar',
   [ERROR_CODES.ASSIGNEE_NOT_MEMBER]: 'El asignado debe ser miembro del proyecto',
   [ERROR_CODES.LABEL_NOT_FOUND]: 'Etiqueta no encontrada',
   [ERROR_CODES.LABEL_NAME_TAKEN]: 'Ya existe una etiqueta con ese nombre',

@@ -12,6 +12,7 @@ export interface ProjectIconDef {
 export const PROJECT_ICONS: ProjectIconDef[] = [
   // Hogar
   { name: 'home', emoji: '🏠' },
+  { name: 'inbox', emoji: '📥' },
   { name: 'building', emoji: '🏢' },
   { name: 'bed-double', emoji: '🛏️' },
   { name: 'sofa', emoji: '🛋️' },

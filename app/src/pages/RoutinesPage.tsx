@@ -5,6 +5,7 @@ import { apiFetch, apiPost } from '@/data/api-client';
 import { apiErrorText } from '@/lib/errors';
 import { useTaskModal } from '@/components/modal-context';
 import { colorOf } from '@/lib/colors';
+import { projectDisplayName } from '@/lib/projects';
 import { fmtFullDate } from '@/i18n';
 import type { TaskRecurrence } from '@/data/types';
 
@@ -173,7 +174,7 @@ export default function RoutinesPage() {
                     <span className="mt-1.5 flex flex-wrap items-center gap-2 text-[12px]">
                       <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full font-medium ${colorOf(s.project.color).chip}`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${colorOf(s.project.color).dot}`} aria-hidden="true" />
-                        {s.project.name}
+                        {projectDisplayName(s.project, t)}
                       </span>
                       <span className="text-faint">
                         {s.next_due

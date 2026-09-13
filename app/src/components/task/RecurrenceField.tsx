@@ -59,43 +59,71 @@ export function RecurrenceField({
         </button>
       ) : (
         <div className="space-y-3">
-          <div className="grid grid-cols-3 gap-1 rounded-full bg-surface2 p-1" role="group" aria-label={t('task.recurrenceFreq')}>
-            {(['daily', 'weekly', 'monthly'] as const).map((f) => (
-              <button
-                key={f}
-                type="button"
-                aria-pressed={rec.freq === f}
-                onClick={() => set({ freq: f })}
-                className={`rounded-full px-2 h-9 text-[13px] font-medium ${
-                  rec.freq === f ? 'bg-surface shadow-soft' : 'text-muted'
-                }`}
-              >
-                {t(`task.recurrenceFreq.${f}`)}
-              </button>
-            ))}
-          </div>
-
-          <div className="flex items-center gap-3">
-            <div className="flex-1">
+          {/* Cada [n] [unidad] y Cuándo se calcula, en la misma fila */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
               <label
                 htmlFor={`${idPrefix}-rec-interval`}
                 className="block text-[12px] font-semibold tracking-wide uppercase text-faint mb-1.5"
               >
                 {t('task.recurrenceEvery')}
               </label>
-              <input
-                id={`${idPrefix}-rec-interval`}
-                type="number"
-                min={1}
-                max={999}
-                value={rec.interval}
-                onChange={(e) => set({ interval: Math.max(1, parseInt(e.target.value, 10) || 1) })}
-                className="w-full bg-surface2 border border-app rounded-xl px-3 py-2 text-[14px] outline-none focus:border-brand"
-              />
+              <div className="flex gap-1.5">
+                <input
+                  id={`${idPrefix}-rec-interval`}
+                  type="number"
+                  min={1}
+                  max={999}
+                  value={rec.interval}
+                  onChange={(e) => set({ interval: Math.max(1, parseInt(e.target.value, 10) || 1) })}
+                  className="w-16 shrink-0 bg-surface2 border border-app rounded-xl px-3 py-2 text-[14px] outline-none focus:border-brand"
+                />
+                <select
+                  value={rec.freq}
+                  onChange={(e) => set({ freq: e.target.value as TaskRecurrence['freq'] })}
+                  aria-label={t('task.recurrenceFreq')}
+                  className="flex-1 min-w-0 bg-surface2 border border-app rounded-xl px-2 py-2 text-[14px] outline-none focus:border-brand"
+                >
+                  {(['daily', 'weekly', 'monthly'] as const).map((f) => (
+                    <option key={f} value={f}>
+                      {t(`task.recurrenceUnit.${f}`)}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
-            <p className="text-[13px] text-faint pt-5">
-              {t(`task.recurrenceUnit.${rec.freq}`)}
-            </p>
+
+            <div>
+              <p className="text-[12px] font-semibold tracking-wide uppercase text-faint mb-1.5">
+                {t('task.recurrenceMode')}
+              </p>
+              <div className="grid grid-cols-1 gap-1.5">
+                <button
+                  type="button"
+                  aria-pressed={rec.mode === 'due'}
+                  onClick={() => set({ mode: 'due' })}
+                  className={`rounded-xl px-3 py-2 text-[13px] text-left ${
+                    rec.mode === 'due'
+                      ? 'bg-brand/10 text-brand ring-1 ring-brand font-medium'
+                      : 'bg-surface border border-app text-muted hover:bg-surface2'
+                  }`}
+                >
+                  {t('task.recurrenceMode.due')}
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={rec.mode === 'completion'}
+                  onClick={() => set({ mode: 'completion' })}
+                  className={`rounded-xl px-3 py-2 text-[13px] text-left ${
+                    rec.mode === 'completion'
+                      ? 'bg-brand/10 text-brand ring-1 ring-brand font-medium'
+                      : 'bg-surface border border-app text-muted hover:bg-surface2'
+                  }`}
+                >
+                  {t('task.recurrenceMode.completion')}
+                </button>
+              </div>
+            </div>
           </div>
 
           {rec.freq === 'weekly' && (
@@ -130,40 +158,9 @@ export function RecurrenceField({
             </div>
           )}
 
-          <div>
-            <p className="text-[12px] font-semibold tracking-wide uppercase text-faint mb-1.5">
-              {t('task.recurrenceMode')}
-            </p>
-            <div className="grid grid-cols-2 gap-1.5">
-              <button
-                type="button"
-                aria-pressed={rec.mode === 'due'}
-                onClick={() => set({ mode: 'due' })}
-                className={`rounded-xl px-3 py-2 text-[13px] text-left ${
-                  rec.mode === 'due'
-                    ? 'bg-brand/10 text-brand ring-1 ring-brand font-medium'
-                    : 'bg-surface border border-app text-muted hover:bg-surface2'
-                }`}
-              >
-                {t('task.recurrenceMode.due')}
-              </button>
-              <button
-                type="button"
-                aria-pressed={rec.mode === 'completion'}
-                onClick={() => set({ mode: 'completion' })}
-                className={`rounded-xl px-3 py-2 text-[13px] text-left ${
-                  rec.mode === 'completion'
-                    ? 'bg-brand/10 text-brand ring-1 ring-brand font-medium'
-                    : 'bg-surface border border-app text-muted hover:bg-surface2'
-                }`}
-              >
-                {t('task.recurrenceMode.completion')}
-              </button>
-            </div>
-            {rec.mode === 'completion' && (
-              <p className="text-[12px] text-faint mt-1.5">{t('task.recurrenceMode.completionHint')}</p>
-            )}
-          </div>
+          {rec.mode === 'completion' && (
+            <p className="text-[12px] text-faint">{t('task.recurrenceMode.completionHint')}</p>
+          )}
         </div>
       )}
     </div>

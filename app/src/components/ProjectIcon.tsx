@@ -37,6 +37,7 @@ import {
   Headphones,
   Heart,
   Home,
+  Inbox,
   Key,
   Lamp,
   Laptop,
@@ -93,6 +94,7 @@ import {
 
 const ICON_MAP: Record<string, LucideIcon> = {
   home: Home,
+  inbox: Inbox,
   building: Building,
   'bed-double': BedDouble,
   sofa: Sofa,

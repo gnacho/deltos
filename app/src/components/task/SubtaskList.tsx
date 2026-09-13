@@ -131,8 +131,7 @@ export function SubtaskList({ taskId, subtasks }: { taskId: string; subtasks: Su
   );
 
   return (
-    <section>
-      <h3 className="font-display font-semibold text-[14px] mb-2">{t('task.subtasks')}</h3>
+    <div>
       {subtasks.length > 0 && (
         <ul className="space-y-0.5 mb-2">{roots.map((s) => renderRow(s, 0))}</ul>
       )}
@@ -163,6 +162,6 @@ export function SubtaskList({ taskId, subtasks }: { taskId: string; subtasks: Su
           {error}
         </p>
       )}
-    </section>
+    </div>
   );
 }

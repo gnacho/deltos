@@ -272,6 +272,7 @@ export default function BoardPage() {
           <button
             type="button"
             aria-pressed={recurringOnly}
+            aria-label={t('board.recurringOnly')}
             onClick={() => setRecurringOnly((v) => !v)}
             className={`inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-[13px] font-medium transition-colors ${
               recurringOnly
