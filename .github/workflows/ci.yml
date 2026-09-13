@@ -1,0 +1,56 @@
+name: CI
+
+# Tests y smoke. El smoke arranca el servidor de verdad, comprueba health y
+# versión, crea datos, hace un backup con el CLI del timer y verifica que se
+# puede restaurar. Sin systemd ni root: en CI no hay systemd.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install server dependencies
+        working-directory: server
+        run: npm ci
+
+      - name: Server tests
+        working-directory: server
+        run: npm test
+
+      - name: Smoke (server, backup and restore)
+        working-directory: server
+        run: node scripts/ci-smoke.mjs
+
+  installer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Shell scripts parse
+        run: |
+          sh -n install.sh
+          for f in deploy/*.sh; do sh -n "$f"; done
+
+      # Descarga la última release, verifica su checksum y recorre los pasos sin
+      # tocar el sistema. Falla si el manifiesto, el checksum o los pasos rompen.
+      - name: install.sh dry-run
+        run: sh install.sh --dry-run
