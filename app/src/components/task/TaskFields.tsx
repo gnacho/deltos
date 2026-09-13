@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { ReactNode, Ref } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ArrowUp, ArrowRight, ArrowDown } from 'lucide-react';
@@ -7,6 +8,7 @@ import { ProjectSelect } from '@/components/task/ProjectSelect';
 import { LabelsSelect } from '@/components/task/LabelsSelect';
 import { AssigneeSelect } from '@/components/task/AssigneeSelect';
 import { RecurrenceField } from '@/components/task/RecurrenceField';
+import Markdown from '@/components/LazyMarkdown';
 
 export interface TaskFieldsValue {
   title: string;
@@ -71,6 +73,7 @@ export function TaskFields({
   children?: ReactNode;
 }) {
   const { t } = useTranslation();
+  const [descFocused, setDescFocused] = useState(false);
 
   return (
     <div className="space-y-5">
@@ -227,9 +230,18 @@ export function TaskFields({
           rows={4}
           placeholder={t('task.descriptionPlaceholder')}
           onChange={(e) => onChange({ description: e.target.value })}
-          onBlur={() => onTextCommit?.('description')}
+          onFocus={() => setDescFocused(true)}
+          onBlur={() => {
+            setDescFocused(false);
+            onTextCommit?.('description');
+          }}
           className="w-full bg-surface2 border border-app rounded-xl px-3.5 py-2.5 text-[15px] leading-relaxed outline-none focus:border-brand resize-y"
         />
+        {!descFocused && value.description.trim() !== '' && (
+          <div className="mt-2 rounded-xl border border-app bg-surface px-3.5 py-2.5">
+            <Markdown>{value.description}</Markdown>
+          </div>
+        )}
       </div>
 
       {children}
