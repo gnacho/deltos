@@ -6,6 +6,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import bcrypt from 'bcryptjs'
 import { logger } from './logger.js'
+import { allocateShortId } from './db.js'
 
 const log = logger.child({ component: 'demo' })
 
@@ -113,15 +114,16 @@ export function seedDemo(db, uploadsDir) {
     // Posición global por columna (orden de la lista anterior)
     const colPos = { nuevo: 0, encurso: 0, hecho: 0 }
     const insTask = db.prepare(
-      `INSERT INTO tasks (id, project_id, title, description, "column", position, priority, due_date, assignee_id, created_by, created_at, updated_at)
-       VALUES (?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO tasks (id, project_id, title, description, "column", position, priority, due_date, assignee_id, created_by, created_at, updated_at, short_id)
+       VALUES (?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     const insTaskLabel = db.prepare('INSERT INTO task_labels (task_id, label_id) VALUES (?, ?)')
     for (const t of TASKS) {
       const createdAt = now + t.created * DAY
       insTask.run(
         t.id, t.project, t.title, t.col, colPos[t.col]++, t.pr,
-        t.due === null ? null : dueStr(t.due), t.as, t.by, createdAt, createdAt
+        t.due === null ? null : dueStr(t.due), t.as, t.by, createdAt, createdAt,
+        allocateShortId(db, t.project)
       )
       for (const tag of t.tags) insTaskLabel.run(t.id, tag)
     }

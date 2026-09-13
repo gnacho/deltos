@@ -12,7 +12,7 @@ import bcrypt from 'bcryptjs'
 import { zValidator } from '@hono/zod-validator'
 import { SqliteError } from 'better-sqlite3'
 import { requireAdmin } from './auth.js'
-import { kvGet, kvSet } from './db.js'
+import { kvGet, kvSet, allocateShortId } from './db.js'
 import { notifyUsers, notifyAllExcept, notifyInterested } from './push.js'
 import { httpError, validationHook } from './errors.js'
 import { ERROR_CODES } from './error-codes.js'
@@ -268,6 +268,7 @@ function hydrateTasks(db, whereSql = '', params = []) {
   return tasks.map((t) => ({
     id: t.id,
     project_id: t.project_id,
+    short_id: t.short_id ?? null,
     title: t.title,
     description: t.description,
     column: t.column,
@@ -315,13 +316,14 @@ function createRecurringInstance(db, doneTask, actorId) {
     .get('nuevo').p
   const groupId = doneTask.recurrence_group_id || doneTask.id
   const create = db.transaction(() => {
+    const shortId = allocateShortId(db, doneTask.project_id)
     db.prepare(
-      `INSERT INTO tasks (id, project_id, title, description, "column", position, priority, due_date, assignee_id, created_by, created_at, updated_at, recurrence, recurrence_group_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO tasks (id, project_id, title, description, "column", position, priority, due_date, assignee_id, created_by, created_at, updated_at, recurrence, recurrence_group_id, short_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       id, doneTask.project_id, doneTask.title, doneTask.description, 'nuevo', pos,
       doneTask.priority ?? null, nextDue, doneTask.assignee_id ?? null, actorId, now, now,
-      serializeRecurrence(rec), groupId
+      serializeRecurrence(rec), groupId, shortId
     )
     replaceTaskLabels(db, id, getTaskLabelIds(db, doneTask.id))
     copySubtasksWithReset(db, doneTask.id, id)
@@ -616,14 +618,15 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
       .get(data.column).p
     const rec = data.recurrence != null ? normalizeRecurrence(data.recurrence) : null
     const create = db.transaction(() => {
+      const shortId = allocateShortId(db, data.project_id)
       db.prepare(
-        `INSERT INTO tasks (id, project_id, title, description, "column", position, priority, due_date, assignee_id, created_by, created_at, updated_at, recurrence, recurrence_group_id, done_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO tasks (id, project_id, title, description, "column", position, priority, due_date, assignee_id, created_by, created_at, updated_at, recurrence, recurrence_group_id, done_at, short_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).run(
         id, data.project_id, data.title, data.description, data.column, pos,
         data.priority ?? null, data.due_date ?? null, data.assignee_id ?? null, user.id, now, now,
         rec ? serializeRecurrence(rec) : null, rec ? id : null,
-        data.column === 'hecho' ? now : null
+        data.column === 'hecho' ? now : null, shortId
       )
       replaceTaskLabels(db, id, data.labels)
       addEvent(db, id, user.id, 'created')

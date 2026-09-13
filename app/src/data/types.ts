@@ -69,6 +69,7 @@ export interface TaskRecurrence {
 export interface Task {
   id: string;
   project_id: string;
+  short_id: string | null;
   title: string;
   description: string;
   column: ColumnId;

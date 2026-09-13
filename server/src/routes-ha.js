@@ -9,7 +9,7 @@
 import crypto from 'node:crypto'
 import { z } from 'zod'
 import { zValidator } from '@hono/zod-validator'
-import { kvGet, kvSet } from './db.js'
+import { kvGet, kvSet, allocateShortId } from './db.js'
 import { httpError, validationHook } from './errors.js'
 import { ERROR_CODES } from './error-codes.js'
 import { logger } from './logger.js'
@@ -168,10 +168,11 @@ export function registerHaRoutes(app, ctx) {
       .prepare('SELECT COALESCE(MAX(position) + 1, 0) AS p FROM tasks WHERE "column" = ?')
       .get('nuevo').p
     const create = db.transaction(() => {
+      const shortId = allocateShortId(db, projectId)
       db.prepare(
-        `INSERT INTO tasks (id, project_id, title, description, "column", position, priority, due_date, assignee_id, created_by, created_at, updated_at)
-         VALUES (?, ?, ?, '', 'nuevo', ?, ?, ?, ?, ?, ?, ?)`
-      ).run(id, projectId, data.title, pos, data.priority ?? null, data.due_date ?? null, actor.id, actor.id, now, now)
+        `INSERT INTO tasks (id, project_id, title, description, "column", position, priority, due_date, assignee_id, created_by, created_at, updated_at, short_id)
+         VALUES (?, ?, ?, '', 'nuevo', ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run(id, projectId, data.title, pos, data.priority ?? null, data.due_date ?? null, actor.id, actor.id, now, now, shortId)
       db.prepare(
         'INSERT INTO activity_events (id, task_id, user_id, type, data, created_at) VALUES (?, ?, ?, ?, ?, ?)'
       ).run(crypto.randomUUID(), id, actor.id, 'created', '{}', now)
@@ -229,13 +230,14 @@ export function registerHaRoutes(app, ctx) {
             .get('nuevo').p
           const groupId = task.recurrence_group_id || task.id
           db.transaction(() => {
+            const shortId = allocateShortId(db, task.project_id)
             db.prepare(
-              `INSERT INTO tasks (id, project_id, title, description, "column", position, priority, due_date, assignee_id, created_by, created_at, updated_at, recurrence, recurrence_group_id)
-               VALUES (?, ?, ?, ?, 'nuevo', ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+              `INSERT INTO tasks (id, project_id, title, description, "column", position, priority, due_date, assignee_id, created_by, created_at, updated_at, recurrence, recurrence_group_id, short_id)
+               VALUES (?, ?, ?, ?, 'nuevo', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
             ).run(
               nid, task.project_id, task.title, task.description, npos,
               task.priority ?? null, nextDue, task.assignee_id ?? null, task.created_by, now, now,
-              serializeRecurrence(rec), groupId
+              serializeRecurrence(rec), groupId, shortId
             )
             db.prepare(
               'INSERT INTO activity_events (id, task_id, user_id, type, data, created_at) VALUES (?, ?, ?, ?, ?, ?)'
