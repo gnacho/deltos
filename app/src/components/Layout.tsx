@@ -15,6 +15,8 @@ import {
   ChevronsRight,
   Receipt,
   RefreshCw,
+  Trash2,
+  Search,
 } from 'lucide-react';
 import { useData } from '@/data/data-context';
 import PullToRefresh from '@/components/PullToRefresh';
@@ -35,6 +37,8 @@ import { setUpdateBanner, useUpdateBanner } from '@/hooks/update-banner-store';
 import { NewTaskModal } from '@/components/NewTaskModal';
 import UpdateDialog from '@/components/UpdateDialog';
 import { VersionFooter } from '@/components/VersionFooter';
+import Toasts from '@/components/Toasts';
+import SearchModal from '@/components/SearchModal';
 
 /**
  * AppLayout unificado (skill webapp-shell):
@@ -376,6 +380,7 @@ export default function Layout() {
 
   const [openTask, setOpenTask] = useState<{ id: string; tab: TaskTab } | null>(null);
   const [newTask, setNewTask] = useState<NewTaskDefaults | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(() => {
     try {
       return localStorage.getItem(COLLAPSED_KEY) === '1';
@@ -389,6 +394,18 @@ export default function Layout() {
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [location.pathname]);
+
+  // Atajo global de búsqueda: Cmd/Ctrl+K.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setSearchOpen((v) => !v);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   /* Re-tap del tab activo (o logo): scroll suave arriba. */
   const reduceMotion = () =>
@@ -585,6 +602,14 @@ export default function Layout() {
             className="mt-2 flex flex-1 flex-col items-center gap-1 overflow-y-auto nice-scroll"
             aria-label={t('nav.main')}
           >
+            <button
+              type="button"
+              onClick={() => setSearchOpen(true)}
+              aria-label={t('search.open')}
+              className="flex h-10 w-10 items-center justify-center rounded-lg text-muted hover:bg-hover hover:text-text-primary"
+            >
+              <Search className="w-[18px] h-[18px]" aria-hidden="true" />
+            </button>
             <IconNavLink to="/" end label={t('nav.todo')}>
               <LayoutGrid className="w-[18px] h-[18px]" aria-hidden="true" />
             </IconNavLink>
@@ -599,6 +624,9 @@ export default function Layout() {
                 <Receipt className="w-[18px] h-[18px]" aria-hidden="true" />
               </IconNavLink>
             )}
+            <IconNavLink to="/trash" label={t('nav.trash')}>
+              <Trash2 className="w-[18px] h-[18px]" aria-hidden="true" />
+            </IconNavLink>
             <IconNavLink to="/settings" label={t('nav.settings')}>
               <Settings className="w-[18px] h-[18px]" aria-hidden="true" />
             </IconNavLink>
@@ -648,6 +676,18 @@ export default function Layout() {
 
           <nav className="flex-1 overflow-y-auto nice-scroll px-3 pb-3" aria-label={t('nav.main')}>
 
+            <button
+              type="button"
+              onClick={() => setSearchOpen(true)}
+              className="mb-4 flex w-full items-center gap-2 rounded-xl border border-app bg-surface2 px-3 py-2 text-sm text-muted hover:text-text"
+            >
+              <Search className="w-4 h-4" aria-hidden="true" />
+              <span className="flex-1 text-left">{t('search.open')}</span>
+              <kbd className="rounded border border-app px-1.5 py-0.5 text-[10px] text-faint">
+                Ctrl K
+              </kbd>
+            </button>
+
             <div className="space-y-0.5 mb-5">
               <NavLink to="/" end className={sideItemCls}>
                 <span className="text-faint">
@@ -676,6 +716,12 @@ export default function Layout() {
                   <span className="flex-1 text-left">{t('nav.expenses')}</span>
                 </NavLink>
               )}
+              <NavLink to="/trash" className={sideItemCls}>
+                <span className="text-faint">
+                  <Trash2 className="w-4 h-4" aria-hidden="true" />
+                </span>
+                <span className="flex-1 text-left">{t('nav.trash')}</span>
+              </NavLink>
             </div>
             <div className="flex items-center justify-between px-2 pb-2">
               <Link
@@ -753,6 +799,14 @@ export default function Layout() {
           <LogoMark size={30} />
         </Link>
         <nav className="mt-2 flex flex-1 flex-col items-center gap-1" aria-label={t('nav.main')}>
+          <button
+            type="button"
+            onClick={() => setSearchOpen(true)}
+            aria-label={t('search.open')}
+            className="flex h-10 w-10 items-center justify-center rounded-lg text-muted hover:bg-hover hover:text-text-primary"
+          >
+            <Search className="w-[18px] h-[18px]" aria-hidden="true" />
+          </button>
           <IconNavLink to="/" end label={t('nav.todo')}>
             <LayoutGrid className="w-[18px] h-[18px]" aria-hidden="true" />
           </IconNavLink>
@@ -770,6 +824,9 @@ export default function Layout() {
               <Receipt className="w-[18px] h-[18px]" aria-hidden="true" />
             </IconNavLink>
           )}
+          <IconNavLink to="/trash" label={t('nav.trash')}>
+            <Trash2 className="w-[18px] h-[18px]" aria-hidden="true" />
+          </IconNavLink>
           <IconNavLink to="/settings" label={t('nav.settings')}>
             <Settings className="w-[18px] h-[18px]" aria-hidden="true" />
           </IconNavLink>
@@ -806,6 +863,14 @@ export default function Layout() {
         <div className="flex-1 min-w-0 flex items-center justify-center gap-2">
           {boardView !== null ? boardSelect : <ConnectionDot />}
         </div>
+        <button
+          type="button"
+          onClick={() => setSearchOpen(true)}
+          aria-label={t('search.open')}
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted hover:bg-surface2"
+        >
+          <Search className="w-5 h-5" aria-hidden="true" />
+        </button>
         <ThemeToggleButton mobile />
       </header>
 
@@ -898,6 +963,7 @@ export default function Layout() {
         />
       )}
       {newTask && <NewTaskModal defaults={newTask} onClose={() => setNewTask(null)} />}
+      <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
 
       {/* Avisador discreto para lector de pantalla (movimientos de tarjetas) */}
       <div
@@ -907,6 +973,7 @@ export default function Layout() {
         aria-live="polite"
         aria-label={t('a11y.announce')}
       />
+      <Toasts />
       <VersionFooter />
     </ModalContext.Provider>
   );

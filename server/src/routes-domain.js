@@ -171,6 +171,11 @@ const activityQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(30),
 })
 
+// Búsqueda global: texto libre, mínimo 2 caracteres (el front no consulta antes).
+const searchQuerySchema = z.object({
+  q: z.string().trim().min(1).max(100),
+})
+
 function countAdmins(db) {
   return db.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'admin'").get().n
 }
@@ -1395,6 +1400,32 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
     db.prepare('DELETE FROM expenses WHERE deleted_at IS NOT NULL').run()
     hub.broadcast('expenses')
     return c.body(null, 204)
+  })
+
+  // --- Búsqueda global: tareas del usuario por texto (título, descripción,
+  // persona asignada, proyecto o etiqueta). Solo proyectos de los que es
+  // miembro. LIKE con ESCAPE para que % y _ del texto no sean comodines.
+  app.get('/api/search', zValidator('query', searchQuerySchema, validationHook), (c) => {
+    const db = c.get('db')
+    const user = c.get('user')
+    const q = c.req.valid('query').q.trim()
+    if (q.length < 2) return c.json({ tasks: [] })
+    const escaped = q.replace(/[\\%_]/g, (ch) => `\\${ch}`)
+    const like = `%${escaped}%`
+    const tasks = hydrateTasks(
+      db,
+      `t.project_id IN (SELECT project_id FROM project_members WHERE user_id = ?)
+       AND (
+         t.title LIKE ? ESCAPE '\\'
+         OR t.description LIKE ? ESCAPE '\\'
+         OR u.username LIKE ? ESCAPE '\\'
+         OR EXISTS (SELECT 1 FROM projects p WHERE p.id = t.project_id AND p.name LIKE ? ESCAPE '\\')
+         OR EXISTS (SELECT 1 FROM task_labels tl JOIN labels l ON l.id = tl.label_id
+                    WHERE tl.task_id = t.id AND l.name LIKE ? ESCAPE '\\')
+       )`,
+      [user.id, like, like, like, like, like],
+    )
+    return c.json({ tasks: tasks.slice(0, 50) })
   })
 
   // --- Feed global de actividad: paginación KEYSET (skill api-stack) ---------

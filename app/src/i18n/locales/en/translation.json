@@ -42,7 +42,28 @@
     "expand": "Expand menu",
     "expenses": "Expenses",
     "summary": "Summary",
-    "routines": "Routines"
+    "routines": "Routines",
+    "trash": "Trash"
+  },
+  "trash": {
+    "title": "Trash",
+    "subtitle": "Deleted tasks and expenses stay here for 30 days.",
+    "tasks": "TASKS",
+    "expenses": "EXPENSES",
+    "restore": "Restore",
+    "empty": "Nothing in the trash.",
+    "noProject": "No project",
+    "taskDeleted": "Task moved to the trash.",
+    "expenseDeleted": "Expense moved to the trash.",
+    "undo": "Undo",
+    "loadError": "Could not load the trash."
+  },
+  "search": {
+    "open": "Search",
+    "title": "Search tasks",
+    "placeholder": "Search tasks...",
+    "hint": "Type at least 2 characters.",
+    "noResults": "No tasks found."
   },
   "columns": {
     "nuevo": "New",
