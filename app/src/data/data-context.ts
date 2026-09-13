@@ -13,6 +13,8 @@ export interface CreateTaskInput {
   assignee_id?: string | null;
   labels?: string[];
   recurrence?: TaskRecurrence | null;
+  /** Subtareas raíz creadas junto con la tarea. */
+  subtasks?: string[];
 }
 
 export interface CreateProjectInput {
