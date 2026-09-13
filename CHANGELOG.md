@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.28] - 2026-09-13
+
+### Added
+
+- **Trash view and undo (#224).** Deleted tasks and expenses can be recovered.
+  A Trash view lists them with their deletion date and a restore action, and
+  deleting a task or an expense raises a toast with an Undo button. The server
+  already kept them for 30 days; now the app can reach them.
+
 ## [2.6.26] - 2026-09-13
 
 ### Fixed
