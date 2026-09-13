@@ -161,6 +161,7 @@
     "deleteTitle": "Eliminar tarea",
     "copyId": "Copiar ID",
     "idCopied": "Copiado",
+    "refOpen": "Abrir la tarea {{id}}: {{title}}",
     "deleteHint": "Se eliminarán también sus comentarios y adjuntos.",
     "deleteConfirm": "¿Seguro? Pulsa para confirmar",
     "deleting": "Eliminando…",
