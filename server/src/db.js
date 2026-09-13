@@ -472,6 +472,64 @@ export function migrateSchema(db) {
     db.exec('ALTER TABLE expense_comments ADD COLUMN author_name TEXT')
     log.info('schema_migrated', { table: 'expense_comments', column: 'author_name' })
   }
+
+  // Id corto legible por tarea (p. ej. CASA-3) + contador por proyecto.
+  const taskColsShort = db.prepare('PRAGMA table_info(tasks)').all().map((c) => c.name)
+  if (!taskColsShort.includes('short_id')) {
+    db.exec('ALTER TABLE tasks ADD COLUMN short_id TEXT')
+    log.info('schema_migrated', { table: 'tasks', column: 'short_id' })
+  }
+  const projectColsShort = db.prepare('PRAGMA table_info(projects)').all().map((c) => c.name)
+  if (!projectColsShort.includes('task_seq')) {
+    db.exec('ALTER TABLE projects ADD COLUMN task_seq INTEGER NOT NULL DEFAULT 0')
+    log.info('schema_migrated', { table: 'projects', column: 'task_seq' })
+  }
+  backfillShortIds(db)
+}
+
+/** Prefijo legible de un proyecto para el id corto de tarea ("Casa" -> CASA). */
+export function projectPrefix(name) {
+  const cleaned = String(name || '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+  return cleaned.slice(0, 4) || 'T'
+}
+
+/**
+ * Reserva el siguiente id corto de un proyecto. Debe llamarse DENTRO de la
+ * transacción que inserta la tarea: better-sqlite3 es síncrono y el escritor es
+ * único, así que no hay carrera posible.
+ */
+export function allocateShortId(db, projectId) {
+  const project = db.prepare('SELECT name, task_seq FROM projects WHERE id = ?').get(projectId)
+  if (!project) return null
+  const seq = (project.task_seq ?? 0) + 1
+  db.prepare('UPDATE projects SET task_seq = ? WHERE id = ?').run(seq, projectId)
+  return `${projectPrefix(project.name)}-${seq}`
+}
+
+/** Asigna short_id a las tareas que no lo tengan, por proyecto y en orden de
+ *  creación. Idempotente: no toca las que ya lo tienen. */
+function backfillShortIds(db) {
+  const missing = db.prepare('SELECT COUNT(*) AS n FROM tasks WHERE short_id IS NULL').get().n
+  if (missing === 0) return
+  const updTask = db.prepare('UPDATE tasks SET short_id = ? WHERE id = ?')
+  const updSeq = db.prepare('UPDATE projects SET task_seq = ? WHERE id = ?')
+  const tx = db.transaction(() => {
+    for (const p of db.prepare('SELECT id, name, task_seq FROM projects').all()) {
+      let seq = p.task_seq ?? 0
+      const tasks = db
+        .prepare('SELECT id FROM tasks WHERE project_id = ? AND short_id IS NULL ORDER BY created_at, id')
+        .all(p.id)
+      for (const t of tasks) {
+        seq += 1
+        updTask.run(`${projectPrefix(p.name)}-${seq}`, t.id)
+      }
+      updSeq.run(seq, p.id)
+    }
+  })
+  tx()
+  log.info('schema_backfilled', { table: 'tasks', column: 'short_id', rows: missing })
 }
 
 // Proyecto "Sin proyecto" (bandeja de tareas sin proyecto). Es un proyecto real

@@ -22,6 +22,7 @@ export function DetailsTab({ detail, onClose }: { detail: TaskDetail; onClose: (
   const [description, setDescription] = useState(task.description);
   const [recurrence, setRecurrence] = useState<TaskRecurrence | null>(task.recurrence);
   const [titleError, setTitleError] = useState<string | null>(null);
+  const [idCopied, setIdCopied] = useState(false);
   const [saveState, setSaveState] = useState<'idle' | 'saved' | 'error'>('idle');
   const [deleteArmed, setDeleteArmed] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -130,9 +131,33 @@ export function DetailsTab({ detail, onClose }: { detail: TaskDetail; onClose: (
   const projects = data.getProjects();
 
   return (
-    <TaskFields
-      value={value}
-      onChange={onFieldsChange}
+    <>
+      {task.short_id && (
+        <div className="mb-4 flex items-center gap-2">
+          <span className="tnum rounded-md border border-app bg-surface2 px-2 py-0.5 text-[12px] text-muted">
+            {task.short_id}
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              if (!navigator.clipboard) return;
+              void navigator.clipboard
+                .writeText(task.short_id ?? '')
+                .then(() => {
+                  setIdCopied(true);
+                  window.setTimeout(() => setIdCopied(false), 1500);
+                })
+                .catch(() => {});
+            }}
+            className="text-[12px] font-medium text-brand hover:underline"
+          >
+            {idCopied ? t('task.idCopied') : t('task.copyId')}
+          </button>
+        </div>
+      )}
+      <TaskFields
+        value={value}
+        onChange={onFieldsChange}
       onTextCommit={(field) => (field === 'title' ? commitTitle() : commitDescription())}
       titleError={titleError}
       idPrefix="dt"
@@ -213,5 +238,6 @@ export function DetailsTab({ detail, onClose }: { detail: TaskDetail; onClose: (
       </div>
       {deleteArmed && <p className="text-[12px] text-faint -mt-4">{t('task.deleteHint')}</p>}
     </TaskFields>
+    </>
   );
 }

@@ -159,6 +159,8 @@
     "saved": "Guardado",
     "saveError": "No se ha podido guardar",
     "deleteTitle": "Eliminar tarea",
+    "copyId": "Copiar ID",
+    "idCopied": "Copiado",
     "deleteHint": "Se eliminarán también sus comentarios y adjuntos.",
     "deleteConfirm": "¿Seguro? Pulsa para confirmar",
     "deleting": "Eliminando…",
