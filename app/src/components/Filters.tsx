@@ -26,11 +26,13 @@ export function FiltersToggleButton({
   open: boolean;
   onClick: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <button
       type="button"
       aria-expanded={open}
       aria-controls="filters-panel"
+      aria-label={t('filters.toggle')}
       onClick={onClick}
       className={`lg:hidden inline-flex items-center gap-1.5 rounded-full border bg-surface px-2.5 py-2 shadow-soft ${
         activeCount ? 'border-brand/50 text-brand' : 'border-app text-muted hover:bg-surface2'

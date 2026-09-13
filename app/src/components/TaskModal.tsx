@@ -138,6 +138,7 @@ export function TaskModal({
                   role="tab"
                   id={`tab-${id}`}
                   data-tab={id}
+                  aria-label={t(`task.tabs.${id}`)}
                   aria-selected={active}
                   aria-controls={`panel-${id}`}
                   tabIndex={active ? 0 : -1}

@@ -302,6 +302,7 @@ function MiPerfilCard() {
               onClick={() => setShowPwd((v) => !v)}
               className={actionBtnCls}
               title={t('settings.password')}
+              aria-label={t('settings.password')}
             >
               <KeyRound className="w-4 h-4" aria-hidden="true" />
               <span className={actionTextCls}>{t('settings.password')}</span>
@@ -315,6 +316,7 @@ function MiPerfilCard() {
             onClick={() => setShowNotif((v) => !v)}
             className={actionBtnCls}
             title={t('settings.notifications')}
+            aria-label={t('settings.notifications')}
           >
             <Bell className="w-4 h-4" aria-hidden="true" />
             <span className={actionTextCls}>{t('settings.notifications')}</span>
@@ -325,6 +327,7 @@ function MiPerfilCard() {
         <button
           type="button"
           onClick={() => void logout()}
+          aria-label={demo ? t('demo.exit') : t('settings.logout')}
           className="ml-auto inline-flex h-9 items-center gap-1.5 rounded-lg border border-danger/30 bg-danger/10 px-2.5 sm:px-3 text-[13px] font-medium text-danger transition-colors hover:bg-danger/15 shrink-0"
         >
           <LogOut className="w-4 h-4" aria-hidden="true" />
