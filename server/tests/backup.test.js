@@ -3,6 +3,8 @@ import { describe, it, expect, afterEach } from 'vitest'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { execFileSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 import Database from 'better-sqlite3'
 import { execBackup } from '../src/backup.js'
 import { makeInstance } from './helpers.js'
@@ -72,5 +74,19 @@ describe('backup de la base de datos', () => {
     const src = fs.readFileSync(new URL('../src/backup.js', import.meta.url), 'utf8')
     expect(src).not.toMatch(/copyFileSync/)
     expect(src).not.toMatch(/['"]sqlite3['"]/)
+  })
+
+  it('el CLI de backup (ruta del timer) produce un snapshot verificado', async () => {
+    const { dir } = await makeInstance()
+    const cli = fileURLToPath(new URL('../src/backup-cli.js', import.meta.url))
+
+    const out = execFileSync(process.execPath, [cli, dir], { encoding: 'utf8' })
+
+    expect(out).toMatch(/backup-cli:/)
+    const backups = fs.readdirSync(path.join(dir, 'backups')).filter((f) => f.endsWith('.db'))
+    expect(backups.length).toBe(1)
+    const snap = new Database(path.join(dir, 'backups', backups[0]), { readonly: true })
+    expect(snap.pragma('integrity_check', { simple: true })).toBe('ok')
+    snap.close()
   })
 })
