@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.34] - 2026-09-13
+
+### Added
+
+- **Markdown in descriptions and comments (#225).** Task descriptions, task
+  comments and expense comments render GitHub-flavored Markdown: emphasis,
+  lists, inline code and links. Raw HTML is not interpreted, so a script in the
+  text cannot run, and links open in a new tab without a referrer. Existing
+  plain-text descriptions keep their line breaks. The description shows the
+  rendered preview when the field is not focused, and the raw source while
+  editing.
+
 ## [2.6.32] - 2026-09-13
 
 ### Added
