@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.32] - 2026-09-13
+
+### Added
+
+- **Short task ids (#226).** Every task gets a short id, unique per project and
+  derived from the project name (`CASA-1`). It shows on the card and in the task
+  detail, and copies with one click. Existing tasks are backfilled by project in
+  creation order.
+
+### Changed
+
+- **Unified task modal (#219).** Creating and editing a task now offer the same
+  fields, including the description when creating. Tasks can live in a "No
+  project" inbox. The details tab is reorganised into four rows, "Column" is
+  renamed to "Stage" and uses the same selector in both places, the recurrence
+  field puts the unit in a dropdown, and the assignee defaults to the current
+  user when creating.
+
 ## [2.6.30] - 2026-09-13
 
 ### Added
