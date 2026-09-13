@@ -15,6 +15,7 @@ import {
   ChevronsRight,
   Receipt,
   RefreshCw,
+  Trash2,
 } from 'lucide-react';
 import { useData } from '@/data/data-context';
 import PullToRefresh from '@/components/PullToRefresh';
@@ -34,6 +35,7 @@ import { setUpdateBanner, useUpdateBanner } from '@/hooks/update-banner-store';
 import { NewTaskModal } from '@/components/NewTaskModal';
 import UpdateDialog from '@/components/UpdateDialog';
 import { VersionFooter } from '@/components/VersionFooter';
+import Toasts from '@/components/Toasts';
 
 /**
  * AppLayout unificado (skill webapp-shell):
@@ -598,6 +600,9 @@ export default function Layout() {
                 <Receipt className="w-[18px] h-[18px]" aria-hidden="true" />
               </IconNavLink>
             )}
+            <IconNavLink to="/trash" label={t('nav.trash')}>
+              <Trash2 className="w-[18px] h-[18px]" aria-hidden="true" />
+            </IconNavLink>
             <IconNavLink to="/settings" label={t('nav.settings')}>
               <Settings className="w-[18px] h-[18px]" aria-hidden="true" />
             </IconNavLink>
@@ -675,6 +680,12 @@ export default function Layout() {
                   <span className="flex-1 text-left">{t('nav.expenses')}</span>
                 </NavLink>
               )}
+              <NavLink to="/trash" className={sideItemCls}>
+                <span className="text-faint">
+                  <Trash2 className="w-4 h-4" aria-hidden="true" />
+                </span>
+                <span className="flex-1 text-left">{t('nav.trash')}</span>
+              </NavLink>
             </div>
             <div className="flex items-center justify-between px-2 pb-2">
               <Link
@@ -769,6 +780,9 @@ export default function Layout() {
               <Receipt className="w-[18px] h-[18px]" aria-hidden="true" />
             </IconNavLink>
           )}
+          <IconNavLink to="/trash" label={t('nav.trash')}>
+            <Trash2 className="w-[18px] h-[18px]" aria-hidden="true" />
+          </IconNavLink>
           <IconNavLink to="/settings" label={t('nav.settings')}>
             <Settings className="w-[18px] h-[18px]" aria-hidden="true" />
           </IconNavLink>
@@ -906,6 +920,7 @@ export default function Layout() {
         aria-live="polite"
         aria-label={t('a11y.announce')}
       />
+      <Toasts />
       <VersionFooter />
     </ModalContext.Provider>
   );
