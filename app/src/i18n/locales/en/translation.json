@@ -159,6 +159,8 @@
     "saved": "Saved",
     "saveError": "Could not save",
     "deleteTitle": "Delete task",
+    "copyId": "Copy ID",
+    "idCopied": "Copied",
     "deleteHint": "Its comments and attachments will also be deleted.",
     "deleteConfirm": "Are you sure? Press to confirm",
     "deleting": "Deleting…",

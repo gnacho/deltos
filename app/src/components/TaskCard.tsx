@@ -54,6 +54,9 @@ export function TaskCard({ task, project, index, onOpen, archived, onArchive, on
             aria-hidden="true"
           />
           <span className="text-[11px] font-medium text-muted truncate">{project.name}</span>
+          {task.short_id && (
+            <span className="tnum ml-auto text-[11px] text-faint">{task.short_id}</span>
+          )}
         </div>
       )}
       {task.labels.length > 0 && (
