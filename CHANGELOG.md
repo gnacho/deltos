@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.26] - 2026-09-13
+
+### Fixed
+
+- **Database backup (#228).** Backups now take a consistent snapshot with the
+  SQLite online backup API, so they no longer depend on the `sqlite3` CLI and
+  no longer fall back to copying the database file, which could miss commits
+  while the database runs in WAL mode. The daily systemd timer used a separate
+  script that did a plain file copy; it now runs the same code. Each backup is
+  checked with `PRAGMA integrity_check` and against the source row counts
+  before it is kept.
+
 ## [2.6.24] - 2026-09-02
 
 ### Added
