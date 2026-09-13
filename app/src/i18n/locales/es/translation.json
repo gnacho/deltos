@@ -58,6 +58,13 @@
     "undo": "Deshacer",
     "loadError": "No se pudo cargar la papelera."
   },
+  "search": {
+    "open": "Buscar",
+    "title": "Buscar tareas",
+    "placeholder": "Buscar tareas...",
+    "hint": "Escribe al menos 2 caracteres.",
+    "noResults": "No se encontraron tareas."
+  },
   "columns": {
     "nuevo": "Nuevo",
     "encurso": "En curso",

@@ -58,6 +58,13 @@
     "undo": "Undo",
     "loadError": "Could not load the trash."
   },
+  "search": {
+    "open": "Search",
+    "title": "Search tasks",
+    "placeholder": "Search tasks...",
+    "hint": "Type at least 2 characters.",
+    "noResults": "No tasks found."
+  },
   "columns": {
     "nuevo": "New",
     "encurso": "In progress",
