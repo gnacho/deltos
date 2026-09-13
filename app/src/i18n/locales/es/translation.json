@@ -42,7 +42,21 @@
     "expand": "Desplegar menú",
     "expenses": "Gastos",
     "summary": "Resumen",
-    "routines": "Periódicas"
+    "routines": "Periódicas",
+    "trash": "Papelera"
+  },
+  "trash": {
+    "title": "Papelera",
+    "subtitle": "Las tareas y gastos borrados se guardan aquí 30 días.",
+    "tasks": "TAREAS",
+    "expenses": "GASTOS",
+    "restore": "Restaurar",
+    "empty": "No hay nada en la papelera.",
+    "noProject": "Sin proyecto",
+    "taskDeleted": "Tarea enviada a la papelera.",
+    "expenseDeleted": "Gasto enviado a la papelera.",
+    "undo": "Deshacer",
+    "loadError": "No se pudo cargar la papelera."
   },
   "columns": {
     "nuevo": "Nuevo",
