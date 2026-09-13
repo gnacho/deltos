@@ -8,6 +8,7 @@ import type { Expense, ExpenseStep } from '@/data/types';
 import type { Attachment, ActivityEvent, Comment } from '@/data/types';
 import { colorOf } from '@/lib/colors';
 import { Avatar } from '@/components/Avatar';
+import Markdown from '@/components/LazyMarkdown';
 import { relTime } from '@/i18n';
 import { apiErrorText } from '@/lib/errors';
 import { announce } from '@/lib/announce';
@@ -817,8 +818,8 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
                           <span className="font-semibold">{c.username ?? '?'}</span>{' '}
                           <span className="text-[12px] text-faint">{relTime(c.created_at, t)}</span>
                         </p>
-                        <div className="mt-1 rounded-xl rounded-tl-sm bg-surface2 px-3.5 py-2.5 text-[15px] leading-relaxed whitespace-pre-wrap break-words">
-                          {c.body}
+                        <div className="mt-1 rounded-xl rounded-tl-sm bg-surface2 px-3.5 py-2.5">
+                          <Markdown>{c.body}</Markdown>
                         </div>
                       </div>
                     </li>
