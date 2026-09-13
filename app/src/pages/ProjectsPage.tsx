@@ -7,6 +7,7 @@ import { useSession } from '@/auth/session-context';
 import type { Project } from '@/data/types';
 import { COLUMNS } from '@/lib/constants';
 import { colorOf } from '@/lib/colors';
+import { realProjects } from '@/lib/projects';
 import { apiErrorText } from '@/lib/errors';
 import { ProjectForm } from '@/components/ProjectForm';
 import { ProjectIcon } from '@/components/ProjectIcon';
@@ -30,7 +31,9 @@ export default function ProjectsPage() {
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  const projects = data.getProjects();
+  // El proyecto inbox ("Sin proyecto") no se gestiona aquí: se oculta de la
+  // lista y de las estadísticas, pero sigue siendo navegable desde el sidebar.
+  const projects = realProjects(data.getProjects());
   const tasks = data.getTasks();
   const openAll = tasks.filter((tk) => tk.column !== 'hecho').length;
 

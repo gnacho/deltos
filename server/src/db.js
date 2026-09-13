@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS projects (
   color TEXT DEFAULT 'sky',
   position INTEGER NOT NULL DEFAULT 0,
   owner_id TEXT REFERENCES users(id) ON DELETE SET NULL,  -- creador; NULL = legado (todos los miembros pueden gestionar)
+  is_inbox INTEGER NOT NULL DEFAULT 0,  -- 1 = proyecto "Sin proyecto" (bandeja de tareas sin proyecto; no editable)
   created_at INTEGER NOT NULL
 );
 
@@ -390,6 +391,10 @@ export function migrateSchema(db) {
     db.exec('ALTER TABLE projects ADD COLUMN owner_id TEXT REFERENCES users(id) ON DELETE SET NULL')
     log.info('schema_migrated', { table: 'projects', column: 'owner_id' })
   }
+  if (!projectCols.includes('is_inbox')) {
+    db.exec('ALTER TABLE projects ADD COLUMN is_inbox INTEGER NOT NULL DEFAULT 0')
+    log.info('schema_migrated', { table: 'projects', column: 'is_inbox' })
+  }
   const memberCount = db
     .prepare(
       `INSERT OR IGNORE INTO project_members (project_id, user_id, role, added_at)
@@ -467,6 +472,51 @@ export function migrateSchema(db) {
     db.exec('ALTER TABLE expense_comments ADD COLUMN author_name TEXT')
     log.info('schema_migrated', { table: 'expense_comments', column: 'author_name' })
   }
+}
+
+// Proyecto "Sin proyecto" (bandeja de tareas sin proyecto). Es un proyecto real
+// para no romper la membresía, el tablero ni los contadores, pero está marcado
+// con is_inbox: no se puede renombrar/borrar y no aparece en la página Proyectos.
+// El nombre se muestra traducido en el front (task.noProject); el guardado es
+// solo un fallback para clientes que no conocen la marca.
+export const INBOX_PROJECT_ID = 'inbox'
+const INBOX_PROJECT_NAME = 'Inbox'
+
+/** Garantiza que existe el proyecto inbox y que TODOS los usuarios son miembros
+ *  (las tareas sin proyecto deben ser visibles para cualquiera). Idempotente. */
+export function ensureInbox(db) {
+  const now = Date.now()
+  let project = db.prepare('SELECT id FROM projects WHERE is_inbox = 1').get()
+  if (!project) {
+    const fixed = db.prepare('SELECT id FROM projects WHERE id = ?').get(INBOX_PROJECT_ID)
+    if (fixed) {
+      db.prepare('UPDATE projects SET is_inbox = 1 WHERE id = ?').run(INBOX_PROJECT_ID)
+    } else {
+      const pos = db.prepare('SELECT COALESCE(MIN(position) - 1, 0) AS p FROM projects').get().p
+      db.prepare(
+        `INSERT INTO projects (id, name, emoji, color, position, owner_id, is_inbox, created_at)
+         VALUES (?, ?, ?, ?, ?, NULL, 1, ?)`
+      ).run(INBOX_PROJECT_ID, INBOX_PROJECT_NAME, 'inbox', 'slate', pos, now)
+      log.info('inbox_project_created', { id: INBOX_PROJECT_ID })
+    }
+    project = { id: INBOX_PROJECT_ID }
+  }
+  const { changes } = db
+    .prepare(
+      `INSERT OR IGNORE INTO project_members (project_id, user_id, role, added_at)
+       SELECT ?, id, 'member', ? FROM users`
+    )
+    .run(project.id, now)
+  if (changes > 0) log.info('inbox_members_added', { rows: changes })
+  return project.id
+}
+
+/** Añade un usuario recién creado como miembro del inbox (idempotente). */
+export function ensureUserInInbox(db, userId) {
+  db.prepare(
+    `INSERT OR IGNORE INTO project_members (project_id, user_id, role, added_at)
+     SELECT id, ?, 'member', ? FROM projects WHERE is_inbox = 1`
+  ).run(userId, Date.now())
 }
 
 // Checkpoint WAL periódico (llamado cada hora desde index.js): sin esto el WAL

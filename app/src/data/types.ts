@@ -43,6 +43,8 @@ export interface Project {
   color: string;
   position: number;
   owner_id: string | null;
+  /** true = proyecto "Sin proyecto" (bandeja de tareas sin proyecto; no editable). */
+  is_inbox: boolean;
   members: ProjectMember[];
   counts: Record<ColumnId, number>;
 }
