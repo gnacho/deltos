@@ -10,6 +10,8 @@ import {
   type UpdateProjectInput,
 } from './data-context';
 import type { Bootstrap, Expense, ExpenseDetail, ExpenseInput, ExpensePatch, Label, Project, ProjectMember, Task, TaskDetail, TaskPatch, TaskRecurrence } from './types';
+import i18n from '@/i18n';
+import { showToast } from '@/lib/toast-store';
 
 /**
  * Capa de datos desacoplada (contrato síncrono):
@@ -249,13 +251,25 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [fetchBootstrap, fetchDetail],
   );
 
+  const restoreTask = useCallback(
+    async (id: string): Promise<void> => {
+      await apiPost(`/api/trash/${encodeURIComponent(id)}/restore`, {});
+      await fetchBootstrap();
+    },
+    [fetchBootstrap],
+  );
+
   const deleteTask = useCallback(
     async (id: string): Promise<void> => {
       await apiDelete(`/api/tasks/${encodeURIComponent(id)}`);
       detailCache.current.delete(id);
       await fetchBootstrap();
+      showToast({
+        message: i18n.t('trash.taskDeleted'),
+        action: { label: i18n.t('trash.undo'), onAction: () => restoreTask(id) },
+      });
     },
-    [fetchBootstrap],
+    [fetchBootstrap, restoreTask],
   );
 
   const addSubtask = useCallback(
@@ -390,13 +404,25 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [fetchExpenses],
   );
 
+  const restoreExpense = useCallback(
+    async (id: string): Promise<void> => {
+      await apiPost(`/api/trash/expense/${encodeURIComponent(id)}/restore`, {});
+      await fetchExpenses();
+    },
+    [fetchExpenses],
+  );
+
   const deleteExpense = useCallback(
     async (id: string): Promise<void> => {
       await apiDelete(`/api/expenses/${encodeURIComponent(id)}`);
       expenseDetailCache.current.delete(id);
       await fetchExpenses();
+      showToast({
+        message: i18n.t('trash.expenseDeleted'),
+        action: { label: i18n.t('trash.undo'), onAction: () => restoreExpense(id) },
+      });
     },
-    [fetchExpenses],
+    [fetchExpenses, restoreExpense],
   );
 
   const fetchExpenseDetail = useCallback(
@@ -526,6 +552,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       archiveTask,
       unarchiveTask,
       deleteTask,
+      restoreTask,
       parseTaskText,
       parseExpenseText,
       addSubtask,
@@ -548,6 +575,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       archiveExpense,
       unarchiveExpense,
       deleteExpense,
+      restoreExpense,
       getExpenseDetail: (id) => {
         const cached = expenseDetailCache.current.get(id);
         if (!cached) void fetchExpenseDetail(id);

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { FormEvent } from 'react';
 import * as React from 'react';
+import { Link } from 'react-router';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import {
@@ -319,6 +320,12 @@ function MiPerfilCard() {
             <Bell className="w-4 h-4" aria-hidden="true" />
             <span className={actionTextCls}>{t('settings.notifications')}</span>
           </button>
+
+          {/* Papelera */}
+          <Link to="/trash" className={actionBtnCls} title={t('nav.trash')}>
+            <Trash2 className="w-4 h-4" aria-hidden="true" />
+            <span className={actionTextCls}>{t('nav.trash')}</span>
+          </Link>
         </div>
 
         {/* Cerrar sesión — siempre a la derecha, rojo; texto solo en ≥sm */}

@@ -58,6 +58,7 @@ export interface DataApi {
   archiveTask: (id: string) => Promise<void>;
   unarchiveTask: (id: string) => Promise<void>;
   deleteTask: (id: string) => Promise<void>;
+  restoreTask: (id: string) => Promise<void>;
   parseTaskText: (text: string, lang: 'es' | 'en') => Promise<{
     parsed: boolean;
     due_date?: string | null;
@@ -91,6 +92,7 @@ export interface DataApi {
   archiveExpense: (id: string) => Promise<void>;
   unarchiveExpense: (id: string) => Promise<void>;
   deleteExpense: (id: string) => Promise<void>;
+  restoreExpense: (id: string) => Promise<void>;
   getExpenseDetail: (id: string) => ExpenseDetail | null;
   refreshExpenseDetail: (id: string) => void;
   releaseExpenseDetail: (id: string) => void;
