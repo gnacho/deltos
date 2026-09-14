@@ -289,6 +289,7 @@ export interface GamLedgerEntry {
   points: number;
   reason: string;
   created_at: number;
+  reverted_at?: number | null;
 }
 
 /** Canje reciente de una recompensa. */

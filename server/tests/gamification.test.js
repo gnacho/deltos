@@ -1,6 +1,6 @@
 // gamification.test.js — concesión de puntos al completar tareas (base +
-// bonus por prioridad, anti-farming 23 h), recompensas y canjes, y el
-// resumen (saldo, semana, racha).
+// bonus por prioridad, anti-farming 23 h, reversión al salir de hecho),
+// recompensas y canjes, y el resumen (saldo, semana, racha).
 import { describe, it, expect } from 'vitest'
 import { makeInstance, loginAdmin, jsonReq } from './helpers.js'
 
@@ -61,28 +61,52 @@ describe('gamificación', () => {
     expect(s.recent[0].task_title).toBe('Baja')
   })
 
-  it('no concede puntos al reordenar dentro de hecho ni al salir de hecho', async () => {
+  it('no concede puntos al reordenar dentro de hecho', async () => {
     const { app, auth, project } = await setup()
     const t = await createTask(app, auth, project.id, 'Tarea')
     await moveTask(app, auth, t.id, 'hecho')
     await moveTask(app, auth, t.id, 'hecho', 0) // reorden dentro de hecho
-    await moveTask(app, auth, t.id, 'encurso')
 
     const s = await summary(app, auth)
     expect(s.users[0].balance).toBe(5)
     expect(s.users[0].tasks_done_total).toBe(1)
   })
 
-  it('anti-farming: la misma tarea no concede dos veces en 23 h', async () => {
+  it('revierte puntos al salir de hecho y los reactiva al volver', async () => {
     const { app, auth, project } = await setup()
     const t = await createTask(app, auth, project.id, 'Cíclica')
+
+    await moveTask(app, auth, t.id, 'hecho')
+    let s = await summary(app, auth)
+    expect(s.users[0].balance).toBe(5)
+    expect(s.users[0].tasks_done_total).toBe(1)
+
+    await moveTask(app, auth, t.id, 'encurso')
+    s = await summary(app, auth)
+    expect(s.users[0].balance).toBe(0)
+    expect(s.users[0].tasks_done_total).toBe(0)
+
+    await moveTask(app, auth, t.id, 'hecho') // reactiva la entrada revertida
+    s = await summary(app, auth)
+    expect(s.users[0].balance).toBe(5)
+    expect(s.users[0].tasks_done_total).toBe(1)
+  })
+
+  it('anti-farming: una tarea no crea una segunda entrada en 23 h', async () => {
+    const { app, auth, prod, project } = await setup()
+    const t = await createTask(app, auth, project.id, 'Una sola entrada')
     await moveTask(app, auth, t.id, 'hecho')
     await moveTask(app, auth, t.id, 'nuevo')
-    await moveTask(app, auth, t.id, 'hecho') // segunda vez en <23 h
+    await moveTask(app, auth, t.id, 'hecho') // reactiva, no inserta
+    await moveTask(app, auth, t.id, 'nuevo')
+    await moveTask(app, auth, t.id, 'hecho') // reactiva de nuevo
 
     const s = await summary(app, auth)
     expect(s.users[0].balance).toBe(5)
-    expect(s.users[0].tasks_done_total).toBe(1)
+
+    // Solo debe haber una fila en el ledger para esta tarea.
+    const rows = prod.prepare('SELECT COUNT(*) AS n FROM gam_points_ledger WHERE task_id = ?').get(t.id)
+    expect(rows.n).toBe(1)
   })
 
   it('done-and-archive desde otra columna también concede puntos', async () => {
@@ -166,8 +190,8 @@ describe('gamificación', () => {
     const day = 24 * 60 * 60 * 1000
     const now = Date.now()
     const ins = prod.prepare(
-      `INSERT INTO gam_points_ledger (id, user_id, task_id, points, reason, created_at)
-       VALUES (?, ?, ?, 5, 'task_done', ?)`
+      `INSERT INTO gam_points_ledger (id, user_id, task_id, points, reason, created_at, reverted_at)
+       VALUES (?, ?, ?, 5, 'task_done', ?, NULL)`
     )
     ins.run('g1', userId, task.id, now - 2 * day)
     ins.run('g2', userId, task.id, now - day)
@@ -177,5 +201,25 @@ describe('gamificación', () => {
     const s = await summary(app, auth)
     expect(s.users[0].streak_days).toBe(3)
     expect(s.users[0].tasks_done_total).toBe(4)
+  })
+
+  it('no permite canjear puntos revertidos', async () => {
+    const { app, auth, project } = await setup()
+    const t = await createTask(app, auth, project.id, 'Tarea', { priority: 'alta' })
+    await moveTask(app, auth, t.id, 'hecho') // 10 puntos
+    await moveTask(app, auth, t.id, 'encurso') // se revierten
+
+    const created = await app.request(
+      '/api/rewards',
+      jsonReq(auth, 'POST', '/api/rewards', { title: 'Caro', cost: 10 })
+    )
+    const reward = (await created.json()).reward
+
+    const redeem = await app.request(
+      `/api/rewards/${reward.id}/redeem`,
+      jsonReq(auth, 'POST', `/api/rewards/${reward.id}/redeem`, {})
+    )
+    expect(redeem.status).toBe(400)
+    expect((await redeem.json()).error.code).toBe('INSUFFICIENT_POINTS')
   })
 })

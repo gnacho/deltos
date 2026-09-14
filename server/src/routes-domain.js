@@ -20,7 +20,7 @@ import { decodeCursor, keysetPage } from './pagination.js'
 import { logger } from './logger.js'
 import { isBackupTimerActive } from './backup.js'
 import { normalizeRecurrence, serializeRecurrence, computeNextDue, todayLocal, adaptiveInterval, completionDates } from './recurrence.js'
-import { grantCompletionPoints } from './routes-gamification.js'
+import { grantCompletionPoints, revertCompletionPoints } from './routes-gamification.js'
 import { parseTaskText } from './nlp.js'
 
 const log = logger.child({ component: 'domain' })
@@ -761,9 +761,10 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
         .get(toCol, task.id).n
       const toPos = Math.min(data.position, targetCount)
 
-      // Gamificación: puntos al entrar en 'hecho' desde otra columna (con
-      // anti-farming dentro de grantCompletionPoints).
+      // Gamificación: puntos al entrar en 'hecho' desde otra columna; revertir
+      // al salir de 'hecho' (por ejemplo, movida por error).
       let granted = 0
+      let reverted = 0
       const move = db.transaction(() => {
         if (task.archived_at) {
           // Tarea archivada: su posición origen está congelada (fue compactada
@@ -800,6 +801,8 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
         addEvent(db, task.id, user.id, 'moved', { from: fromCol, to: toCol })
         if (fromCol !== 'hecho' && toCol === 'hecho') {
           granted = grantCompletionPoints(db, task, user.id)
+        } else if (fromCol === 'hecho' && toCol !== 'hecho') {
+          reverted = revertCompletionPoints(db, task.id)
         }
         return true
       })
@@ -810,7 +813,7 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
       if (fromCol !== 'hecho' && toCol === 'hecho' && task.recurrence) {
         recurred = createRecurringInstance(db, task, user.id)
       }
-      if (granted > 0) hub.broadcast('gamification')
+      if (granted > 0 || reverted > 0) hub.broadcast('gamification')
       hub.broadcast('tasks')
       notifyInterested(db, c.get('demo'), task, user.id, 'tarea_movida', { usuario: user.username, titulo: task.title, columna: toCol })
       return c.json({ task: hydrateTasks(db, 't.id = ?', [task.id])[0] })

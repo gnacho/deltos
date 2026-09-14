@@ -307,16 +307,17 @@ CREATE TABLE IF NOT EXISTS idempotency_keys (
 CREATE INDEX IF NOT EXISTS idx_idempotency_expiry ON idempotency_keys(created_at);
 
 -- Gamificación: libro mayor de puntos (una fila por concesión; el saldo es
--- SUM(puntos) − SUM(canjes)). El anti-farming (una concesión por tarea cada
--- 23 h) se aplica en routes-gamification.js, no con un UNIQUE: la tarea puede
--- ganar puntos de nuevo pasado el enfriamiento.
+-- SUM(puntos activos) - SUM(canjes)). El anti-farming (una concesión por
+-- tarea cada 23 h) se aplica en routes-gamification.js. Una fila puede
+-- revertirse (reverted_at) si la tarea sale de 'hecho'.
 CREATE TABLE IF NOT EXISTS gam_points_ledger (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id),
   task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
   points INTEGER NOT NULL,
   reason TEXT NOT NULL DEFAULT 'task_done',
-  created_at INTEGER NOT NULL
+  created_at INTEGER NOT NULL,
+  reverted_at INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_gam_ledger_user ON gam_points_ledger(user_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_gam_ledger_task ON gam_points_ledger(task_id, created_at);
@@ -568,6 +569,18 @@ function backfillShortIds(db) {
   })
   tx()
   log.info('schema_backfilled', { table: 'tasks', column: 'short_id', rows: missing })
+
+  // Gamificación: columna de reversión de puntos (si la tarea sale de 'hecho').
+  const gamLedgerCols = db.prepare('PRAGMA table_info(gam_points_ledger)').all().map((c) => c.name)
+  if (!gamLedgerCols.includes('reverted_at')) {
+    db.exec('ALTER TABLE gam_points_ledger ADD COLUMN reverted_at INTEGER')
+    log.info('schema_migrated', { table: 'gam_points_ledger', column: 'reverted_at' })
+  }
+  const gamLedgerIndexes = db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='gam_points_ledger'").all().map((r) => r.name)
+  if (!gamLedgerIndexes.includes('idx_gam_ledger_reverted')) {
+    db.exec('CREATE INDEX IF NOT EXISTS idx_gam_ledger_reverted ON gam_points_ledger(task_id, reverted_at)')
+    log.info('schema_migrated', { table: 'gam_points_ledger', index: 'idx_gam_ledger_reverted' })
+  }
 }
 
 // Proyecto "Sin proyecto" (bandeja de tareas sin proyecto). Es un proyecto real
