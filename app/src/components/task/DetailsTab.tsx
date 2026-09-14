@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, Trash2, Archive, ArchiveRestore } from 'lucide-react';
+import { Check, Trash2, Archive, ArchiveRestore, Save } from 'lucide-react';
 import { z } from 'zod';
 import type { ColumnId, Task, TaskDetail, TaskRecurrence } from '@/data/types';
 import { useData } from '@/data/data-context';
@@ -158,86 +158,101 @@ export function DetailsTab({ detail, onClose }: { detail: TaskDetail; onClose: (
       <TaskFields
         value={value}
         onChange={onFieldsChange}
-      onTextCommit={(field) => (field === 'title' ? commitTitle() : commitDescription())}
-      titleError={titleError}
-      idPrefix="dt"
-      projects={projects}
-      labels={labels}
-      users={users}
-      stageSlot={<StageSelect id="dt-stage" value={task.column} onChange={moveTo} />}
-      subtasksSlot={<SubtaskList taskId={task.id} subtasks={detail.subtasks ?? []} />}
-    >
-      <div className="flex items-center justify-between gap-3 pt-2 border-t border-app">
-        <p className="text-[12px] text-faint" role="status" aria-live="polite">
-          {saveState === 'saved' && (
-            <span className="inline-flex items-center gap-1 text-ok">
-              <Check className="w-3.5 h-3.5" aria-hidden="true" />
-              {t('task.saved')}
-            </span>
-          )}
-          {saveState === 'error' && (
-            <span className="text-rose-600 dark:text-rose-400">{t('task.saveError')}</span>
-          )}
-        </p>
-        <div className="flex items-center gap-2">
-          {task.archived_at ? (
-            <>
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-surface2 text-muted">
-                <Archive className="w-3 h-3" aria-hidden="true" />
-                {t('task.archived')}
+        onTextCommit={(field) => (field === 'title' ? commitTitle() : commitDescription())}
+        titleError={titleError}
+        idPrefix="dt"
+        projects={projects}
+        labels={labels}
+        users={users}
+        stageSlot={<StageSelect id="dt-stage" value={task.column} onChange={moveTo} ariaLabel={t('task.stage')} />}
+        subtasksSlot={<SubtaskList taskId={task.id} subtasks={detail.subtasks ?? []} />}
+      >
+        <div className="flex items-center justify-between gap-3 pt-2 border-t border-app">
+          <p className="text-[12px] text-faint" role="status" aria-live="polite">
+            {saveState === 'saved' && (
+              <span className="inline-flex items-center gap-1 text-ok">
+                <Check className="w-3.5 h-3.5" aria-hidden="true" />
+                {t('task.saved')}
               </span>
-              <button
-                type="button"
-                onClick={() =>
-                  void data
-                    .unarchiveTask(task.id)
-                    .then(() => announce(t('board.taskUnarchived', { title: task.title })))
-                    .catch(() => setSaveState('error'))
-                }
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-medium bg-surface border border-app text-muted hover:bg-surface2"
-              >
-                <ArchiveRestore className="w-4 h-4" aria-hidden="true" />
-                {t('task.unarchive')}
-              </button>
-            </>
-          ) : (
-            task.column === 'hecho' && (
-              <button
-                type="button"
-                onClick={() =>
-                  void data
-                    .archiveTask(task.id)
-                    .then(() => announce(t('board.taskArchived', { title: task.title })))
-                    .catch(() => setSaveState('error'))
-                }
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-medium bg-surface border border-app text-muted hover:bg-surface2"
-              >
-                <Archive className="w-4 h-4" aria-hidden="true" />
-                {t('task.archive')}
-              </button>
-            )
-          )}
-          <button
-            type="button"
-            onClick={() => void onDelete()}
-            disabled={deleting}
-            className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[13px] font-medium ${
-              deleteArmed
-                ? 'bg-rose-600 text-white hover:bg-rose-700'
-                : 'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300 hover:bg-rose-200/70 dark:hover:bg-rose-500/25'
-            } disabled:opacity-60`}
-          >
-            <Trash2 className="w-4 h-4" aria-hidden="true" />
-            {deleting
-              ? t('task.deleting')
-              : deleteArmed
-                ? t('task.deleteConfirm')
-                : t('task.deleteTitle')}
-          </button>
+            )}
+            {saveState === 'error' && (
+              <span className="text-rose-600 dark:text-rose-400">{t('task.saveError')}</span>
+            )}
+          </p>
+          <div className="flex items-center gap-2">
+            {task.archived_at ? (
+              <>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-surface2 text-muted">
+                  <Archive className="w-3 h-3" aria-hidden="true" />
+                  {t('task.archived')}
+                </span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    void data
+                      .unarchiveTask(task.id)
+                      .then(() => announce(t('board.taskUnarchived', { title: task.title })))
+                      .catch(() => setSaveState('error'))
+                  }
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-medium bg-surface border border-app text-muted hover:bg-surface2"
+                >
+                  <ArchiveRestore className="w-4 h-4" aria-hidden="true" />
+                  {t('task.unarchive')}
+                </button>
+              </>
+            ) : (
+              task.column === 'hecho' && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    void data
+                      .archiveTask(task.id)
+                      .then(() => announce(t('board.taskArchived', { title: task.title })))
+                      .catch(() => setSaveState('error'))
+                  }
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-medium bg-surface border border-app text-muted hover:bg-surface2"
+                >
+                  <Archive className="w-4 h-4" aria-hidden="true" />
+                  {t('task.archive')}
+                </button>
+              )
+            )}
+            <button
+              type="button"
+              onClick={() => void onDelete()}
+              disabled={deleting}
+              className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[13px] font-medium ${
+                deleteArmed
+                  ? 'bg-rose-600 text-white hover:bg-rose-700'
+                  : 'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300 hover:bg-rose-200/70 dark:hover:bg-rose-500/25'
+              } disabled:opacity-60`}
+            >
+              <Trash2 className="w-4 h-4" aria-hidden="true" />
+              {deleting
+                ? t('task.deleting')
+                : deleteArmed
+                  ? t('task.deleteConfirm')
+                  : t('task.deleteTitle')}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[13px] font-medium bg-surface border border-app text-muted hover:bg-surface2"
+            >
+              {t('common.cancel')}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-semibold bg-brand text-brandfg hover:brightness-110 shadow-soft"
+            >
+              <Save className="w-4 h-4" aria-hidden="true" />
+              {t('common.save')}
+            </button>
+          </div>
         </div>
-      </div>
-      {deleteArmed && <p className="text-[12px] text-faint -mt-4">{t('task.deleteHint')}</p>}
-    </TaskFields>
+        {deleteArmed && <p className="text-[12px] text-faint -mt-4">{t('task.deleteHint')}</p>}
+      </TaskFields>
     </>
   );
 }
