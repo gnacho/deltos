@@ -15,6 +15,7 @@ import * as auth from './auth.js'
 import { kvGet } from './db.js'
 import { registerDomainRoutes } from './routes-domain.js'
 import { registerExpenseRoutes } from './routes-expenses.js'
+import { registerGamificationRoutes } from './routes-gamification.js'
 import { registerPushRoutes } from './routes-push.js'
 import { registerInviteRoutes } from './routes-invite.js'
 import { registerHaRoutes } from './routes-ha.js'
@@ -295,6 +296,7 @@ export function createApp(ctx) {
 
   registerDomainRoutes(app, { hub, uploadsDir: ctx.uploadsDir, prod, config, dataDir: ctx.dataDir })
   registerExpenseRoutes(app, { prod, hub, uploadsDir: ctx.uploadsDir })
+  registerGamificationRoutes(app, { hub })
   registerPushRoutes(app)
   registerHealth(app, { prod, demo })
   registerInviteRoutes(app, { prod })

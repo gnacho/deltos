@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Check, Pause, Play, Repeat, Settings2 } from 'lucide-react';
 import { apiFetch, apiPost } from '@/data/api-client';
 import { apiErrorText } from '@/lib/errors';
+import { fireConfetti } from '@/lib/confetti';
 import { useTaskModal } from '@/components/modal-context';
 import { colorOf } from '@/lib/colors';
 import { projectDisplayName } from '@/lib/projects';
@@ -95,6 +96,7 @@ export default function RoutinesPage() {
     if (!s.active_task_id) return;
     void withBusy(`complete-${s.group_id}`, async () => {
       await apiPost(`/api/tasks/${s.active_task_id}/move`, { column: 'hecho', position: 0 });
+      fireConfetti(); // rutina completada por el usuario local
       await load();
     });
   };

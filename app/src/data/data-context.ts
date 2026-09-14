@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import type { BoardUser, Label, Project, Task, TaskDetail, TaskPatch, TaskRecurrence, Expense, ExpenseInput, ExpensePatch, ExpenseDetail } from './types';
+import type { BoardUser, Label, Project, Task, TaskDetail, TaskPatch, TaskRecurrence, Expense, ExpenseInput, ExpensePatch, ExpenseDetail, GamificationSummary } from './types';
 
 export type ConnectionStatus = 'connected' | 'reconnecting';
 
@@ -105,6 +105,11 @@ export interface DataApi {
   setMyShare: (id: string, paid: boolean) => Promise<void>;
   uploadExpenseAttachment: (id: string, file: File) => Promise<void>;
   deleteExpenseAttachment: (expenseId: string, attId: string) => Promise<void>;
+
+  /** Resumen de gamificación en caché (null hasta la primera carga). */
+  getGamificationSummary: () => GamificationSummary | null;
+  /** Refetch explícito del resumen de gamificación. */
+  refreshGamification: () => void;
 }
 
 export const DataContext = createContext<DataApi | null>(null);

@@ -743,7 +743,9 @@
     "SSE_TOO_MANY_CLIENTS": "Too many connected clients",
     "PUSH_NOT_CONFIGURED": "The server has no push keys configured",
     "PUSH_DEMO_UNAVAILABLE": "Push notifications are not available in demo mode",
-    "EXPENSE_NOT_FOUND": "Expense not found"
+    "EXPENSE_NOT_FOUND": "Expense not found",
+    "INSUFFICIENT_POINTS": "You don't have enough points to redeem this reward",
+    "REWARD_NOT_FOUND": "Reward not found"
   },
   "update": {
     "banner": "A new version of Deltos is on the server.",
@@ -828,5 +830,38 @@
     "resumeAria": "Resume series {{title}}",
     "edit": "Edit",
     "editAria": "Edit series {{title}}"
+  },
+  "gamification": {
+    "points": "points",
+    "pointsBadge": "Your points balance",
+    "openRewards": "Open points and rewards",
+    "panelTitle": "Points and rewards",
+    "weeklyTitle": "Weekly karma",
+    "weekPoints_one": "{{count}} point this week",
+    "weekPoints_other": "{{count}} points this week",
+    "streak_one": "{{count}}-day streak",
+    "streak_other": "{{count}}-day streak",
+    "balance": "Balance",
+    "tasksDone_one": "{{count}} task completed",
+    "tasksDone_other": "{{count}} tasks completed",
+    "rewardsTitle": "Rewards",
+    "rewardsEmpty": "No rewards yet. Create the first one below.",
+    "redeem": "Redeem",
+    "redeemConfirm": "Redeem \"{{title}}\" for {{cost}} points?",
+    "redeemError": "The reward could not be redeemed",
+    "deleteReward": "Delete reward",
+    "deleteRewardConfirm": "Delete the reward \"{{title}}\"? Redemption history is kept.",
+    "deleteRewardError": "The reward could not be deleted",
+    "addTitle": "New reward",
+    "rewardTitleLabel": "Reward title",
+    "rewardTitlePlaceholder": "E.g. Pizza on Friday",
+    "rewardEmojiLabel": "Emoji",
+    "rewardCostLabel": "Cost in points",
+    "addReward": "Add",
+    "addRewardError": "The reward could not be created",
+    "historyTitle": "Recent activity",
+    "historyEmpty": "No activity yet.",
+    "earned": "+{{points}} · {{title}}",
+    "redeemed": "{{name}} redeemed {{emoji}} {{title}}"
   }
 }

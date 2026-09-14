@@ -194,7 +194,7 @@ export function DetailsTab({ detail, onClose }: { detail: TaskDetail; onClose: (
                       .then(() => announce(t('board.taskUnarchived', { title: task.title })))
                       .catch(() => setSaveState('error'))
                   }
-                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-medium bg-surface border border-app text-muted hover:bg-surface2"
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-medium bg-surface border border-app text-muted hover:text-text hover:bg-surface2 transition-colors duration-150"
                 >
                   <ArchiveRestore className="w-4 h-4" aria-hidden="true" />
                   {t('task.unarchive')}
@@ -210,7 +210,7 @@ export function DetailsTab({ detail, onClose }: { detail: TaskDetail; onClose: (
                       .then(() => announce(t('board.taskArchived', { title: task.title })))
                       .catch(() => setSaveState('error'))
                   }
-                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-medium bg-surface border border-app text-muted hover:bg-surface2"
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-medium bg-surface border border-app text-muted hover:text-text hover:bg-surface2 transition-colors duration-150"
                 >
                   <Archive className="w-4 h-4" aria-hidden="true" />
                   {t('task.archive')}
@@ -221,7 +221,7 @@ export function DetailsTab({ detail, onClose }: { detail: TaskDetail; onClose: (
               type="button"
               onClick={() => void onDelete()}
               disabled={deleting}
-              className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[13px] font-medium ${
+              className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[13px] font-medium transition-colors duration-150 ${
                 deleteArmed
                   ? 'bg-rose-600 text-white hover:bg-rose-700'
                   : 'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300 hover:bg-rose-200/70 dark:hover:bg-rose-500/25'
@@ -237,14 +237,14 @@ export function DetailsTab({ detail, onClose }: { detail: TaskDetail; onClose: (
             <button
               type="button"
               onClick={onClose}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[13px] font-medium bg-surface border border-app text-muted hover:bg-surface2"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[13px] font-medium bg-surface border border-app text-muted hover:text-text hover:bg-surface2 transition-colors duration-150"
             >
               {t('common.cancel')}
             </button>
             <button
               type="button"
               onClick={onClose}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-semibold bg-brand text-brandfg hover:brightness-110 shadow-soft"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-semibold bg-brand text-brandfg hover:brightness-110 hover:shadow-md transition-all duration-150 shadow-soft"
             >
               <Save className="w-4 h-4" aria-hidden="true" />
               {t('common.save')}

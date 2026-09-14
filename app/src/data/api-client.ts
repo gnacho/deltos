@@ -15,6 +15,12 @@
  *   reacciona y muestra Login. NUNCA location.assign('/login').
  * - Login/check inicial/logout pasan `noAuthEvent` para no auto-disparar.
  */
+import type {
+  GamificationSummary,
+  Redemption,
+  Reward,
+  RewardInput,
+} from './types';
 
 const APP_SLUG = 'deltos';
 
@@ -211,4 +217,41 @@ export function apiDelete<T>(path: string, init?: ApiOptions): Promise<T> {
 /** Conveniencia para subida multipart (adjuntos). */
 export function apiUpload<T>(path: string, form: FormData, init?: ApiOptions): Promise<T> {
   return apiFetch<T>(path, { method: 'POST', ...init, body: form });
+}
+
+/* --- Gamificación (rutas de server/src/routes-gamification.js) --- */
+
+/** GET /api/gamification/summary: saldos, karma semanal, rachas e historial. */
+export function getGamificationSummary(init?: ApiOptions): Promise<GamificationSummary> {
+  return apiFetch<GamificationSummary>('/api/gamification/summary', init);
+}
+
+/** GET /api/rewards: recompensas activas. */
+export function getRewards(init?: ApiOptions): Promise<{ rewards: Reward[] }> {
+  return apiFetch<{ rewards: Reward[] }>('/api/rewards', init);
+}
+
+/** POST /api/rewards (201): crea una recompensa canjeable. */
+export function createReward(input: RewardInput, init?: ApiOptions): Promise<{ reward: Reward }> {
+  return apiPost<{ reward: Reward }>('/api/rewards', input, init);
+}
+
+/** DELETE /api/rewards/:id (204, borrado lógico). */
+export function deleteReward(id: string, init?: ApiOptions): Promise<void> {
+  return apiDelete<void>(`/api/rewards/${encodeURIComponent(id)}`, init);
+}
+
+/**
+ * POST /api/rewards/:id/redeem (201): canjea con el saldo del usuario actual.
+ * 400 INSUFFICIENT_POINTS si no llega el saldo; 404 REWARD_NOT_FOUND.
+ */
+export function redeemReward(
+  id: string,
+  init?: ApiOptions,
+): Promise<{ redemption: Redemption; balance: number }> {
+  return apiPost<{ redemption: Redemption; balance: number }>(
+    `/api/rewards/${encodeURIComponent(id)}/redeem`,
+    {},
+    init,
+  );
 }

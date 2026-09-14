@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { apiDelete, apiFetch, apiPatch, apiPost, apiPut, apiUpload } from './api-client';
+import { apiDelete, apiFetch, apiPatch, apiPost, apiPut, apiUpload, getGamificationSummary } from './api-client';
 import {
   DataContext,
   type ConnectionStatus,
@@ -9,9 +9,10 @@ import {
   type DataApi,
   type UpdateProjectInput,
 } from './data-context';
-import type { Bootstrap, Expense, ExpenseDetail, ExpenseInput, ExpensePatch, Label, Project, ProjectMember, Task, TaskDetail, TaskPatch, TaskRecurrence } from './types';
+import type { Bootstrap, Expense, ExpenseDetail, ExpenseInput, ExpensePatch, GamificationSummary, Label, Project, ProjectMember, Task, TaskDetail, TaskPatch, TaskRecurrence } from './types';
 import i18n from '@/i18n';
 import { showToast } from '@/lib/toast-store';
+import { fireConfetti } from '@/lib/confetti';
 
 /**
  * Capa de datos desacoplada (contrato síncrono):
@@ -39,6 +40,13 @@ const SSE_CHANGED_EVENTS = [
   'settings.changed',
   'expenses.changed',
 ] as const;
+
+/**
+ * Evento window que avisa de cambios de gamificación (puntos, recompensas,
+ * canjes). Lo escucha el RewardsPanel para refrescar su lista en vivo; el
+ * saldo del PointsBadge viaja por el propio contexto (getGamificationSummary).
+ */
+export const GAMIFICATION_EVENT = 'deltos-gamification.changed';
 export function DataProvider({ children }: { children: ReactNode }) {
   const [version, setVersion] = useState(0);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('reconnecting');
@@ -53,6 +61,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const expensesInFlight = useRef<Promise<void> | null>(null);
   const expenseDetailCache = useRef(new Map<string, ExpenseDetail>());
   const expenseDetailPending = useRef(new Set<string>());
+  const gamRef = useRef<GamificationSummary | null>(null);
+  const gamInFlight = useRef<Promise<void> | null>(null);
   const mounted = useRef(true);
 
   const bump = useCallback(() => setVersion((v) => v + 1), []);
@@ -100,6 +110,26 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return p;
   }, [bump]);
 
+  /* Resumen de gamificación: mismo patrón que los gastos (caché en ref +
+     anti-duplicados). Un fallo deja el último valor conocido. */
+  const fetchGamification = useCallback(async (): Promise<void> => {
+    if (gamInFlight.current) return gamInFlight.current;
+    const p = (async () => {
+      try {
+        const data = await getGamificationSummary();
+        if (!mounted.current) return;
+        gamRef.current = data;
+        bump();
+      } catch {
+        /* se reintenta con el próximo evento SSE o al abrir el panel */
+      } finally {
+        gamInFlight.current = null;
+      }
+    })();
+    gamInFlight.current = p;
+    return p;
+  }, [bump]);
+
   const fetchDetail = useCallback(
     async (id: string): Promise<void> => {
       if (detailPending.current.has(id)) return;
@@ -135,11 +165,18 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }, 250);
   }, [refreshAll]);
 
+  /* Cambios de gamificación: refetch del resumen + aviso al RewardsPanel. */
+  const onGamificationChanged = useCallback(() => {
+    void fetchGamification();
+    window.dispatchEvent(new Event(GAMIFICATION_EVENT));
+  }, [fetchGamification]);
+
   /* Bootstrap inicial + SSE */
   useEffect(() => {
     mounted.current = true;
     void fetchBootstrap();
     void fetchExpenses();
+    void fetchGamification();
 
     let es: EventSource | null = null;
     let failures = 0;
@@ -153,6 +190,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       };
       /* Cambios de dominio: refetch con debounce (ráfagas de una mutación). */
       for (const ev of SSE_CHANGED_EVENTS) es.addEventListener(ev, scheduleRefresh);
+      /* Gamificación: no toca el bootstrap; solo su resumen. */
+      es.addEventListener('gamification.changed', onGamificationChanged);
       /* Reconexión con eventos perdidos: refetch total (bootstrap + detalle
          abierto), inmediato — los eventos no llevan datos, solo avisan. */
       es.addEventListener('sync.resync', refreshAll);
@@ -175,7 +214,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       if (sseTimer.current !== null) window.clearTimeout(sseTimer.current);
       es?.close();
     };
-  }, [fetchBootstrap, scheduleRefresh, refreshAll]);
+  }, [fetchBootstrap, fetchGamification, scheduleRefresh, refreshAll, onGamificationChanged]);
 
   /* --- Mutaciones: API + refresco de cachés --- */
 
@@ -223,14 +262,21 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const moveTask = useCallback(
     async (id: string, column: string, position: number): Promise<void> => {
+      // Confetti al completar (mover a 'hecho' desde otra columna): el usuario
+      // local acaba de terminar la tarea. Los puntos los concede el server.
+      const wasDone = bootstrapRef.current?.tasks.find((tk) => tk.id === id)?.column === 'hecho';
       await apiPost<{ task: Task }>(`/api/tasks/${encodeURIComponent(id)}/move`, {
         column,
         position,
       });
+      if (column === 'hecho' && !wasDone) {
+        fireConfetti();
+        void fetchGamification();
+      }
       await fetchBootstrap();
       if (detailCache.current.has(id)) await fetchDetail(id);
     },
-    [fetchBootstrap, fetchDetail],
+    [fetchBootstrap, fetchDetail, fetchGamification],
   );
 
   const archiveTask = useCallback(
@@ -592,6 +638,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setMyShare,
       uploadExpenseAttachment,
       deleteExpenseAttachment,
+      getGamificationSummary: () => gamRef.current,
+      refreshGamification: () => void fetchGamification(),
     };
     // version es el disparador de recomputo (cachés en refs)
     // eslint-disable-next-line react-hooks/exhaustive-deps
