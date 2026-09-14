@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.38] - 2026-09-14
+
+### Added
+
+- **Passive gamification (#246).** Moving a task to Done awards points (5 base +
+  priority bonus: high +5, medium +2, low +0). A points badge in the top bar
+  opens a panel with weekly karma, streaks, a real-life rewards catalog and a
+  recent activity history. Canvas confetti celebrates completions while
+  respecting prefers-reduced-motion.
+- **Revert on undo.** If a task is moved out of Done, its points are reverted;
+  moving it back to Done reactivates the same ledger entry instead of creating
+  duplicates. This keeps points aligned with the real completion state.
+- **23-hour anti-farming.** The same task cannot create a second point entry
+  within 23 hours.
+
+### Changed
+
+- **Task modal hover states.** Close button, tabs and footer buttons (archive,
+  delete, cancel, save) now have clearer hover feedback with transitions.
+
 ## [2.6.36] - 2026-09-14
 
 ### Added
