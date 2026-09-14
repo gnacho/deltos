@@ -305,6 +305,44 @@ CREATE TABLE IF NOT EXISTS idempotency_keys (
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_idempotency_expiry ON idempotency_keys(created_at);
+
+-- Gamificación: libro mayor de puntos (una fila por concesión; el saldo es
+-- SUM(puntos) − SUM(canjes)). El anti-farming (una concesión por tarea cada
+-- 23 h) se aplica en routes-gamification.js, no con un UNIQUE: la tarea puede
+-- ganar puntos de nuevo pasado el enfriamiento.
+CREATE TABLE IF NOT EXISTS gam_points_ledger (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id),
+  task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  points INTEGER NOT NULL,
+  reason TEXT NOT NULL DEFAULT 'task_done',
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_gam_ledger_user ON gam_points_ledger(user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_gam_ledger_task ON gam_points_ledger(task_id, created_at);
+
+-- Recompensas canjeables con puntos (borrado lógico con active=0).
+CREATE TABLE IF NOT EXISTS gam_rewards (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  emoji TEXT DEFAULT '🎁',
+  cost INTEGER NOT NULL,
+  active INTEGER NOT NULL DEFAULT 1,
+  created_by TEXT REFERENCES users(id),
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_gam_rewards_active ON gam_rewards(active, created_at);
+
+-- Canjes: guardan el coste en el momento del canje (la recompensa puede
+-- cambiar de precio después sin reescribir el historial).
+CREATE TABLE IF NOT EXISTS gam_redemptions (
+  id TEXT PRIMARY KEY,
+  reward_id TEXT NOT NULL REFERENCES gam_rewards(id),
+  user_id TEXT NOT NULL REFERENCES users(id),
+  cost INTEGER NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_gam_redemptions_user ON gam_redemptions(user_id, created_at);
 `
 
 export function openDb(file) {

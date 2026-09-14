@@ -55,6 +55,10 @@ export const ERROR_CODES = {
   UPLOAD_TOO_LARGE: 'UPLOAD_TOO_LARGE', // 413, fichero > MAX_UPLOAD_MB
   UPLOAD_INVALID_MIME: 'UPLOAD_INVALID_MIME', // 415, tipo de fichero no permitido
 
+  // Gamificación
+  REWARD_NOT_FOUND: 'REWARD_NOT_FOUND',
+  INSUFFICIENT_POINTS: 'INSUFFICIENT_POINTS', // 400, saldo insuficiente para canjear
+
   // Ajustes
   SETTINGS_PROD_ONLY: 'SETTINGS_PROD_ONLY', // 403, ajuste solo desde sesión prod
   SETTINGS_BACKUP_FAILED: 'SETTINGS_BACKUP_FAILED', // 500, error al hacer backup
@@ -112,6 +116,9 @@ export const ERROR_MESSAGES_ES = {
   [ERROR_CODES.UPLOAD_FILE_REQUIRED]: 'Falta el fichero (campo "file" en multipart)',
   [ERROR_CODES.UPLOAD_TOO_LARGE]: 'El fichero supera el límite de subida',
   [ERROR_CODES.UPLOAD_INVALID_MIME]: 'El tipo de fichero no está permitido',
+
+  [ERROR_CODES.REWARD_NOT_FOUND]: 'Recompensa no encontrada',
+  [ERROR_CODES.INSUFFICIENT_POINTS]: 'No tienes puntos suficientes para canjear esta recompensa',
 
   [ERROR_CODES.SETTINGS_PROD_ONLY]: 'Ajuste solo disponible desde la sesión de producción',
   [ERROR_CODES.SETTINGS_BACKUP_FAILED]: 'Error al realizar la copia de seguridad',
