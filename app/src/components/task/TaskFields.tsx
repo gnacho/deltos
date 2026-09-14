@@ -1,12 +1,11 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import type { ReactNode, Ref } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowUp, ArrowRight, ArrowDown } from 'lucide-react';
 import type { Label, Priority, Project, TaskRecurrence } from '@/data/types';
-import { PRIORITIES, PRIORITY_BADGE } from '@/lib/constants';
 import { ProjectSelect } from '@/components/task/ProjectSelect';
 import { LabelsSelect } from '@/components/task/LabelsSelect';
 import { AssigneeSelect } from '@/components/task/AssigneeSelect';
+import { PrioritySelect } from '@/components/task/PrioritySelect';
 import { RecurrenceField } from '@/components/task/RecurrenceField';
 import Markdown from '@/components/LazyMarkdown';
 
@@ -27,8 +26,6 @@ interface FieldUser {
   color: string;
 }
 
-const PR_ICON = { alta: ArrowUp, media: ArrowRight, baja: ArrowDown } as const;
-
 function FieldLabel({ children }: { children: ReactNode }) {
   return (
     <p className="text-[12px] font-semibold tracking-wide uppercase text-faint mb-1.5">
@@ -41,8 +38,8 @@ function FieldLabel({ children }: { children: ReactNode }) {
  *  pestaña Detalles (paridad de campos y layout). Presentacional: el padre
  *  decide cómo persiste cada cambio.
  *
- *  Orden de filas: etapa | prioridad · asignado | etiquetas · proyecto |
- *  vencimiento · subtareas | repite. */
+ *  Orden de filas: etapa | prioridad | asignado · proyecto | etiquetas ·
+ *  vencimiento | subtareas | repite. */
 export function TaskFields({
   value,
   onChange,
@@ -74,6 +71,17 @@ export function TaskFields({
 }) {
   const { t } = useTranslation();
   const [descFocused, setDescFocused] = useState(false);
+  const descRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (descFocused && descRef.current) {
+      descRef.current.focus();
+      const len = descRef.current.value.length;
+      descRef.current.setSelectionRange(len, len);
+    }
+  }, [descFocused]);
+
+  const showPreview = !descFocused && value.description.trim() !== '';
 
   return (
     <div className="space-y-5">
@@ -107,7 +115,8 @@ export function TaskFields({
         {titleExtra}
       </div>
 
-      <div className="grid grid-cols-2 gap-x-4 gap-y-5">
+      {/* Fila 1: Etapa | Prioridad | Asignado */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-5">
         <div>
           <FieldLabel>{t('task.stage')}</FieldLabel>
           {stageSlot}
@@ -115,45 +124,12 @@ export function TaskFields({
 
         <div>
           <FieldLabel>{t('task.priority')}</FieldLabel>
-          <div
+          <PrioritySelect
             id={`${idPrefix}-priority`}
-            className="flex flex-wrap gap-1.5"
-            role="group"
-            aria-label={t('task.priority')}
-          >
-            {PRIORITIES.map((pr) => {
-              const Icon = PR_ICON[pr];
-              const active = value.priority === pr;
-              return (
-                <button
-                  key={pr}
-                  type="button"
-                  aria-pressed={active}
-                  onClick={() => onChange({ priority: active ? null : pr })}
-                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs ${
-                    active
-                      ? `${PRIORITY_BADGE[pr]} ring-1 ring-current font-medium`
-                      : 'bg-surface border border-app text-muted hover:bg-surface2'
-                  }`}
-                >
-                  <Icon className="w-3 h-3" aria-hidden="true" />
-                  {t(`priority.${pr}`)}
-                </button>
-              );
-            })}
-            <button
-              type="button"
-              aria-pressed={value.priority === null}
-              onClick={() => onChange({ priority: null })}
-              className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs ${
-                value.priority === null
-                  ? 'bg-slate-200/70 text-slate-600 dark:bg-slate-500/20 dark:text-slate-300 ring-1 ring-current font-medium'
-                  : 'bg-surface border border-app text-muted hover:bg-surface2'
-              }`}
-            >
-              {t('priority.none')}
-            </button>
-          </div>
+            value={value.priority}
+            onChange={(pr) => onChange({ priority: pr })}
+            ariaLabel={t('task.priority')}
+          />
         </div>
 
         <div>
@@ -164,6 +140,20 @@ export function TaskFields({
             value={value.assignee_id}
             onChange={(userId) => onChange({ assignee_id: userId })}
             ariaLabel={t('task.assignee')}
+          />
+        </div>
+      </div>
+
+      {/* Fila 2: Proyecto | Etiquetas */}
+      <div className="grid grid-cols-2 gap-x-4 gap-y-5">
+        <div>
+          <FieldLabel>{t('task.project')}</FieldLabel>
+          <ProjectSelect
+            id={`${idPrefix}-project`}
+            value={value.project_id}
+            onChange={(projectId) => onChange({ project_id: projectId })}
+            projects={projects}
+            ariaLabel={t('task.project')}
           />
         </div>
 
@@ -177,18 +167,10 @@ export function TaskFields({
             ariaLabel={t('task.labels')}
           />
         </div>
+      </div>
 
-        <div>
-          <FieldLabel>{t('task.project')}</FieldLabel>
-          <ProjectSelect
-            id={`${idPrefix}-project`}
-            value={value.project_id}
-            onChange={(projectId) => onChange({ project_id: projectId })}
-            projects={projects}
-            ariaLabel={t('task.project')}
-          />
-        </div>
-
+      {/* Fila 3: Vencimiento | Subtareas | Repite */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-5">
         <div>
           <FieldLabel>{t('task.dueDate')}</FieldLabel>
           <input
@@ -199,14 +181,12 @@ export function TaskFields({
             className="w-full bg-surface2 border border-app rounded-xl px-3 py-2.5 text-[14px] outline-none focus:border-brand"
           />
         </div>
-      </div>
 
-      {/* Subtareas y repetición en su propia fila */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-4 gap-y-5">
         <div>
           <FieldLabel>{t('task.subtasks')}</FieldLabel>
           {subtasksSlot}
         </div>
+
         <div>
           <RecurrenceField
             value={value.recurrence}
@@ -223,25 +203,40 @@ export function TaskFields({
         >
           {t('task.description')}
         </label>
-        <textarea
-          id={`${idPrefix}-description`}
-          value={value.description}
-          maxLength={5000}
-          rows={4}
-          placeholder={t('task.descriptionPlaceholder')}
-          onChange={(e) => onChange({ description: e.target.value })}
-          onFocus={() => setDescFocused(true)}
-          onBlur={() => {
-            setDescFocused(false);
-            onTextCommit?.('description');
-          }}
-          className="w-full bg-surface2 border border-app rounded-xl px-3.5 py-2.5 text-[15px] leading-relaxed outline-none focus:border-brand resize-y"
-        />
-        {!descFocused && value.description.trim() !== '' && (
-          <div className="mt-2 rounded-xl border border-app bg-surface px-3.5 py-2.5">
-            <Markdown>{value.description}</Markdown>
-          </div>
-        )}
+        <div className="relative">
+          <textarea
+            ref={descRef}
+            id={`${idPrefix}-description`}
+            value={value.description}
+            maxLength={5000}
+            rows={4}
+            placeholder={t('task.descriptionPlaceholder')}
+            onChange={(e) => onChange({ description: e.target.value })}
+            onFocus={() => setDescFocused(true)}
+            onBlur={() => {
+              setDescFocused(false);
+              onTextCommit?.('description');
+            }}
+            className={`w-full bg-surface2 border border-app rounded-xl px-3.5 py-2.5 text-[15px] leading-relaxed outline-none focus:border-brand resize-y ${showPreview ? 'sr-only' : ''}`}
+          />
+          {showPreview && (
+            <div
+              onClick={() => setDescFocused(true)}
+              className="w-full rounded-xl border border-app bg-surface px-3.5 py-2.5 cursor-text"
+              role="button"
+              tabIndex={0}
+              aria-label={t('task.editDescription')}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setDescFocused(true);
+                }
+              }}
+            >
+              <Markdown>{value.description}</Markdown>
+            </div>
+          )}
+        </div>
       </div>
 
       {children}
