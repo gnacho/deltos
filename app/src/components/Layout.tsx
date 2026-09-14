@@ -17,6 +17,7 @@ import {
   RefreshCw,
   Trash2,
   Search,
+  Sparkles,
 } from 'lucide-react';
 import { useData } from '@/data/data-context';
 import PullToRefresh from '@/components/PullToRefresh';
@@ -39,6 +40,7 @@ import UpdateDialog from '@/components/UpdateDialog';
 import { VersionFooter } from '@/components/VersionFooter';
 import Toasts from '@/components/Toasts';
 import SearchModal from '@/components/SearchModal';
+import RewardsPanel from '@/components/RewardsPanel';
 
 /**
  * AppLayout unificado (skill webapp-shell):
@@ -131,6 +133,31 @@ function ThemeToggleButton({ mobile }: { mobile?: boolean }) {
     >
       {icon}
       <span>{dark ? t('settings.themeLightShort') : t('settings.themeDarkShort')}</span>
+    </button>
+  );
+}
+
+/**
+ * Insignia con el saldo de puntos del usuario actual (gamificación). El
+ * resumen vive en el DataProvider y se refresca con el SSE
+ * `gamification.changed`; al hacer clic abre el RewardsPanel.
+ */
+function PointsBadge({ onOpen }: { onOpen: () => void }) {
+  const { t } = useTranslation();
+  const { user } = useSession();
+  const data = useData();
+  const summary = data.getGamificationSummary();
+  const balance = summary?.users.find((u) => u.user_id === user.id)?.balance;
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      title={t('gamification.pointsBadge')}
+      aria-label={t('gamification.openRewards')}
+      className="flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-app bg-surface2 px-2.5 text-[13px] font-semibold text-muted transition-colors hover:text-text"
+    >
+      <Sparkles className="w-3.5 h-3.5 text-amber-500" aria-hidden="true" />
+      <span className="tnum">{balance ?? '...'}</span>
     </button>
   );
 }
@@ -381,6 +408,7 @@ export default function Layout() {
   const [openTask, setOpenTask] = useState<{ id: string; tab: TaskTab } | null>(null);
   const [newTask, setNewTask] = useState<NewTaskDefaults | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [rewardsOpen, setRewardsOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(() => {
     try {
       return localStorage.getItem(COLLAPSED_KEY) === '1';
@@ -841,6 +869,7 @@ export default function Layout() {
         <h1 className="font-display font-bold text-lg tracking-tight truncate">{title}</h1>
         <div className="flex items-center gap-3">
           {boardSelect}
+          <PointsBadge onOpen={() => setRewardsOpen(true)} />
           <ThemeTogglePill />
           <div className="flex items-center gap-2">
             <Avatar name={user.username} color={user.color} size="sm" />
@@ -863,6 +892,7 @@ export default function Layout() {
         <div className="flex-1 min-w-0 flex items-center justify-center gap-2">
           {boardView !== null ? boardSelect : <ConnectionDot />}
         </div>
+        <PointsBadge onOpen={() => setRewardsOpen(true)} />
         <button
           type="button"
           onClick={() => setSearchOpen(true)}
@@ -964,6 +994,7 @@ export default function Layout() {
       )}
       {newTask && <NewTaskModal defaults={newTask} onClose={() => setNewTask(null)} />}
       <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
+      <RewardsPanel open={rewardsOpen} onClose={() => setRewardsOpen(false)} />
 
       {/* Avisador discreto para lector de pantalla (movimientos de tarjetas) */}
       <div
