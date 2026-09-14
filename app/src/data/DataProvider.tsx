@@ -538,6 +538,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
       getTasks: () => getBootstrapData()?.tasks ?? [],
       getProject: (id) => getBootstrapData()?.projects.find((p) => p.id === id),
       getTask: (id) => getBootstrapData()?.tasks.find((t) => t.id === id),
+      getTaskByShortId: (shortId) => {
+        const needle = shortId.trim().toUpperCase();
+        return getBootstrapData()?.tasks.find((t) => t.short_id?.toUpperCase() === needle);
+      },
       getUsername: (id) => getBootstrapData()?.users.find((u) => u.id === id)?.username ?? '?',
       getTaskDetail: (id) => {
         const cached = detailCache.current.get(id);
