@@ -743,7 +743,9 @@
     "SSE_TOO_MANY_CLIENTS": "Demasiados clientes conectados",
     "PUSH_NOT_CONFIGURED": "El servidor no tiene claves push configuradas",
     "PUSH_DEMO_UNAVAILABLE": "Las notificaciones push no están disponibles en modo demo",
-    "EXPENSE_NOT_FOUND": "Gasto no encontrado"
+    "EXPENSE_NOT_FOUND": "Gasto no encontrado",
+    "INSUFFICIENT_POINTS": "No tienes puntos suficientes para canjear esta recompensa",
+    "REWARD_NOT_FOUND": "Recompensa no encontrada"
   },
   "update": {
     "banner": "Hay una nueva versión de Deltos en el servidor.",
@@ -828,5 +830,38 @@
     "resumeAria": "Reanudar serie {{title}}",
     "edit": "Editar",
     "editAria": "Editar serie {{title}}"
+  },
+  "gamification": {
+    "points": "puntos",
+    "pointsBadge": "Tu saldo de puntos",
+    "openRewards": "Abrir puntos y recompensas",
+    "panelTitle": "Puntos y recompensas",
+    "weeklyTitle": "Karma semanal",
+    "weekPoints_one": "{{count}} punto esta semana",
+    "weekPoints_other": "{{count}} puntos esta semana",
+    "streak_one": "racha de {{count}} día",
+    "streak_other": "racha de {{count}} días",
+    "balance": "Saldo",
+    "tasksDone_one": "{{count}} tarea completada",
+    "tasksDone_other": "{{count}} tareas completadas",
+    "rewardsTitle": "Recompensas",
+    "rewardsEmpty": "Aún no hay recompensas. Crea la primera abajo.",
+    "redeem": "Canjear",
+    "redeemConfirm": "¿Canjear «{{title}}» por {{cost}} puntos?",
+    "redeemError": "No se pudo canjear la recompensa",
+    "deleteReward": "Eliminar recompensa",
+    "deleteRewardConfirm": "¿Eliminar la recompensa «{{title}}»? El historial de canjes se conserva.",
+    "deleteRewardError": "No se pudo eliminar la recompensa",
+    "addTitle": "Nueva recompensa",
+    "rewardTitleLabel": "Título de la recompensa",
+    "rewardTitlePlaceholder": "P. ej. Pizza el viernes",
+    "rewardEmojiLabel": "Emoji",
+    "rewardCostLabel": "Coste en puntos",
+    "addReward": "Añadir",
+    "addRewardError": "No se pudo crear la recompensa",
+    "historyTitle": "Actividad reciente",
+    "historyEmpty": "Todavía no hay actividad.",
+    "earned": "+{{points}} · {{title}}",
+    "redeemed": "{{name}} canjeó {{emoji}} {{title}}"
   }
 }

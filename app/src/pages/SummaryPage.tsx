@@ -12,6 +12,7 @@ import { fmtMoney } from '@/lib/format';
 import { parseISODate, fmtFullDate } from '@/i18n';
 import ActivityFeed from '@/components/ActivityFeed';
 import { apiPost } from '@/data/api-client';
+import { fireConfetti } from '@/lib/confetti';
 
 type Tab = 'reminders' | 'activity';
 
@@ -125,6 +126,7 @@ export default function SummaryPage() {
     setArchiving((prev) => new Set(prev).add(task.id));
     try {
       await apiPost(`/api/tasks/${task.id}/done-and-archive`, {});
+      fireConfetti(); // tarea completada y archivada por el usuario local
     } finally {
       setArchiving((prev) => {
         const next = new Set(prev);

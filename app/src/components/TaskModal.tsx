@@ -116,7 +116,7 @@ export function TaskModal({
               ref={closeRef}
               type="button"
               onClick={onClose}
-              className="w-10 h-10 rounded-lg text-muted hover:bg-surface2 flex items-center justify-center shrink-0"
+              className="w-10 h-10 rounded-lg text-muted hover:text-text hover:bg-surface2 transition-colors duration-150 flex items-center justify-center shrink-0"
               aria-label={t('task.closeDetail')}
             >
               <X className="w-5 h-5" aria-hidden="true" />
@@ -143,10 +143,10 @@ export function TaskModal({
                   aria-controls={`panel-${id}`}
                   tabIndex={active ? 0 : -1}
                   onClick={() => setTab(id)}
-                  className={`relative flex items-center gap-2 lg:gap-1.5 px-3 lg:px-3 py-3 lg:py-2.5 -mb-px border-b-2 text-[12px] lg:text-[13px] font-medium whitespace-nowrap shrink-0 ${
+                  className={`relative flex items-center gap-2 lg:gap-1.5 px-3 lg:px-3 py-3 lg:py-2.5 -mb-px border-b-2 text-[12px] lg:text-[13px] font-medium whitespace-nowrap shrink-0 transition-colors duration-150 rounded-t-lg ${
                     active
                       ? 'border-brand text-brand'
-                      : 'border-transparent text-muted hover:text-[var(--text)]'
+                      : 'border-transparent text-muted hover:text-text hover:bg-surface2'
                   }`}
                 >
                   <Icon className="w-6 h-6 lg:w-4 lg:h-4" aria-hidden="true" />

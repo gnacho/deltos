@@ -263,3 +263,76 @@ export interface ExpenseDetail {
   comments: Comment[];
   activity: ActivityEvent[];
 }
+
+/* --- Gamificación (server/src/routes-gamification.js) --- */
+
+/** Resumen por usuario: saldo, puntos de la semana, racha y total completadas. */
+export interface GamUserSummary {
+  user_id: string;
+  display_name: string | null;
+  username: string;
+  color: string;
+  balance: number;
+  week_points: number;
+  streak_days: number;
+  tasks_done_total: number;
+}
+
+/** Entrada reciente del ledger de puntos (una concesión por tarea completada). */
+export interface GamLedgerEntry {
+  id: string;
+  user_id: string;
+  username: string;
+  display_name: string | null;
+  task_id: string;
+  task_title: string | null;
+  points: number;
+  reason: string;
+  created_at: number;
+  reverted_at?: number | null;
+}
+
+/** Canje reciente de una recompensa. */
+export interface GamRedemptionEntry {
+  id: string;
+  user_id: string;
+  username: string;
+  display_name: string | null;
+  reward_id: string;
+  reward_title: string;
+  reward_emoji: string;
+  cost: number;
+  created_at: number;
+}
+
+/** GET /api/gamification/summary. */
+export interface GamificationSummary {
+  users: GamUserSummary[];
+  recent: GamLedgerEntry[];
+  redemptions: GamRedemptionEntry[];
+}
+
+/** Recompensa canjeable activa (GET /api/rewards). */
+export interface Reward {
+  id: string;
+  title: string;
+  emoji: string;
+  cost: number;
+  created_by: string;
+  created_at: number;
+}
+
+export interface RewardInput {
+  title: string;
+  emoji?: string;
+  cost: number;
+}
+
+/** Resultado del canje (POST /api/rewards/:id/redeem → 201). */
+export interface Redemption {
+  id: string;
+  reward_id: string;
+  user_id: string;
+  cost: number;
+  created_at: number;
+}
