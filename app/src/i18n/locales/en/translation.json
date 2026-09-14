@@ -161,6 +161,7 @@
     "deleteTitle": "Delete task",
     "copyId": "Copy ID",
     "idCopied": "Copied",
+    "refOpen": "Open task {{id}}: {{title}}",
     "deleteHint": "Its comments and attachments will also be deleted.",
     "deleteConfirm": "Are you sure? Press to confirm",
     "deleting": "Deleting…",

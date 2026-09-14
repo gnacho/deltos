@@ -45,6 +45,8 @@ export interface DataApi {
   getTasks: () => Task[];
   getProject: (id: string) => Project | undefined;
   getTask: (id: string) => Task | undefined;
+  /** Busca por id corto legible (`CASA-1`), sin distinguir mayúsculas. */
+  getTaskByShortId: (shortId: string) => Task | undefined;
   getUsername: (id: string | null | undefined) => string;
 
   /** Detalle perezoso: devuelve el último conocido y dispara fetch si falta. */
