@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.36] - 2026-09-14
+
+### Added
+
+- **Task references (#241).** Typing `[[CASA-1]]` in a task description or
+  comment renders a clickable chip that opens that task. Unresolved ids stay as
+  plain text. The link works case-insensitively and does not interfere with code
+  blocks.
+
 ## [2.6.34] - 2026-09-13
 
 ### Added
