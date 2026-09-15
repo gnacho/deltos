@@ -67,6 +67,9 @@ Trello or Jira, and for us that was the point.
   plain HTTP; turns itself on once the app is served over HTTPS.
 - **Cards with everything**: comments, attachments with an in-app image
   viewer, labels, priority, due dates and a per-card activity feed.
+- **Points and rewards**: completing a task earns points. A weekly karma
+  board, streaks and a catalog of real-life rewards you define yourselves.
+  Ignore it and the board works exactly the same.
 - **Multiuser**: admin/user roles, per-user language (ES/EN), bcrypt
   passwords, rate-limited login, audit trail.
 - **Installable PWA**: light/dark theme following the system, offline
@@ -91,6 +94,14 @@ Trello or Jira, and for us that was the point.
   <source media="(prefers-color-scheme: dark)" srcset="assets/screenshot-settings-en-dark.png">
   <source media="(prefers-color-scheme: light)" srcset="assets/screenshot-settings-en-light.png">
   <img alt="Settings page showing theme previews, accent color swatches, density options, profile card, label manager and language selector" src="assets/screenshot-settings-en-light.png" width="800">
+</picture>
+
+**Points and rewards:** weekly karma, streaks and rewards you define**
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/screenshot-rewards-en-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="assets/screenshot-rewards-en-light.png">
+  <img alt="Points and rewards panel showing each person's weekly karma with their streak, a catalog of redeemable rewards and a recent activity list" src="assets/screenshot-rewards-en-light.png" width="800">
 </picture>
 
 ## Installation
