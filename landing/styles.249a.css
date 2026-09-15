@@ -358,6 +358,8 @@ h2{font-size:clamp(28px,4vw,42px);margin-bottom:16px}
 
 /* features */
 .feat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+/* Si la ultima tarjeta queda sola en la fila (13 = 4x3 + 1), centrarla. */
+.feat-grid>.feat:last-child:nth-child(3n+1){grid-column:2}
 .feat{
   background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
   padding:26px;transition:transform .25s,border-color .25s,box-shadow .25s;
@@ -514,6 +516,7 @@ html.js .reveal.in{opacity:1;transform:none}
   .hero-grid{grid-template-columns:1fr;gap:56px}
   .hero-sub{max-width:640px}
   .feat-grid{grid-template-columns:repeat(2,1fr)}
+  .feat-grid>.feat:last-child:nth-child(3n+1){grid-column:auto}
   .install-grid{grid-template-columns:1fr}
   .about-wrap{grid-template-columns:1fr;padding:36px}
   .foot-grid{grid-template-columns:1fr 1fr}

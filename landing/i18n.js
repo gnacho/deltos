@@ -22,6 +22,7 @@
     'shot.viaje.cap': 'El viaje a Lisboa, con fechas y responsables',
     'shot.trabajo.cap': 'El tablero de Trabajo, para equipos pequeños',
     'shot.expenses.cap': 'Gastos compartidos, con su reparto',
+    'shot.rewards.cap': 'Puntos y recompensas: karma semanal, rachas y premios que canjear',
     'shot.invite.cap': 'Invitar sin cuenta: enlace, tu parte y pago',
     'shot.settings.cap': 'Ajustes: tema, acento, densidad y etiquetas'
   });
@@ -31,6 +32,7 @@
     'shot.viaje.alt': 'Tablero del viaje a Lisboa con la reserva del hotel, los trenes y una lista de restaurantes',
     'shot.trabajo.alt': 'Tablero de Trabajo con la presentación del trimestre, una factura y un bug de login',
     'shot.expenses.alt': 'Tablero de gastos con la compra del súper, una cena y la factura de la luz, con el reparto de pagos',
+    'shot.rewards.alt': 'Panel de puntos y recompensas de Deltos: karma semanal de cada uno con su racha, catálogo de recompensas reales para canjear e historial de actividad',
     'shot.invite.alt': 'Página pública de invitación de Deltos: saludo a la persona invitada, su parte del gasto y el botón de marcar como pagado',
     'shot.settings.alt': 'Ajustes de Deltos: tema claro, oscuro o auto, color de acento, densidad y editor de etiquetas'
   });
@@ -76,16 +78,17 @@
     "shot.viaje.cap": "The Lisbon trip, with dates and owners",
     "shot.trabajo.cap": "The Work board, for small teams",
     "shot.expenses.cap": "Shared expenses, with their splits",
+    "shot.rewards.cap": "Points and rewards: weekly karma, streaks and prizes to redeem",
     "shot.invite.cap": "Invite without an account: link, your share and payment",
     "shot.settings.cap": "Settings: theme, accent, density and labels",
     "shots.close": "Close",
     "feat.eyebrow": "What's in it", "feat.title": "Everything the board can do",
-    "feat.lede": "Twelve pieces that fit together, including the expense plugin. Not a single filler feature.",
+    "feat.lede": "Thirteen pieces that fit together, including the expense plugin. Not a single filler feature.",
     "f1.t": "Live sync", "f1.p": "Drag a card and everyone sees it instantly, no refresh. All over SSE.",
     "f2.t": "Phone alerts", "f2.p": "Web Push with the app closed: assigns and comments reach you.",
     "f3.t": "Cards with everything", "f3.p": "Comments, cropped attachments, priority, due dates and activity.",
     "f4.t": "Projects and labels", "f4.p": "Each project with its own board and labels to filter.",
-    "f5.t": "Each one in their language", "f5.p": "Roles, hashed passwords and rate-limited login.",
+    "f5.t": "Multiuser", "f5.p": "Admin and user roles, per-person language, bcrypt passwords and rate-limited login.",
     "f6.t": "Installable PWA", "f6.p": "Installable app, works offline, with light and dark theme.",
     "f7.t": "One-click demo", "f7.p": "Sign in password-free into a demo full of sample tasks.",
     "f8.t": "Your data, yours", "f8.p": "JSON export, automatic backups and an audit trail.",
@@ -93,6 +96,7 @@
     "f10.t": "Invite anyone", "f10.p": "One link: see their share, comment, mark as paid. No signup.",
     "f11.t": "Settle up", "f11.p": "One click and the app calculates who owes whom. Done.",
     "f12.t": "Drag your cards", "f12.p": "Hold and drag on mobile, or swipe the whole column.",
+    "f13.t": "Points and rewards", "f13.p": "Complete a task and earn points. Weekly karma, streaks and a catalog of real-life rewards you define yourselves.",
     "cmp.eyebrow": "Compare",
     "cmp.title": "The category that was missing: a light board for real life",
     "cmp.lede": "This is a comparison of task boards, not office suites. Data cross-checked against each project's public sources in August 2026.",
@@ -157,6 +161,7 @@
     "shot.viaje.alt": "Deltos Trip to Lisbon project board with hotel bookings, tickets and a restaurant list",
     "shot.trabajo.alt": "Deltos Work project board with the quarterly presentation, an invoice and a login bug",
     "shot.expenses.alt": "Deltos expenses board with the supermarket shopping, a dinner and the power bill, with payment splits",
+    "shot.rewards.alt": "Deltos points and rewards panel: each person's weekly karma with their streak, a catalog of real-life rewards to redeem and a recent activity history",
     "shot.invite.alt": "Deltos public invite page: greeting to the invited person, their share of the expense and the mark-as-paid button",
     "shot.settings.alt": "Deltos settings: light, dark or auto theme, accent color, density and label editor"
   };

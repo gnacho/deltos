@@ -34,7 +34,7 @@
   function langNow() { return root.lang === 'en' ? 'en' : 'es'; }
 
   /* ---------- Capturas: principal + carrusel, por idioma/tema ---------- */
-  const SHOT_ORDER = ['board', 'casa', 'viaje', 'trabajo', 'expenses', 'invite', 'settings'];
+  const SHOT_ORDER = ['board', 'casa', 'viaje', 'trabajo', 'expenses', 'rewards', 'invite', 'settings'];
   let shotIndex = 0;
   const mainImg = document.getElementById('shotMain');
   const capEl = document.getElementById('shotCap');

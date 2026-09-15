@@ -71,6 +71,9 @@ en vivo. Hace menos que Trello o Jira, y para nosotros esa era la idea.
   HTTP plano; se activa solo cuando la app se sirve por HTTPS.
 - **Tarjetas con todo**: comentarios, adjuntos con visor de imágenes en la
   app, etiquetas, prioridad, vencimiento y feed de actividad por tarjeta.
+- **Puntos y recompensas**: completar una tarea da puntos. Karma semanal,
+  rachas y un catálogo de recompensas reales que definís vosotros. Si lo
+  ignoras, el tablero funciona exactamente igual.
 - **Multiusuario**: roles admin/usuario, idioma por usuario (ES/EN),
   contraseñas bcrypt, login con rate-limit y registro de auditoría.
 - **PWA instalable**: tema claro/oscuro siguiendo al sistema, service
@@ -96,6 +99,14 @@ en vivo. Hace menos que Trello o Jira, y para nosotros esa era la idea.
   <source media="(prefers-color-scheme: dark)" srcset="assets/screenshot-settings-es-dark.png">
   <source media="(prefers-color-scheme: light)" srcset="assets/screenshot-settings-es-light.png">
   <img alt="Página de ajustes con previews de tema, selector de color de acento, opciones de densidad, tarjeta de perfil, gestor de etiquetas y selector de idioma" src="assets/screenshot-settings-es-light.png" width="800">
+</picture>
+
+**Puntos y recompensas:** karma semanal, rachas y premios que definís vosotros**
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/screenshot-rewards-es-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="assets/screenshot-rewards-es-light.png">
+  <img alt="Panel de puntos y recompensas con el karma semanal de cada uno y su racha, un catálogo de recompensas para canjear y el historial de actividad" src="assets/screenshot-rewards-es-light.png" width="800">
 </picture>
 
 ## Instalación
