@@ -97,7 +97,7 @@ export function createApp(ctx) {
   })
 
   // --- Auth: todo /api/* requiere sesión salvo login/register/demo/logout ---
-  app.use('/api/*', auth.requireAuth({ prod, demo, secret }))
+  app.use('/api/*', auth.requireAuth({ prod, demo, secret, cookieSecure: config.cookieSecure }))
 
   // --- Demo de solo lectura: la BD demo es "inamovible". Se rechazan todas
   // las mutaciones (POST/PUT/PATCH/DELETE) en sesiones demo. Las rutas

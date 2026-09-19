@@ -253,4 +253,54 @@ describe('auth', () => {
     const currentSession = await app.request('/api/auth/me', { headers: { cookie: pepe2.cookie } })
     expect(currentSession.status).toBe(200)
   })
+
+  it('cambio de User-Agent NO invalida la sesión: se acepta y se actualiza el ua (#251)', async () => {
+    const { app, prod } = await makeInstance()
+    const login = await app.request('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'user-agent': 'AgenteA/1.0' },
+      body: JSON.stringify({ username: 'admin', password: 'admin1234567' }),
+    })
+    expect(login.status).toBe(200)
+    const cookie = login.headers.get('set-cookie').split(';')[0]
+    const sessionId = cookie.split('=')[1].split('.')[0]
+
+    const me = await app.request('/api/auth/me', {
+      headers: { cookie, 'user-agent': 'AgenteB/2.0 (mismo navegador actualizado)' },
+    })
+    expect(me.status).toBe(200)
+    const row = prod.prepare('SELECT ua FROM sessions WHERE id = ?').get(sessionId)
+    expect(row.ua).toBe('AgenteB/2.0 (mismo navegador actualizado)')
+  })
+
+  it('renovación deslizante: sesión por debajo del umbral extiende expires_at y re-emite cookie (#251)', async () => {
+    const { app, prod } = await makeInstance()
+    const auth = await loginAdmin(app)
+    const sessionId = auth.cookie.split('=')[1].split('.')[0]
+    const now = Date.now()
+    const almostExpired = now + 10 * 24 * 3600 * 1000 // 10 días < umbral (15 días)
+    prod.prepare('UPDATE sessions SET expires_at = ? WHERE id = ?').run(almostExpired, sessionId)
+
+    const me = await app.request('/api/auth/me', { headers: { cookie: auth.cookie } })
+    expect(me.status).toBe(200)
+    const setCookie = me.headers.get('set-cookie')
+    expect(setCookie).toMatch(/^deltos_session=.+\..+/)
+    expect(setCookie).toMatch(/Max-Age=2592000/)
+    const row = prod.prepare('SELECT expires_at FROM sessions WHERE id = ?').get(sessionId)
+    expect(row.expires_at).toBeGreaterThan(now + 25 * 24 * 3600 * 1000)
+  })
+
+  it('renovación deslizante: sesión por encima del umbral NO se toca (#251)', async () => {
+    const { app, prod } = await makeInstance()
+    const auth = await loginAdmin(app)
+    const sessionId = auth.cookie.split('=')[1].split('.')[0]
+    const fresh = Date.now() + 20 * 24 * 3600 * 1000 // 20 días > umbral (15 días)
+    prod.prepare('UPDATE sessions SET expires_at = ? WHERE id = ?').run(fresh, sessionId)
+
+    const me = await app.request('/api/auth/me', { headers: { cookie: auth.cookie } })
+    expect(me.status).toBe(200)
+    expect(me.headers.get('set-cookie')).toBeNull()
+    const row = prod.prepare('SELECT expires_at FROM sessions WHERE id = ?').get(sessionId)
+    expect(row.expires_at).toBe(fresh)
+  })
 })

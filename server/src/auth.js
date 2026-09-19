@@ -11,6 +11,9 @@ import { ERROR_CODES } from './error-codes.js'
 const log = logger.child({ component: 'auth' })
 
 export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000 // 30 días
+// Renovación deslizante: con menos de la mitad del TTL por delante se
+// extiende expires_at y se re-emite la cookie (issue #251).
+export const SESSION_RENEW_THRESHOLD_MS = SESSION_TTL_MS / 2
 export const COOKIE_NAME = 'deltos_session'
 const LOCK_MS = 5 * 60 * 1000 // 5 min de bloqueo tras 5 intentos fallidos
 
@@ -92,12 +95,18 @@ export function resolveSession({ prod, demo, secret }, cookieHeader, ua) {
     if (!db) continue
     const s = db.prepare('SELECT * FROM sessions WHERE id = ?').get(id)
     if (!s || s.expires_at <= now) continue
+    // El User-Agent cambia con actualizaciones legítimas del navegador o del
+    // WebView de la PWA; ya no se invalida la sesión, solo se actualiza el
+    // fingerprint registrado (issue #251). El robo de cookie sigue mitigado
+    // por httpOnly + SameSite=Lax + HMAC de la cookie.
     if (s.ua && ua && s.ua !== ua) {
-      db.prepare('DELETE FROM sessions WHERE id = ?').run(id)
-      return null
+      db.prepare('UPDATE sessions SET ua = ? WHERE id = ?').run(ua, id)
+      log.info('session_ua_updated', { sessionId: id, reason: 'ua_changed' })
     }
     const user = db.prepare(`SELECT ${USER_PUBLIC_COLS} FROM users WHERE id = ?`).get(s.user_id)
-    if (user) return { db, demo: isDemo, user, sessionId: id, csrfToken: s.csrf_token }
+    if (!user) continue
+    const renew = s.expires_at - now < SESSION_RENEW_THRESHOLD_MS
+    return { db, demo: isDemo, user, sessionId: id, csrfToken: s.csrf_token, renew }
   }
   return null
 }
@@ -124,6 +133,16 @@ export function requireAuth(ctx) {
 
     const session = resolveSession(ctx, c.req.header('cookie'), c.req.header('user-agent'))
     if (!session) httpError(401, ERROR_CODES.AUTH_REQUIRED)
+    // Renovación deslizante (issue #251): si la sesión queda por debajo del
+    // umbral, extender su vida y re-emitir la cookie con maxAge fresco.
+    if (session.renew) {
+      const expiresAt = Date.now() + SESSION_TTL_MS
+      session.db.prepare('UPDATE sessions SET expires_at = ? WHERE id = ?').run(expiresAt, session.sessionId)
+      c.header('set-cookie', cookieFor(ctx.secret, session.sessionId, {
+        secure: ctx.cookieSecure === true,
+        maxAgeMs: SESSION_TTL_MS,
+      }))
+    }
     c.set('db', session.db)
     c.set('user', session.user)
     c.set('demo', session.demo)
