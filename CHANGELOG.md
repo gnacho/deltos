@@ -5,6 +5,18 @@ All notable changes to Deltos are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.40] - 2026-09-19
+
+### Fixed
+
+- **Session no longer dies when the browser or WebView updates (#251).** The
+  stored User-Agent fingerprint is refreshed instead of destroying the session,
+  so PWA users stop being logged out after a browser or Android System WebView
+  update.
+- **Sliding session expiration (#251).** When less than half of the 30-day TTL
+  remains, the session extends and the cookie is re-issued, so active users are
+  no longer logged out on a fixed schedule.
+
 ## [Unreleased]
 
 ## [2.6.38] - 2026-09-14
