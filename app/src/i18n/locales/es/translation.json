@@ -30,6 +30,7 @@
   },
   "nav": {
     "todo": "Tareas",
+    "today": "Hoy",
     "projects": "Proyectos",
     "activity": "Actividad",
     "settings": "Ajustes",
@@ -830,6 +831,22 @@
     "resumeAria": "Reanudar serie {{title}}",
     "edit": "Editar",
     "editAria": "Editar serie {{title}}"
+  },
+  "today": {
+    "title": "Hoy",
+    "subtitle": "{{date}}",
+    "complete": "Completar",
+    "completeAria": "Completar tarea {{title}}",
+    "completeError": "No se pudo completar «{{title}}»",
+    "openAria": "Abrir tarea {{title}}",
+    "emptyAll": "Nada pendiente ni completado hoy.",
+    "groups": {
+      "overdue": "Vencidas",
+      "dueToday": "Vencen hoy",
+      "doneToday": "Hechas hoy"
+    },
+    "overdueDays_one": "lleva {{count}} día",
+    "overdueDays_other": "lleva {{count}} días"
   },
   "gamification": {
     "points": "puntos",

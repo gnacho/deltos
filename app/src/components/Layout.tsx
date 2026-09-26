@@ -7,6 +7,7 @@ import {
   Folder,
   ListTodo,
   Repeat,
+  CalendarCheck,
   Settings,
   Sun,
   Moon,
@@ -389,6 +390,7 @@ function UpdateAutoCheck() {
 
 const TITLE_KEYS: [RegExp, string][] = [
   [/^\/$/, 'nav.todo'],
+  [/^\/today/, 'nav.today'],
   [/^\/projects/, 'nav.projects'],
   [/^\/summary/, 'nav.summary'],
   [/^\/routines/, 'nav.routines'],
@@ -499,6 +501,15 @@ export default function Layout() {
   const projects = data.getProjects();
   const tasks = data.getTasks();
   const openAll = tasks.filter((tk) => tk.column !== 'hecho').length;
+  const todayKey = (() => {
+    const d = new Date();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${d.getFullYear()}-${m}-${day}`;
+  })();
+  const todayCount = tasks.filter(
+    (tk) => !tk.archived_at && tk.column !== 'hecho' && tk.due_date !== null && tk.due_date <= todayKey,
+  ).length;
 
   const boardView: 'todo' | 'project' | null = location.pathname.startsWith('/p/')
     ? 'project'
@@ -641,6 +652,9 @@ export default function Layout() {
             <IconNavLink to="/" end label={t('nav.todo')}>
               <LayoutGrid className="w-[18px] h-[18px]" aria-hidden="true" />
             </IconNavLink>
+            <IconNavLink to="/today" label={t('nav.today')}>
+              <CalendarCheck className="w-[18px] h-[18px]" aria-hidden="true" />
+            </IconNavLink>
             <IconNavLink to="/summary" label={t('nav.summary')}>
               <ListTodo className="w-[18px] h-[18px]" aria-hidden="true" />
             </IconNavLink>
@@ -723,6 +737,13 @@ export default function Layout() {
                 </span>
                 <span className="flex-1 text-left">{t('nav.todo')}</span>
                 <span className="tnum text-xs text-faint">{openAll}</span>
+              </NavLink>
+              <NavLink to="/today" className={sideItemCls}>
+                <span className="text-faint">
+                  <CalendarCheck className="w-4 h-4" aria-hidden="true" />
+                </span>
+                <span className="flex-1 text-left">{t('nav.today')}</span>
+                <span className="tnum text-xs text-faint">{todayCount}</span>
               </NavLink>
               <NavLink to="/summary" className={sideItemCls}>
                 <span className="text-faint">
