@@ -70,12 +70,21 @@ export function TaskCard({ task, project, index, onOpen, archived, onArchive, on
         done ? 'opacity-60' : ''
       } ${archived ? 'opacity-50 bg-surface2/60' : ''}`}
     >
-      {/* Prioridad (izq) + asignado (dcha) encima del título */}
-      {(task.priority || task.assignee) && (
-        <div className="flex items-center justify-between gap-2 mb-1.5">
-          {task.priority ? <PriorityDot priority={task.priority} /> : <span className="w-2" aria-hidden="true" />}
+      {/* Fila superior: prioridad + proyecto (izq) + asignado (dcha) */}
+      {(task.priority || task.assignee || project) && (
+        <div className="flex items-center gap-1.5 mb-1.5">
+          {task.priority && <PriorityDot priority={task.priority} />}
+          {project ? (
+            <span className={`min-w-0 truncate text-[11px] font-medium ${colorOf(project.color).text}`}>
+              {project.name}
+            </span>
+          ) : (
+            !task.priority && <span className="w-2" aria-hidden="true" />
+          )}
           {task.assignee && (
-            <Avatar name={task.assignee.username} color={task.assignee.color} />
+            <span className="ml-auto shrink-0">
+              <Avatar name={task.assignee.username} color={task.assignee.color} />
+            </span>
           )}
         </div>
       )}
@@ -89,35 +98,31 @@ export function TaskCard({ task, project, index, onOpen, archived, onArchive, on
           ))}
         </div>
       )}
-      {/* Proyecto con acento (izq, sin punto) + recurrencia + adjuntos (dcha) */}
-      {(project || task.recurrence || task.counts.attachments > 0) && (
-        <div className="flex items-center justify-between gap-2 mt-2">
-          <span className="flex items-center gap-1.5 min-w-0 text-[11px] font-medium">
-            {task.recurrence && (
-              <Repeat className="w-3 h-3 shrink-0 text-faint" aria-hidden="true" />
+      {/* Línea inferior de iconos: adjuntos, comentarios, recurrencia (izq) y
+          acciones de archivo (dcha) */}
+      {(task.counts.attachments > 0 ||
+        task.counts.comments > 0 ||
+        task.recurrence ||
+        canArchive ||
+        (archived && onUnarchive)) && (
+        <div className="flex items-center justify-between gap-2 mt-2.5">
+          <span className="tnum flex items-center gap-2.5 text-xs text-faint">
+            {task.counts.attachments > 0 && (
+              <Paperclip
+                className="w-3.5 h-3.5"
+                aria-hidden="true"
+                aria-label={t('task.tabs.adjuntos')}
+              />
             )}
-            {project && (
-              <span className={`truncate ${colorOf(project.color).text}`}>
-                {project.name}
-              </span>
-            )}
-          </span>
-          {task.counts.attachments > 0 && (
-            <Paperclip
-              className="w-3.5 h-3.5 shrink-0 text-faint"
-              aria-hidden="true"
-              aria-label={t('task.tabs.adjuntos')}
-            />
-          )}
-        </div>
-      )}
-      {(task.counts.comments > 0 || canArchive || (archived && onUnarchive)) && (
-        <div className="flex items-center justify-between mt-2.5">
-          <span className="tnum flex items-center gap-3 text-xs text-faint">
             {task.counts.comments > 0 && (
               <span className="inline-flex items-center gap-1">
                 <MessageCircle className="w-3.5 h-3.5" aria-hidden="true" />
                 {task.counts.comments}
+              </span>
+            )}
+            {task.recurrence && (
+              <span className="inline-flex items-center" title={t('task.recurrence')}>
+                <Repeat className="w-3.5 h-3.5" aria-hidden="true" />
               </span>
             )}
           </span>
