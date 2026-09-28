@@ -1,11 +1,45 @@
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { MessageCircle, Paperclip, Repeat, Archive, ArchiveRestore } from 'lucide-react';
-import type { ColumnId, Project, Task } from '@/data/types';
+import type { ColumnId, Priority, Project, Task } from '@/data/types';
 import { colorOf } from '@/lib/colors';
 import { Avatar } from '@/components/Avatar';
-import { DueBadge, PriorityBadge, TagChip, UnassignedAvatar } from '@/components/badges';
+import { PriorityBadge, TagChip } from '@/components/badges';
 import { COLUMNS } from '@/lib/constants';
+import { dueInfo } from '@/lib/due';
+
+/** Color de punto por prioridad (indicador sin texto). */
+const PRIORITY_DOT: Record<Priority, string> = {
+  alta: 'bg-rose-500',
+  media: 'bg-amber-500',
+  baja: 'bg-slate-400',
+};
+
+/** Punto de prioridad: solo color, el texto va en el tooltip/aria. */
+function PriorityDot({ priority }: { priority: Priority }) {
+  const { t } = useTranslation();
+  const label = t(`priority.${priority}`);
+  return (
+    <span
+      className={`w-2 h-2 rounded-full ${PRIORITY_DOT[priority]}`}
+      title={label}
+      aria-label={label}
+      role="img"
+    />
+  );
+}
+
+/** Punto de vencimiento: rojo vencida, ámbar hoy, gris futura. Solo color. */
+function DueDot({ due }: { due: string | null }) {
+  const { t } = useTranslation();
+  const info = dueInfo(due);
+  if (!info) return null;
+  const text = info.key ? t(info.key) : info.formatted;
+  if (!text) return null;
+  const cls =
+    info.kind === 'over' ? 'bg-rose-500' : info.kind === 'today' ? 'bg-amber-500' : 'bg-slate-400';
+  return <span className={`w-2 h-2 rounded-full ${cls}`} title={text} aria-label={text} role="img" />;
+}
 
 interface CardProps {
   task: Task;
@@ -20,7 +54,8 @@ interface CardProps {
   onUnarchive?: (id: string) => void;
 }
 
-/** Tarjeta desktop (completa): etiquetas, prioridad, vencimiento, contadores, avatar.
+/** Tarjeta desktop (compacta): etiquetas, indicadores de color (prioridad y
+ *  vencimiento sin texto), contadores, avatar del asignado arriba a la derecha.
  *  Es un div role=button (no un <button>) para poder anidar las acciones de
  *  archivar/desarchivar sin elementos interactivos anidados inválidos. */
 export function TaskCard({ task, project, index, onOpen, archived, onArchive, onUnarchive }: CardProps) {
@@ -54,8 +89,10 @@ export function TaskCard({ task, project, index, onOpen, archived, onArchive, on
             aria-hidden="true"
           />
           <span className="text-[11px] font-medium text-muted truncate">{project.name}</span>
-          {task.short_id && (
-            <span className="tnum ml-auto text-[11px] text-faint">{task.short_id}</span>
+          {task.assignee && (
+            <span className="ml-auto shrink-0">
+              <Avatar name={task.assignee.username} color={task.assignee.color} />
+            </span>
           )}
         </div>
       )}
@@ -71,8 +108,8 @@ export function TaskCard({ task, project, index, onOpen, archived, onArchive, on
       </h3>
       {(task.priority || task.due_date || task.recurrence) && (
         <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
-          {task.priority && <PriorityBadge priority={task.priority} />}
-          <DueBadge due={task.due_date} />
+          {task.priority && <PriorityDot priority={task.priority} />}
+          <DueDot due={task.due_date} />
           {task.recurrence && (
             <span
               className="inline-flex items-center gap-1 text-[11px] font-medium text-muted"
@@ -83,7 +120,7 @@ export function TaskCard({ task, project, index, onOpen, archived, onArchive, on
           )}
         </div>
       )}
-      <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-app">
+      <div className="flex items-center justify-between mt-3">
         <span className="tnum flex items-center gap-3 text-xs text-faint">
           {task.counts.comments > 0 && (
             <span className="inline-flex items-center gap-1">
@@ -92,10 +129,11 @@ export function TaskCard({ task, project, index, onOpen, archived, onArchive, on
             </span>
           )}
           {task.counts.attachments > 0 && (
-            <span className="inline-flex items-center gap-1">
-              <Paperclip className="w-3.5 h-3.5" aria-hidden="true" />
-              {task.counts.attachments}
-            </span>
+            <Paperclip
+              className="w-3.5 h-3.5"
+              aria-hidden="true"
+              aria-label={t('task.tabs.adjuntos')}
+            />
           )}
         </span>
         <span className="flex items-center gap-2">
@@ -126,11 +164,6 @@ export function TaskCard({ task, project, index, onOpen, archived, onArchive, on
             >
               <ArchiveRestore className="w-4 h-4" aria-hidden="true" />
             </button>
-          )}
-          {task.assignee ? (
-            <Avatar name={task.assignee.username} color={task.assignee.color} />
-          ) : (
-            <UnassignedAvatar />
           )}
         </span>
       </div>
