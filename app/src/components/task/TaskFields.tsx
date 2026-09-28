@@ -91,6 +91,14 @@ export function TaskFields({
     }
   }, [descFocused]);
 
+  /* Auto-crece con el contenido mientras se escribe (tope: 55 % del viewport) */
+  useEffect(() => {
+    const el = descRef.current;
+    if (!el || !descFocused) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, [value.description, descFocused]);
+
   const showPreview = !descFocused && value.description.trim() !== '';
 
   return (
@@ -216,12 +224,15 @@ export function TaskFields({
 
       {showDescription && (
       <div>
-        <label
-          htmlFor={`${idPrefix}-description`}
-          className="block text-[12px] font-semibold tracking-wide uppercase text-faint mb-1.5"
-        >
-          {t('task.description')}
-        </label>
+        <div className="flex items-center justify-between mb-1.5">
+          <label
+            htmlFor={`${idPrefix}-description`}
+            className="text-[12px] font-semibold tracking-wide uppercase text-faint"
+          >
+            {t('task.description')}
+          </label>
+          <span className="text-[11px] text-faint">{t('task.markdownHint')}</span>
+        </div>
         <div className="relative">
           <textarea
             ref={descRef}
@@ -236,7 +247,8 @@ export function TaskFields({
               setDescFocused(false);
               onTextCommit?.('description');
             }}
-            className={`w-full bg-surface2 border border-app rounded-xl px-3.5 py-2.5 text-[15px] leading-relaxed outline-none focus:border-brand resize-y ${showPreview ? 'sr-only' : ''}`}
+            style={{ maxHeight: '55vh' }}
+            className={`w-full bg-surface2 border border-app rounded-xl px-3.5 py-2.5 text-[15px] leading-relaxed outline-none focus:border-brand overflow-y-auto resize-none ${showPreview ? 'sr-only' : ''}`}
           />
           {showPreview && (
             <div

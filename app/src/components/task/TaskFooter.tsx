@@ -60,27 +60,12 @@ export function TaskFooter({
   return (
     <>
       <div className="flex items-center justify-between gap-3 pt-2 border-t border-app">
-        <p className="text-[12px] text-faint" role="status" aria-live="polite">
-          {saveState === 'saved' && (
-            <span className="inline-flex items-center gap-1 text-ok">
-              <Check className="w-3.5 h-3.5" aria-hidden="true" />
-              {t('task.saved')}
-            </span>
-          )}
-          {saveState === 'error' && (
-            <span className="text-rose-600 dark:text-rose-400">{t('task.saveError')}</span>
-          )}
-          {deleteError && (
-            <span className="text-rose-600 dark:text-rose-400">{t('task.saveError')}</span>
-          )}
-        </p>
-        <div className="flex items-center gap-2">
-          {start}
+        <div className="flex items-center gap-3 min-w-0">
           <button
             type="button"
             onClick={() => void onDelete()}
             disabled={deleting}
-            className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[13px] font-medium transition-colors duration-150 ${
+            className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[13px] font-medium transition-colors duration-150 shrink-0 ${
               deleteArmed
                 ? 'bg-rose-600 text-white hover:bg-rose-700'
                 : 'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300 hover:bg-rose-200/70 dark:hover:bg-rose-500/25'
@@ -93,6 +78,23 @@ export function TaskFooter({
                 ? t('task.deleteConfirm')
                 : t('task.deleteTitle')}
           </button>
+          <p className="text-[12px] text-faint" role="status" aria-live="polite">
+            {saveState === 'saved' && (
+              <span className="inline-flex items-center gap-1 text-ok">
+                <Check className="w-3.5 h-3.5" aria-hidden="true" />
+                {t('task.saved')}
+              </span>
+            )}
+            {saveState === 'error' && (
+              <span className="text-rose-600 dark:text-rose-400">{t('task.saveError')}</span>
+            )}
+            {deleteError && (
+              <span className="text-rose-600 dark:text-rose-400">{t('task.saveError')}</span>
+            )}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {start}
           <button
             type="button"
             onClick={onClose}
@@ -105,8 +107,8 @@ export function TaskFooter({
             onClick={onClose}
             className={
               prominentSave
-                ? 'inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-[15px] font-semibold bg-brand text-brandfg hover:brightness-110 hover:shadow-lg transition-all duration-150 shadow-md'
-                : 'inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-semibold bg-brand text-brandfg hover:brightness-110 hover:shadow-md transition-all duration-150 shadow-soft'
+                ? 'inline-flex items-center gap-2 px-8 py-3 rounded-xl text-[16px] font-semibold bg-brand text-brandfg hover:brightness-110 hover:shadow-lg transition-all duration-150 shadow-md'
+                : 'inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-[14px] font-semibold bg-brand text-brandfg hover:brightness-110 hover:shadow-md transition-all duration-150 shadow-soft'
             }
           >
             <Save className={prominentSave ? 'w-5 h-5' : 'w-4 h-4'} aria-hidden="true" />

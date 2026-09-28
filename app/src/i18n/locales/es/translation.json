@@ -151,6 +151,7 @@
     "labelError": "No se ha podido crear la etiqueta",
     "description": "Descripción",
     "descriptionPlaceholder": "Añade una descripción…",
+    "markdownHint": "Admite Markdown",
     "titleLabel": "Título",
     "titlePlaceholder": "Título de la tarea",
     "moveTo": "Mover a",

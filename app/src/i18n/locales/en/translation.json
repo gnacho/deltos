@@ -151,6 +151,7 @@
     "labelError": "Could not create the label",
     "description": "Description",
     "descriptionPlaceholder": "Add a description…",
+    "markdownHint": "Markdown supported",
     "titleLabel": "Title",
     "titlePlaceholder": "Task title",
     "moveTo": "Move to",
