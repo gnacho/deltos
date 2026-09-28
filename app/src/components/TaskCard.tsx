@@ -6,7 +6,6 @@ import { colorOf } from '@/lib/colors';
 import { Avatar } from '@/components/Avatar';
 import { PriorityBadge, TagChip } from '@/components/badges';
 import { COLUMNS } from '@/lib/constants';
-import { dueInfo } from '@/lib/due';
 
 /** Color de punto por prioridad (indicador sin texto). */
 const PRIORITY_DOT: Record<Priority, string> = {
@@ -29,18 +28,6 @@ function PriorityDot({ priority }: { priority: Priority }) {
   );
 }
 
-/** Punto de vencimiento: rojo vencida, ámbar hoy, gris futura. Solo color. */
-function DueDot({ due }: { due: string | null }) {
-  const { t } = useTranslation();
-  const info = dueInfo(due);
-  if (!info) return null;
-  const text = info.key ? t(info.key) : info.formatted;
-  if (!text) return null;
-  const cls =
-    info.kind === 'over' ? 'bg-rose-500' : info.kind === 'today' ? 'bg-amber-500' : 'bg-slate-400';
-  return <span className={`w-2 h-2 rounded-full ${cls}`} title={text} aria-label={text} role="img" />;
-}
-
 interface CardProps {
   task: Task;
   project: Project | undefined;
@@ -54,10 +41,11 @@ interface CardProps {
   onUnarchive?: (id: string) => void;
 }
 
-/** Tarjeta desktop (compacta): etiquetas, indicadores de color (prioridad y
- *  vencimiento sin texto), contadores, avatar del asignado arriba a la derecha.
- *  Es un div role=button (no un <button>) para poder anidar las acciones de
- *  archivar/desarchivar sin elementos interactivos anidados inválidos. */
+/** Tarjeta desktop (compacta): prioridad encima del título, etiquetas,
+ *  nombre del proyecto con acento (sin punto), adjuntos a la derecha debajo
+ *  del título y contadores al pie. Es un div role=button (no un <button>)
+ *  para poder anidar las acciones de archivar/desarchivar sin elementos
+ *  interactivos anidados inválidos. */
 export function TaskCard({ task, project, index, onOpen, archived, onArchive, onUnarchive }: CardProps) {
   const { t } = useTranslation();
   const done = task.column === 'hecho';
@@ -82,91 +70,89 @@ export function TaskCard({ task, project, index, onOpen, archived, onArchive, on
         done ? 'opacity-60' : ''
       } ${archived ? 'opacity-50 bg-surface2/60' : ''}`}
     >
-      {project && (
-        <div className="flex items-center gap-1.5 mb-2">
-          <span
-            className={`w-2 h-2 rounded-full ${colorOf(project.color).dot}`}
-            aria-hidden="true"
-          />
-          <span className="text-[11px] font-medium text-muted truncate">{project.name}</span>
+      {/* Prioridad (izq) + asignado (dcha) encima del título */}
+      {(task.priority || task.assignee) && (
+        <div className="flex items-center justify-between gap-2 mb-1.5">
+          {task.priority ? <PriorityDot priority={task.priority} /> : <span className="w-2" aria-hidden="true" />}
           {task.assignee && (
-            <span className="ml-auto shrink-0">
-              <Avatar name={task.assignee.username} color={task.assignee.color} />
-            </span>
+            <Avatar name={task.assignee.username} color={task.assignee.color} />
           )}
-        </div>
-      )}
-      {task.labels.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 mb-2">
-          {task.labels.map((l) => (
-            <TagChip key={l.id} label={l} />
-          ))}
         </div>
       )}
       <h3 className={`text-[15px] font-medium leading-snug ${done ? 'line-through decoration-1' : ''}`}>
         {task.title}
       </h3>
-      {(task.priority || task.due_date || task.recurrence) && (
-        <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
-          {task.priority && <PriorityDot priority={task.priority} />}
-          <DueDot due={task.due_date} />
-          {task.recurrence && (
-            <span
-              className="inline-flex items-center gap-1 text-[11px] font-medium text-muted"
-              title={t('task.recurrence')}
-            >
-              <Repeat className="w-3.5 h-3.5" aria-hidden="true" />
-            </span>
-          )}
+      {task.labels.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mt-2">
+          {task.labels.map((l) => (
+            <TagChip key={l.id} label={l} />
+          ))}
         </div>
       )}
-      <div className="flex items-center justify-between mt-3">
-        <span className="tnum flex items-center gap-3 text-xs text-faint">
-          {task.counts.comments > 0 && (
-            <span className="inline-flex items-center gap-1">
-              <MessageCircle className="w-3.5 h-3.5" aria-hidden="true" />
-              {task.counts.comments}
-            </span>
-          )}
+      {/* Proyecto con acento (izq, sin punto) + recurrencia + adjuntos (dcha) */}
+      {(project || task.recurrence || task.counts.attachments > 0) && (
+        <div className="flex items-center justify-between gap-2 mt-2">
+          <span className="flex items-center gap-1.5 min-w-0 text-[11px] font-medium">
+            {task.recurrence && (
+              <Repeat className="w-3 h-3 shrink-0 text-faint" aria-hidden="true" />
+            )}
+            {project && (
+              <span className={`truncate ${colorOf(project.color).text}`}>
+                {project.name}
+              </span>
+            )}
+          </span>
           {task.counts.attachments > 0 && (
             <Paperclip
-              className="w-3.5 h-3.5"
+              className="w-3.5 h-3.5 shrink-0 text-faint"
               aria-hidden="true"
               aria-label={t('task.tabs.adjuntos')}
             />
           )}
-        </span>
-        <span className="flex items-center gap-2">
-          {canArchive && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onArchive(task.id);
-              }}
-              className="w-7 h-7 -mr-1 rounded-lg text-faint hover:bg-surface2 hover:text-muted flex items-center justify-center"
-              aria-label={t('task.archiveAria', { title: task.title })}
-              title={t('task.archive')}
-            >
-              <Archive className="w-4 h-4" aria-hidden="true" />
-            </button>
-          )}
-          {archived && onUnarchive && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onUnarchive(task.id);
-              }}
-              className="w-7 h-7 -mr-1 rounded-lg text-faint hover:bg-surface2 hover:text-muted flex items-center justify-center"
-              aria-label={t('task.unarchiveAria', { title: task.title })}
-              title={t('task.unarchive')}
-            >
-              <ArchiveRestore className="w-4 h-4" aria-hidden="true" />
-            </button>
-          )}
-        </span>
-      </div>
+        </div>
+      )}
+      {(task.counts.comments > 0 || canArchive || (archived && onUnarchive)) && (
+        <div className="flex items-center justify-between mt-2.5">
+          <span className="tnum flex items-center gap-3 text-xs text-faint">
+            {task.counts.comments > 0 && (
+              <span className="inline-flex items-center gap-1">
+                <MessageCircle className="w-3.5 h-3.5" aria-hidden="true" />
+                {task.counts.comments}
+              </span>
+            )}
+          </span>
+          <span className="flex items-center gap-2">
+            {canArchive && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onArchive(task.id);
+                }}
+                className="w-7 h-7 -mr-1 rounded-lg text-faint hover:bg-surface2 hover:text-muted flex items-center justify-center"
+                aria-label={t('task.archiveAria', { title: task.title })}
+                title={t('task.archive')}
+              >
+                <Archive className="w-4 h-4" aria-hidden="true" />
+              </button>
+            )}
+            {archived && onUnarchive && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onUnarchive(task.id);
+                }}
+                className="w-7 h-7 -mr-1 rounded-lg text-faint hover:bg-surface2 hover:text-muted flex items-center justify-center"
+                aria-label={t('task.unarchiveAria', { title: task.title })}
+                title={t('task.unarchive')}
+              >
+                <ArchiveRestore className="w-4 h-4" aria-hidden="true" />
+              </button>
+            )}
+          </span>
+        </div>
+      )}
     </div>
   );
 }
