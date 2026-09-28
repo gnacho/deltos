@@ -131,6 +131,7 @@
   "task": {
     "tabs": {
       "label": "Secciones del detalle",
+      "tarea": "Tarea",
       "detalles": "Detalles",
       "adjuntos": "Adjuntos",
       "comentarios": "Comentarios",

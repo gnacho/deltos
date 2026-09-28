@@ -492,7 +492,7 @@ export default function Layout() {
 
   const modalApi = useMemo(
     () => ({
-      openTask: (id: string, tab?: TaskTab) => setOpenTask({ id, tab: tab ?? 'detalles' }),
+      openTask: (id: string, tab?: TaskTab) => setOpenTask({ id, tab: tab ?? 'tarea' }),
       openNewTask: (defaults?: NewTaskDefaults) => setNewTask(defaults ?? {}),
     }),
     [],

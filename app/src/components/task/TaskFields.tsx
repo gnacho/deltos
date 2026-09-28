@@ -34,9 +34,13 @@ function FieldLabel({ children }: { children: ReactNode }) {
   );
 }
 
-/** Formulario de campos de tarea compartido por el modal de creación y la
- *  pestaña Detalles (paridad de campos y layout). Presentacional: el padre
- *  decide cómo persiste cada cambio.
+/** Formulario de campos de tarea compartido por el modal de creación y las
+ *  pestañas Tarea y Detalles (paridad de campos y layout). Presentacional:
+ *  el padre decide cómo persiste cada cambio.
+ *
+ *  Las secciones son independientes: el modal de creación las muestra todas;
+ *  la pestaña Tarea solo texto (título + descripción) y la pestaña Detalles
+ *  solo las filas de campos.
  *
  *  Orden de filas: etapa | prioridad | asignado · proyecto | etiquetas ·
  *  vencimiento | subtareas | repite. */
@@ -53,6 +57,9 @@ export function TaskFields({
   titleExtra,
   stageSlot,
   subtasksSlot,
+  showTitle = true,
+  showFieldRows = true,
+  showDescription = true,
   children,
 }: {
   value: TaskFieldsValue;
@@ -67,6 +74,9 @@ export function TaskFields({
   titleExtra?: ReactNode;
   stageSlot?: ReactNode;
   subtasksSlot?: ReactNode;
+  showTitle?: boolean;
+  showFieldRows?: boolean;
+  showDescription?: boolean;
   children?: ReactNode;
 }) {
   const { t } = useTranslation();
@@ -85,37 +95,40 @@ export function TaskFields({
 
   return (
     <div className="space-y-5">
-      <div>
-        <label
-          htmlFor={`${idPrefix}-title`}
-          className="block text-[12px] font-semibold tracking-wide uppercase text-faint mb-1.5"
-        >
-          {t('task.titleLabel')}
-        </label>
-        <input
-          ref={titleInputRef}
-          id={`${idPrefix}-title`}
-          type="text"
-          value={value.title}
-          maxLength={200}
-          placeholder={t('task.titlePlaceholder')}
-          onChange={(e) => onChange({ title: e.target.value })}
-          onBlur={() => onTextCommit?.('title')}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-          }}
-          aria-invalid={titleError !== null && titleError !== undefined}
-          className="w-full bg-surface2 border border-app rounded-xl px-3.5 py-2.5 text-[15px] font-medium outline-none focus:border-brand"
-        />
-        {titleError && (
-          <p role="alert" className="text-[12px] text-rose-600 dark:text-rose-400 mt-1">
-            {titleError}
-          </p>
-        )}
-        {titleExtra}
-      </div>
+      {showTitle && (
+        <div>
+          <label
+            htmlFor={`${idPrefix}-title`}
+            className="block text-[12px] font-semibold tracking-wide uppercase text-faint mb-1.5"
+          >
+            {t('task.titleLabel')}
+          </label>
+          <input
+            ref={titleInputRef}
+            id={`${idPrefix}-title`}
+            type="text"
+            value={value.title}
+            maxLength={200}
+            placeholder={t('task.titlePlaceholder')}
+            onChange={(e) => onChange({ title: e.target.value })}
+            onBlur={() => onTextCommit?.('title')}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+            }}
+            aria-invalid={titleError !== null && titleError !== undefined}
+            className="w-full bg-surface2 border border-app rounded-xl px-3.5 py-2.5 text-[15px] font-medium outline-none focus:border-brand"
+          />
+          {titleError && (
+            <p role="alert" className="text-[12px] text-rose-600 dark:text-rose-400 mt-1">
+              {titleError}
+            </p>
+          )}
+          {titleExtra}
+        </div>
+      )}
 
       {/* Fila 1: Etapa | Prioridad | Asignado */}
+      {showFieldRows && (
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-5">
         <div>
           <FieldLabel>{t('task.stage')}</FieldLabel>
@@ -143,8 +156,10 @@ export function TaskFields({
           />
         </div>
       </div>
+      )}
 
       {/* Fila 2: Proyecto | Etiquetas */}
+      {showFieldRows && (
       <div className="grid grid-cols-2 gap-x-4 gap-y-5">
         <div>
           <FieldLabel>{t('task.project')}</FieldLabel>
@@ -168,8 +183,10 @@ export function TaskFields({
           />
         </div>
       </div>
+      )}
 
       {/* Fila 3: Vencimiento | Subtareas | Repite */}
+      {showFieldRows && (
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-5">
         <div>
           <FieldLabel>{t('task.dueDate')}</FieldLabel>
@@ -195,7 +212,9 @@ export function TaskFields({
           />
         </div>
       </div>
+      )}
 
+      {showDescription && (
       <div>
         <label
           htmlFor={`${idPrefix}-description`}
@@ -238,6 +257,7 @@ export function TaskFields({
           )}
         </div>
       </div>
+      )}
 
       {children}
     </div>

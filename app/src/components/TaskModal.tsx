@@ -1,15 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Info, Paperclip, MessageCircle, Clock } from 'lucide-react';
+import { X, PenLine, Info, Paperclip, MessageCircle, Clock } from 'lucide-react';
 import { useData } from '@/data/data-context';
 import type { TaskTab } from '@/components/modal-context';
 import { ProjectChip } from '@/components/badges';
+import { TareaTab } from '@/components/task/TareaTab';
 import { DetailsTab } from '@/components/task/DetailsTab';
 import { AttachmentsTab } from '@/components/task/AttachmentsTab';
 import { CommentsTab } from '@/components/task/CommentsTab';
 import { ActivityTab } from '@/components/task/ActivityTab';
 
 const TABS: { id: TaskTab; icon: typeof Info }[] = [
+  { id: 'tarea', icon: PenLine },
   { id: 'detalles', icon: Info },
   { id: 'adjuntos', icon: Paperclip },
   { id: 'comentarios', icon: MessageCircle },
@@ -182,6 +184,15 @@ export function TaskModal({
             )
           ) : (
             <>
+              <div
+                role="tabpanel"
+                id="panel-tarea"
+                aria-labelledby="tab-tarea"
+                tabIndex={0}
+                hidden={tab !== 'tarea'}
+              >
+                {tab === 'tarea' && <TareaTab detail={detail} onClose={onClose} />}
+              </div>
               <div
                 role="tabpanel"
                 id="panel-detalles"
