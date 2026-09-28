@@ -1,11 +1,12 @@
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { MessageCircle, Paperclip, Repeat, Archive, ArchiveRestore } from 'lucide-react';
+import { MessageCircle, Paperclip, Repeat, Archive, ArchiveRestore, Flame } from 'lucide-react';
 import type { ColumnId, Priority, Project, Task } from '@/data/types';
 import { colorOf } from '@/lib/colors';
 import { Avatar } from '@/components/Avatar';
 import { PriorityBadge, TagChip } from '@/components/badges';
 import { COLUMNS } from '@/lib/constants';
+import { useSession } from '@/auth/session-context';
 
 /** Color de punto por prioridad (indicador sin texto). */
 const PRIORITY_DOT: Record<Priority, string> = {
@@ -50,9 +51,12 @@ interface CardProps {
  *  interactivos anidados inválidos. */
 export function TaskCard({ task, project, index, onOpen, tabIndex = 0, archived, onArchive, onUnarchive }: CardProps) {
   const { t } = useTranslation();
+  const { user: me } = useSession();
   const done = task.column === 'hecho';
   const delay = Math.min(index, 10) * 40;
   const canArchive = !archived && done && onArchive !== undefined;
+  const threshold = me.anti_slip_threshold ?? 3;
+  const dragged = threshold > 0 && task.slips >= threshold;
   return (
     <div
       role="button"
@@ -72,16 +76,23 @@ export function TaskCard({ task, project, index, onOpen, tabIndex = 0, archived,
         done ? 'opacity-60' : ''
       } ${archived ? 'opacity-50 bg-surface2/60' : ''}`}
     >
-      {/* Fila superior: prioridad + proyecto (izq) + asignado (dcha) */}
-      {(task.priority || task.assignee || project) && (
+      {/* Fila superior: prioridad / aplazada / proyecto (izq) + asignado (dcha) */}
+      {(task.priority || task.assignee || dragged || project) && (
         <div className="flex items-center gap-1.5 mb-1.5">
           {task.priority && <PriorityDot priority={task.priority} />}
+          {dragged && (
+            <Flame
+              className="w-3.5 h-3.5 shrink-0 text-amber-500"
+              aria-label={t('task.dragged', { count: task.slips })}
+              role="img"
+            />
+          )}
           {project ? (
             <span className={`min-w-0 truncate text-[11px] font-medium ${colorOf(project.color).text}`}>
               {project.name}
             </span>
           ) : (
-            !task.priority && <span className="w-2" aria-hidden="true" />
+            !task.priority && !dragged && <span className="w-2" aria-hidden="true" />
           )}
           {task.assignee && (
             <span className="ml-auto shrink-0">
