@@ -19,7 +19,9 @@ const TABS: { id: TaskTab; icon: typeof Info }[] = [
 ];
 
 /**
- * Detalle de tarea (modal, 4 pestañas). El detalle llega del DataProvider
+ * Detalle de tarea (modal, 5 pestañas). El alto se ajusta al contenido
+ * (crece con la descripción) hasta un máximo del 88 % del viewport, con
+ * scroll interno si se desborda. El detalle llega del DataProvider
  * (caché + refetch vía SSE); las mutaciones van por el mismo contrato.
  */
 export function TaskModal({
@@ -100,7 +102,7 @@ export function TaskModal({
       />
       <div
         ref={panelRef}
-        className="relative w-full h-full lg:h-[88vh] lg:max-w-2xl xl:max-w-3xl 2xl:max-w-4xl bg-surface lg:rounded-2xl border border-app shadow-2xl overflow-y-auto nice-scroll"
+        className="relative w-full h-full lg:h-auto lg:max-h-[88vh] lg:max-w-2xl xl:max-w-3xl 2xl:max-w-4xl bg-surface lg:rounded-2xl border border-app shadow-2xl overflow-y-auto nice-scroll"
       >
         {/* Cabecera fija: título + tab bar */}
         <div className="sticky top-0 z-10 bg-surface/95 backdrop-blur border-b border-app">
