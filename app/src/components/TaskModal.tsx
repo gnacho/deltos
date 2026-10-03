@@ -193,7 +193,7 @@ export function TaskModal({
                 tabIndex={0}
                 hidden={tab !== 'tarea'}
               >
-                {tab === 'tarea' && <TareaTab detail={detail} onClose={onClose} />}
+                {tab === 'tarea' && <TareaTab detail={detail} onClose={onClose} onNavigate={setTab} />}
               </div>
               <div
                 role="tabpanel"

@@ -207,7 +207,11 @@
     "subtaskDelete": "Delete {{title}}",
     "subtaskAddError": "Could not add the subtask",
     "subtaskUpdateError": "Could not save the subtask",
-    "subtaskDeleteError": "Could not delete the subtask"
+    "subtaskDeleteError": "Could not delete the subtask",
+    "dragged": "Slipped {{count}} times",
+    "draggedBanner": "This task has been rescheduled {{count}} times without being completed.",
+    "doToday": "Do it today",
+    "replanOrSplit": "Reschedule or split into subtasks"
   },
   "attachments": {
     "empty": "No attachments.",
@@ -683,7 +687,12 @@
       "delete": "Delete label",
       "nameTaken": "A label with that name already exists",
       "error": "Couldn't save the label"
-    }
+    },
+    "antiSlipTitle": "Anti-procrastination",
+    "antiSlipLabel": "Warn when a task keeps slipping",
+    "antiSlipHint": "How many times the due date can change without completion before the task is flagged.",
+    "antiSlipOff": "Off",
+    "antiSlipN": "{{count}} times"
   },
   "connection": {
     "live": "Live",

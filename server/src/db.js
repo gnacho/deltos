@@ -389,6 +389,10 @@ export function migrateSchema(db) {
     db.exec("ALTER TABLE users ADD COLUMN color TEXT DEFAULT 'slate'")
     log.info('schema_migrated', { table: 'users', column: 'color' })
   }
+  if (!userCols.includes('anti_slip_threshold')) {
+    db.exec('ALTER TABLE users ADD COLUMN anti_slip_threshold INTEGER NOT NULL DEFAULT 3')
+    log.info('schema_migrated', { table: 'users', column: 'anti_slip_threshold' })
+  }
   const sessionCols = db.prepare('PRAGMA table_info(sessions)').all().map((c) => c.name)
   if (!sessionCols.includes('csrf_token')) {
     db.exec('ALTER TABLE sessions ADD COLUMN csrf_token TEXT')

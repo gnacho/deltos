@@ -61,6 +61,7 @@ export interface DataApi {
   moveTask: (id: string, column: string, position: number) => Promise<void>;
   archiveTask: (id: string) => Promise<void>;
   unarchiveTask: (id: string) => Promise<void>;
+  doTodayTask: (id: string) => Promise<void>;
   deleteTask: (id: string) => Promise<void>;
   restoreTask: (id: string) => Promise<void>;
   parseTaskText: (text: string, lang: 'es' | 'en') => Promise<{

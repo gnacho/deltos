@@ -25,6 +25,7 @@ import {
   ShieldCheck,
   Mail,
   Trash2,
+  Flame,
 } from 'lucide-react';
 import { z } from 'zod';
 import { apiFetch, apiPost, apiPut, dispatchUnauthorized, ApiError } from '@/data/api-client';
@@ -995,6 +996,58 @@ function AboutCard({ installState, install }: { installState?: string; install?:
 }
 
 /* ---------------- Página ---------------- */
+/* ---------------- Anti-procrastination: umbral de aplazamientos (#255) ---------------- */
+function AntiSlipCard() {
+  const { t } = useTranslation();
+  const { user, setUser } = useSession();
+  const [error, setError] = useState(false);
+  const threshold = user.anti_slip_threshold ?? 3;
+
+  const change = async (value: number) => {
+    setError(false);
+    try {
+      const res = await apiPut<{ ok: boolean; user: SessionUser }>('/api/auth/profile', {
+        anti_slip_threshold: value,
+      });
+      setUser(res.user);
+    } catch {
+      setError(true);
+    }
+  };
+
+  return (
+    <Card>
+      <Heading icon={Flame} title={t('settings.antiSlipTitle')}>
+        {t('settings.antiSlipTitle')}
+      </Heading>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[14px] font-medium text-text-primary">{t('settings.antiSlipLabel')}</p>
+          <p className="mt-0.5 text-[13px] text-faint">{t('settings.antiSlipHint')}</p>
+          {error && (
+            <p role="alert" className="mt-1 text-[13px] text-rose-600 dark:text-rose-400">
+              {t('settings.profileError')}
+            </p>
+          )}
+        </div>
+        <select
+          id="anti-slip-threshold"
+          value={threshold}
+          onChange={(e) => void change(Number(e.target.value))}
+          className="h-9 w-[140px] shrink-0 rounded-lg border border-app bg-elevated px-2 text-[13px] text-text-primary outline-none focus:border-brand"
+        >
+          <option value={0}>{t('settings.antiSlipOff')}</option>
+          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+            <option key={n} value={n}>
+              {t('settings.antiSlipN', { count: n })}
+            </option>
+          ))}
+        </select>
+      </div>
+    </Card>
+  );
+}
+
 export default function SettingsPage() {
   const { t } = useTranslation();
   const { user, demo } = useSession();
@@ -1017,6 +1070,7 @@ export default function SettingsPage() {
         <LabelsCard />
         <AppearanceCard />
         <MiPerfilCard />
+        <AntiSlipCard />
         {isAdmin && <AdminBar />}
         <AboutCard installState={installState} install={install} />
       </div>
