@@ -12,6 +12,7 @@ import { lazyRetry } from '@/lib/lazy-retry';
 /* React.lazy por ruta desde el día 1, con reintento anti pantalla-negra */
 const BoardPage = lazyRetry(() => import('@/pages/BoardPage'));
 const ExpenseBoard = lazyRetry(() => import('@/pages/ExpenseBoard'));
+const DecisionsPage = lazyRetry(() => import('@/pages/DecisionsPage'));
 const ProjectsPage = lazyRetry(() => import('@/pages/ProjectsPage'));
 const ActivityPage = lazyRetry(() => import('@/pages/ActivityPage'));
 const SummaryPage = lazyRetry(() => import('@/pages/SummaryPage'));
@@ -132,6 +133,16 @@ function ProtectedRoutes() {
                 <ErrorBoundary>
                   <Suspense fallback={<RouteFallback />}>
                     <ExpenseBoard />
+                  </Suspense>
+                </ErrorBoundary>
+              }
+            />
+            <Route
+              path="decisions"
+              element={
+                <ErrorBoundary>
+                  <Suspense fallback={<RouteFallback />}>
+                    <DecisionsPage />
                   </Suspense>
                 </ErrorBoundary>
               }

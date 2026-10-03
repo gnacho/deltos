@@ -270,6 +270,83 @@ export interface ExpenseDetail {
   activity: ActivityEvent[];
 }
 
+/* --- Decisiones (server/src/routes-decisions.js) --- */
+
+export type DecisionStatus = 'open' | 'decided';
+
+export interface Decision {
+  id: string;
+  project_id: string;
+  title: string;
+  description: string;
+  status: DecisionStatus;
+  chosen_solution_id: string | null;
+  created_by: string;
+  created_by_username: string;
+  created_by_color: string;
+  created_at: number;
+  updated_at: number;
+  decided_at: number | null;
+}
+
+/** Fila de la lista (GET /api/decisions): decisión + contadores. */
+export interface DecisionListItem extends Decision {
+  chosen_solution_title: string | null;
+  counts: { solutions: number; votes: number; comments: number };
+}
+
+export interface DecisionSolution {
+  id: string;
+  decision_id: string;
+  title: string;
+  description: string;
+  proposer_id: string;
+  proposer_username: string;
+  proposer_color: string;
+  votes: number;
+  my_vote: boolean;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface DecisionComment {
+  id: string;
+  decision_id: string;
+  user_id: string | null;
+  username: string | null;
+  user_color: string | null;
+  body: string;
+  created_at: number;
+}
+
+export interface DecisionActivityEvent {
+  id: string;
+  decision_id: string | null;
+  user_id: string | null;
+  username: string | null;
+  type: string;
+  data: Record<string, unknown>;
+  created_at: number;
+}
+
+export interface DecisionDetail {
+  decision: Decision;
+  solutions: DecisionSolution[];
+  comments: DecisionComment[];
+  activity: DecisionActivityEvent[];
+}
+
+export interface DecisionInput {
+  project_id: string;
+  title: string;
+  description?: string;
+}
+
+export interface DecisionPatch {
+  title?: string;
+  description?: string;
+}
+
 /* --- Gamificación (server/src/routes-gamification.js) --- */
 
 /** Resumen por usuario: saldo, puntos de la semana, racha y total completadas. */
