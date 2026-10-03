@@ -211,11 +211,11 @@ export default function SummaryPage() {
                             key={task.id}
                             role="button"
                             tabIndex={0}
-                            onClick={() => openTask(task.id, 'detalles')}
+                            onClick={() => openTask(task.id, 'tarea')}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter' || e.key === ' ') {
                                 e.preventDefault();
-                                openTask(task.id, 'detalles');
+                                openTask(task.id, 'tarea');
                               }
                             }}
                             aria-label={t('task.openDetail', { title: task.title })}

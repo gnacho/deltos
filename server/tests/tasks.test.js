@@ -220,6 +220,16 @@ describe('tasks', () => {
     expect(boot.tasks[0].counts.attachments).toBe(0)
   })
 
+  it('bootstrap expone done_at: null al crear y epoch al mover a hecho', async () => {
+    const { app, auth, project } = await setup()
+    const t = await createTask(app, auth, project.id, 'Con done_at')
+    const boot1 = await (await app.request('/api/bootstrap', { headers: { cookie: auth.cookie } })).json()
+    expect(boot1.tasks[0].done_at).toBeNull()
+    await app.request(`/api/tasks/${t.id}/move`, jsonReq(auth, 'POST', '', { column: 'hecho', position: 0 }))
+    const boot2 = await (await app.request('/api/bootstrap', { headers: { cookie: auth.cookie } })).json()
+    expect(boot2.tasks[0].done_at).toBeGreaterThan(0)
+  })
+
   it('feed global /api/activity pagina keyset y enriquece con tarea/proyecto/usuario', async () => {
     const { app, auth, project } = await setup()
     const t = await createTask(app, auth, project.id, 'Feed')

@@ -1,7 +1,7 @@
 import { createContext, useContext } from 'react';
 import type { ColumnId } from '@/data/types';
 
-export type TaskTab = 'detalles' | 'adjuntos' | 'comentarios' | 'actividad';
+export type TaskTab = 'tarea' | 'detalles' | 'adjuntos' | 'comentarios' | 'actividad';
 
 export interface NewTaskDefaults {
   projectId?: string;
