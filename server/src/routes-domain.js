@@ -251,7 +251,19 @@ function hydrateTasks(db, whereSql = '', params = []) {
     .prepare(
       `SELECT t.*, u.username AS assignee_username, u.color AS assignee_color,
               (SELECT COUNT(*) FROM comments cm WHERE cm.task_id = t.id) AS comments_count,
-              (SELECT COUNT(*) FROM attachments at WHERE at.task_id = t.id) AS attachments_count
+              (SELECT COUNT(*) FROM attachments at WHERE at.task_id = t.id) AS attachments_count,
+              (SELECT COUNT(*) FROM activity_events sl
+                WHERE sl.task_id = t.id AND sl.type = 'due'
+                  AND COALESCE(json_extract(sl.data, '$.reset'), 0) != 1
+                  AND sl.created_at > COALESCE(
+                    (SELECT MAX(e.created_at) FROM activity_events e
+                      WHERE e.task_id = t.id AND (
+                        (e.type = 'moved' AND json_extract(e.data, '$.to') = 'hecho') OR
+                        (e.type = 'due' AND COALESCE(json_extract(e.data, '$.reset'), 0) = 1)
+                      )),
+                    t.created_at
+                  )
+              ) AS slips_count
        FROM tasks t LEFT JOIN users u ON u.id = t.assignee_id
        WHERE ${filter}
        ORDER BY t."column", t.position`
@@ -293,6 +305,7 @@ function hydrateTasks(db, whereSql = '', params = []) {
     archived_at: t.archived_at ?? null,
     labels: byTask.get(t.id) || [],
     counts: { comments: t.comments_count, attachments: t.attachments_count },
+    slips: t.slips_count,
   }))
 }
 
@@ -738,6 +751,26 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
       return c.json({ task: hydrateTasks(db, 't.id = ?', [task.id])[0] })
     }
   )
+
+  /* "La hago hoy": fija el vencimiento a hoy y reinicia la línea base del
+   *  contador de aplazamientos (el evento 'due' lleva reset: true y el
+   *  contador de slips lo ignora y lo usa como nuevo punto de partida). */
+  app.post('/api/tasks/:id/do-today', zValidator('param', idParamSchema, validationHook), (c) => {
+    const db = c.get('db')
+    const user = c.get('user')
+    const task = getTask(db, c.req.valid('param').id)
+    if (!task) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
+    requireMember(db, user.id, task.project_id)
+    const today = todayLocal()
+    db.prepare('UPDATE tasks SET due_date = ?, updated_at = ? WHERE id = ?').run(
+      today,
+      Date.now(),
+      task.id,
+    )
+    addEvent(db, task.id, user.id, 'due', { from: task.due_date, to: today, reset: true })
+    hub.broadcast('tasks')
+    return c.json({ task: hydrateTasks(db, 't.id = ?', [task.id])[0] })
+  })
 
   // Mover tarjeta: reordena posiciones de ambas columnas en transacción + evento 'moved'
   app.post(

@@ -207,7 +207,11 @@
     "subtaskDelete": "Eliminar {{title}}",
     "subtaskAddError": "No se ha podido añadir la subtarea",
     "subtaskUpdateError": "No se ha podido guardar la subtarea",
-    "subtaskDeleteError": "No se ha podido eliminar la subtarea"
+    "subtaskDeleteError": "No se ha podido eliminar la subtarea",
+    "dragged": "Aplazada {{count}} veces",
+    "draggedBanner": "Esta tarea se ha replanificado {{count}} veces sin completarse.",
+    "doToday": "La hago hoy",
+    "replanOrSplit": "Replanificar o partir en subtareas"
   },
   "attachments": {
     "empty": "Sin adjuntos.",
@@ -683,7 +687,12 @@
       "delete": "Eliminar etiqueta",
       "nameTaken": "Ya existe una etiqueta con ese nombre",
       "error": "No se pudo guardar la etiqueta"
-    }
+    },
+    "antiSlipTitle": "Anti-procrastinación",
+    "antiSlipLabel": "Avisar cuando una tarea se aplaza",
+    "antiSlipHint": "Nº de veces que puede cambiar el vencimiento sin completarse antes de marcarse con la llama.",
+    "antiSlipOff": "Desactivado",
+    "antiSlipN": "{{count}} veces"
   },
   "connection": {
     "live": "En vivo",

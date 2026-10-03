@@ -17,6 +17,8 @@ export interface SessionUser {
   language: Language;
   role: Role;
   expenses_enabled?: boolean;
+  /** 0 = desactivado; nº de aplazamientos antes de marcar la tarea (#255). */
+  anti_slip_threshold?: number;
   created_at: number;
 }
 
@@ -91,6 +93,8 @@ export interface Task {
   archived_at: number | null; // epoch ms; null = activa en el tablero
   labels: Label[];
   counts: { comments: number; attachments: number };
+  /** Cambios de vencimiento desde la última finalización/reinicio (issue #255). */
+  slips: number;
 }
 
 export interface Bootstrap {

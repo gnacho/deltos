@@ -49,6 +49,7 @@ const profileSchema = z
     language: z.enum(['auto', 'es', 'en']),
     color: z.string().regex(/^[a-z]{2,20}$/),
     expenses_enabled: z.boolean(),
+    anti_slip_threshold: z.number().int().min(0).max(10),
   })
   .partial()
 

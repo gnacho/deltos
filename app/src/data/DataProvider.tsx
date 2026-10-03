@@ -236,6 +236,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [fetchBootstrap, fetchDetail],
   );
 
+  const doTodayTask = useCallback(
+    async (id: string): Promise<void> => {
+      await apiPost<{ task: Task }>(`/api/tasks/${encodeURIComponent(id)}/do-today`, {});
+      await fetchBootstrap();
+      if (detailCache.current.has(id)) await fetchDetail(id);
+    },
+    [fetchBootstrap, fetchDetail],
+  );
+
   const parseTaskText = useCallback(
     async (text: string, lang: 'es' | 'en') => {
       return apiPost<{
@@ -601,6 +610,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       moveTask,
       archiveTask,
       unarchiveTask,
+      doTodayTask,
       deleteTask,
       restoreTask,
       parseTaskText,
