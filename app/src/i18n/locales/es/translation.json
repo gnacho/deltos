@@ -745,7 +745,8 @@
       "closeWithoutSolution": "Cerrar sin solución",
       "reopen": "Reabrir",
       "comments": "Comentarios",
-      "noSolutions": "Todavía no hay soluciones. Propón la primera."
+      "noSolutions": "Todavía no hay soluciones. Propón la primera.",
+      "editSolution": "Editar solución"
     }
   },
   "demo": {

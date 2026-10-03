@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Check, Plus, RotateCcw, ThumbsUp } from 'lucide-react';
+import { X, Check, Plus, RotateCcw, ThumbsUp, Pencil } from 'lucide-react';
 import type { FormEvent } from 'react';
 import { useData } from '@/data/data-context';
 import { useSession } from '@/auth/session-context';
@@ -38,6 +38,11 @@ export function DecisionModal({
   const [descDraft, setDescDraft] = useState('');
   const descRef = useRef<HTMLTextAreaElement>(null);
   const descCancelRef = useRef(false);
+  const [editingSolutionId, setEditingSolutionId] = useState<string | null>(null);
+  const [solutionDraft, setSolutionDraft] = useState('');
+  const [editError, setEditError] = useState<string | null>(null);
+  const solutionEditRef = useRef<HTMLTextAreaElement>(null);
+  const solutionCancelRef = useRef(false);
 
   const detail = data.getDecisionDetail(decisionId);
 
@@ -48,6 +53,19 @@ export function DecisionModal({
       descRef.current.setSelectionRange(len, len);
     }
   }, [descEditing]);
+
+  useEffect(() => {
+    if (editingSolutionId && solutionEditRef.current) {
+      solutionEditRef.current.focus();
+      const len = solutionEditRef.current.value.length;
+      solutionEditRef.current.setSelectionRange(len, len);
+    }
+  }, [editingSolutionId]);
+
+  useEffect(() => {
+    setEditingSolutionId(null);
+    setEditError(null);
+  }, [decisionId]);
 
   useEffect(() => {
     setDescEditing(false);
@@ -124,8 +142,28 @@ export function DecisionModal({
     }
   };
 
-  const handleVote = async (solutionId: string, myVote: boolean) => {
+  const startEditSolution = (solutionId: string, title: string, description: string) => {
+    setSolutionDraft(description ? `${title}\n${description}` : title);
+    setEditError(null);
+    setEditingSolutionId(solutionId);
+  };
+
+  const handleSaveSolution = async (solutionId: string, originalTitle: string, originalDescription: string) => {
+    const [first, ...rest] = solutionDraft.split('\n');
+    const title = (first ?? '').trim().slice(0, 200);
+    if (!title) return;
+    const description = rest.join('\n').trim();
+    if (title === originalTitle && description === originalDescription) return;
     try {
+      await data.patchSolution(decision.id, solutionId, { title, description });
+      setEditingSolutionId(null);
+      setEditError(null);
+    } catch (err) {
+      setEditError(apiErrorText(err, t('common.error')));
+    }
+  };
+
+  const handleVote = async (solutionId: string, myVote: boolean) => {    try {
       if (myVote) await data.unvoteDecision(decision.id);
       else await data.voteDecision(decision.id, solutionId);
     } catch {
@@ -323,62 +361,116 @@ export function DecisionModal({
                       >
                         <Avatar name={s.proposer_username} color={s.proposer_color} size="lg" />
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <p
-                              className={`font-medium ${
-                                s.description
-                                  ? 'text-[17px] font-semibold uppercase'
-                                  : 'text-[15px]'
-                              }`}
-                            >
-                              {s.title}
-                            </p>
-                            {chosen && (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-brand text-brandfg px-2 py-0.5 text-[11px] font-semibold">
-                                <Check className="w-3 h-3" aria-hidden="true" />
-                                {t('decisions.modal.chosen')}
-                              </span>
-                            )}
-                          </div>
-                          {s.description && (
-                            <p className="text-[13px] text-muted mt-0.5 break-words">
-                              {s.description}
-                            </p>
+                          {editingSolutionId === s.id ? (
+                            <div>
+                              <textarea
+                                ref={solutionEditRef}
+                                value={solutionDraft}
+                                maxLength={5000}
+                                rows={Math.min(12, Math.max(2, solutionDraft.split('\n').length + 1))}
+                                placeholder={t('decisions.modal.proposePlaceholder')}
+                                onChange={(e) => setSolutionDraft(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Escape') {
+                                    e.stopPropagation();
+                                    solutionCancelRef.current = true;
+                                    setEditingSolutionId(null);
+                                  }
+                                }}
+                                onBlur={() => {
+                                  if (solutionCancelRef.current) {
+                                    solutionCancelRef.current = false;
+                                    setEditingSolutionId(null);
+                                    return;
+                                  }
+                                  void handleSaveSolution(s.id, s.title, s.description);
+                                }}
+                                className="w-full px-3 py-2 rounded-lg bg-surface2 border border-app text-sm text-text focus:outline-none focus:border-brand resize-none"
+                              />
+                              {editError && (
+                                <p
+                                  role="alert"
+                                  className="text-[13px] font-medium text-rose-600 dark:text-rose-400 mt-1"
+                                >
+                                  {editError}
+                                </p>
+                              )}
+                            </div>
+                          ) : (
+                            <>
+                              <div className="flex items-center gap-2">
+                                <p
+                                  className={`font-medium ${
+                                    s.description
+                                      ? 'text-[17px] font-semibold uppercase'
+                                      : 'text-[15px]'
+                                  }`}
+                                >
+                                  {s.title}
+                                </p>
+                                {chosen && (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-brand text-brandfg px-2 py-0.5 text-[11px] font-semibold">
+                                    <Check className="w-3 h-3" aria-hidden="true" />
+                                    {t('decisions.modal.chosen')}
+                                  </span>
+                                )}
+                              </div>
+                              {s.description && (
+                                <p className="text-[13px] text-muted mt-0.5 break-words">
+                                  {s.description}
+                                </p>
+                              )}
+                              <p className="text-[12px] text-faint mt-0.5">
+                                {t('decisions.by', { name: s.proposer_username })}
+                              </p>
+                            </>
                           )}
-                          <p className="text-[12px] text-faint mt-0.5">
-                            {t('decisions.by', { name: s.proposer_username })}
-                          </p>
                         </div>
                         <div className="flex items-center gap-1.5 shrink-0">
-                          {decision.status === 'open' && (
-                            <button
-                              type="button"
-                              onClick={() => void handleVote(s.id, s.my_vote)}
-                              className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[13px] font-semibold transition-colors ${
-                                s.my_vote
-                                  ? 'bg-brand text-brandfg'
-                                  : 'bg-surface border border-app text-muted hover:bg-surface2'
-                              }`}
-                              aria-label={t('decisions.votes', { count: s.votes })}
-                            >
-                              <ThumbsUp className="w-3.5 h-3.5" aria-hidden="true" />
-                              {s.votes}
-                            </button>
-                          )}
-                          {decision.status !== 'open' && (
-                            <span className="inline-flex items-center gap-1 text-[13px] font-semibold text-muted">
-                              <ThumbsUp className="w-3.5 h-3.5" aria-hidden="true" />
-                              {s.votes}
-                            </span>
-                          )}
-                          {decision.status === 'open' && canDecide && (
-                            <button
-                              type="button"
-                              onClick={() => setChooseTarget(s.id)}
-                              className="px-2.5 py-1.5 rounded-lg text-[12px] font-medium bg-surface border border-app text-muted hover:text-brand"
-                            >
-                              {t('decisions.modal.choose')}
-                            </button>
+                          {editingSolutionId !== s.id && (
+                            <>
+                              {(s.proposer_id === user?.id || user?.role === 'admin') && (
+                                <button
+                                  type="button"
+                                  onClick={() => startEditSolution(s.id, s.title, s.description)}
+                                  className="w-8 h-8 rounded-lg text-faint hover:text-muted hover:bg-surface flex items-center justify-center"
+                                  aria-label={t('decisions.modal.editSolution')}
+                                  title={t('decisions.modal.editSolution')}
+                                >
+                                  <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
+                                </button>
+                              )}
+                              {decision.status === 'open' && (
+                                <button
+                                  type="button"
+                                  onClick={() => void handleVote(s.id, s.my_vote)}
+                                  className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[13px] font-semibold transition-colors ${
+                                    s.my_vote
+                                      ? 'bg-brand text-brandfg'
+                                      : 'bg-surface border border-app text-muted hover:bg-surface2'
+                                  }`}
+                                  aria-label={t('decisions.votes', { count: s.votes })}
+                                >
+                                  <ThumbsUp className="w-3.5 h-3.5" aria-hidden="true" />
+                                  {s.votes}
+                                </button>
+                              )}
+                              {decision.status !== 'open' && (
+                                <span className="inline-flex items-center gap-1 text-[13px] font-semibold text-muted">
+                                  <ThumbsUp className="w-3.5 h-3.5" aria-hidden="true" />
+                                  {s.votes}
+                                </span>
+                              )}
+                              {decision.status === 'open' && canDecide && (
+                                <button
+                                  type="button"
+                                  onClick={() => setChooseTarget(s.id)}
+                                  className="px-2.5 py-1.5 rounded-lg text-[12px] font-medium bg-surface border border-app text-muted hover:text-brand"
+                                >
+                                  {t('decisions.modal.choose')}
+                                </button>
+                              )}
+                            </>
                           )}
                         </div>
                       </li>

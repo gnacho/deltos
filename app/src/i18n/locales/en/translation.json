@@ -745,7 +745,8 @@
       "closeWithoutSolution": "Close without solution",
       "reopen": "Reopen",
       "comments": "Comments",
-      "noSolutions": "No solutions yet. Propose the first one."
+      "noSolutions": "No solutions yet. Propose the first one.",
+      "editSolution": "Edit solution"
     }
   },
   "demo": {
