@@ -353,11 +353,27 @@ CREATE TABLE IF NOT EXISTS decision_activity_events (
   user_id TEXT REFERENCES users(id),
   type TEXT NOT NULL CHECK (type IN
     ('created','title','description','solution_added','solution_edited','solution_removed',
-     'voted','unchosen','chosen','comment','reopened','deleted')),
+     'voted','unchosen','chosen','comment','reopened','deleted','attachment')),
   data TEXT DEFAULT '{}',
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_decision_activity_decision ON decision_activity_events(decision_id, created_at);
+
+-- Adjuntos de decisiones: solution_id NULL = adjunto de la descripción; con
+-- valor, adjunto de esa solución. Patrón de attachments (nombre original +
+-- stored_name aleatorio en DATA_DIR/uploads).
+CREATE TABLE IF NOT EXISTS decision_attachments (
+  id TEXT PRIMARY KEY,
+  decision_id TEXT NOT NULL REFERENCES decisions(id) ON DELETE CASCADE,
+  solution_id TEXT REFERENCES decision_solutions(id) ON DELETE CASCADE,
+  filename TEXT NOT NULL,       -- nombre original mostrado al usuario
+  stored_name TEXT NOT NULL,    -- nombre aleatorio en disco (DATA_DIR/uploads)
+  size INTEGER NOT NULL,
+  mime TEXT DEFAULT 'application/octet-stream',
+  uploaded_by TEXT NOT NULL REFERENCES users(id),
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_decision_attachments_decision ON decision_attachments(decision_id);
 
 -- Idempotency: cache de respuestas POST para reintentos seguros (TTL 24h).
 CREATE TABLE IF NOT EXISTS idempotency_keys (
@@ -372,11 +388,14 @@ CREATE INDEX IF NOT EXISTS idx_idempotency_expiry ON idempotency_keys(created_at
 -- Gamificación: libro mayor de puntos (una fila por concesión; el saldo es
 -- SUM(puntos activos) - SUM(canjes)). El anti-farming (una concesión por
 -- tarea cada 23 h) se aplica en routes-gamification.js. Una fila puede
--- revertirse (reverted_at) si la tarea sale de 'hecho'.
+-- revertirse (reverted_at) si la tarea sale de 'hecho'. task_id y decision_id
+-- son excluyentes: una fila de decisión (decision_chosen/decision_vote) lleva
+-- task_id NULL (issue #280).
 CREATE TABLE IF NOT EXISTS gam_points_ledger (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id),
-  task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  task_id TEXT REFERENCES tasks(id) ON DELETE CASCADE,
+  decision_id TEXT REFERENCES decisions(id) ON DELETE CASCADE,
   points INTEGER NOT NULL,
   reason TEXT NOT NULL DEFAULT 'task_done',
   created_at INTEGER NOT NULL,
@@ -384,6 +403,7 @@ CREATE TABLE IF NOT EXISTS gam_points_ledger (
 );
 CREATE INDEX IF NOT EXISTS idx_gam_ledger_user ON gam_points_ledger(user_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_gam_ledger_task ON gam_points_ledger(task_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_gam_ledger_decision ON gam_points_ledger(decision_id, created_at);
 
 -- Recompensas canjeables con puntos (borrado lógico con active=0).
 CREATE TABLE IF NOT EXISTS gam_rewards (
@@ -535,6 +555,83 @@ export function migrateSchema(db) {
     db.exec('CREATE INDEX IF NOT EXISTS idx_activity_created ON activity_events(created_at)')
     log.info('schema_migrated', { table: 'activity_events', change: 'type CHECK + project' })
   }
+  // Adjuntos de decisiones: decision_activity_events.type gana 'attachment'
+  // (issue #279). SQLite no permite ALTER de CHECK → reconstrucción por tabla
+  // temporal, igual que activity_events. Protegido por el SQL actual de la
+  // tabla: si ya incluye 'attachment' (instalaciones nuevas), no se toca.
+  const decEvSql = db
+    .prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='decision_activity_events'")
+    .get()
+  if (decEvSql && !decEvSql.sql.includes("'attachment'")) {
+    db.transaction(() => {
+      db.exec(`
+        ALTER TABLE decision_activity_events RENAME TO decision_activity_events_old;
+        CREATE TABLE decision_activity_events (
+          id TEXT PRIMARY KEY,
+          decision_id TEXT REFERENCES decisions(id) ON DELETE CASCADE,
+          user_id TEXT REFERENCES users(id),
+          type TEXT NOT NULL CHECK (type IN
+            ('created','title','description','solution_added','solution_edited','solution_removed',
+             'voted','unchosen','chosen','comment','reopened','deleted','attachment')),
+          data TEXT DEFAULT '{}',
+          created_at INTEGER NOT NULL
+        );
+        INSERT INTO decision_activity_events (id, decision_id, user_id, type, data, created_at)
+          SELECT id, decision_id, user_id, type, data, created_at FROM decision_activity_events_old;
+        DROP TABLE decision_activity_events_old;
+      `)
+    })()
+    // El DROP de la tabla vieja se lleva el índice: recrearlo.
+    db.exec('CREATE INDEX IF NOT EXISTS idx_decision_activity_decision ON decision_activity_events(decision_id, created_at)')
+    log.info('schema_migrated', { table: 'decision_activity_events', change: 'type CHECK + attachment' })
+  }
+  // Puntos de decisiones (issue #280): gam_points_ledger gana decision_id
+  // nullable y task_id pasa a nullable (las entradas de decisión van con
+  // task_id NULL). SQLite no permite quitar NOT NULL con ALTER ->
+  // reconstrucción por tabla temporal, igual que decision_activity_events.
+  // Protegido por PRAGMA table_info: instalaciones nuevas (schema con
+  // decision_id y task_id nullable) no se tocan. Primero garantiza
+  // reverted_at (el ALTER original vivía al final de backfillShortIds): el
+  // INSERT SELECT del rebuild necesita la columna.
+  const gamLedgerColsInfo = db.prepare('PRAGMA table_info(gam_points_ledger)').all()
+  if (!gamLedgerColsInfo.map((c) => c.name).includes('reverted_at')) {
+    db.exec('ALTER TABLE gam_points_ledger ADD COLUMN reverted_at INTEGER')
+    log.info('schema_migrated', { table: 'gam_points_ledger', column: 'reverted_at' })
+  }
+  const gamNeedsRebuild =
+    !gamLedgerColsInfo.map((c) => c.name).includes('decision_id') ||
+    gamLedgerColsInfo.find((c) => c.name === 'task_id')?.notnull === 1
+  if (gamNeedsRebuild) {
+    db.transaction(() => {
+      db.exec(`
+        ALTER TABLE gam_points_ledger RENAME TO gam_points_ledger_old;
+        CREATE TABLE gam_points_ledger (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL REFERENCES users(id),
+          task_id TEXT REFERENCES tasks(id) ON DELETE CASCADE,
+          decision_id TEXT REFERENCES decisions(id) ON DELETE CASCADE,
+          points INTEGER NOT NULL,
+          reason TEXT NOT NULL DEFAULT 'task_done',
+          created_at INTEGER NOT NULL,
+          reverted_at INTEGER
+        );
+        INSERT INTO gam_points_ledger (id, user_id, task_id, decision_id, points, reason, created_at, reverted_at)
+          SELECT id, user_id, task_id, NULL, points, reason, created_at, reverted_at FROM gam_points_ledger_old;
+        DROP TABLE gam_points_ledger_old;
+      `)
+    })()
+    // El DROP de la tabla vieja se lleva los índices: recrearlos al final.
+    db.exec('CREATE INDEX IF NOT EXISTS idx_gam_ledger_user ON gam_points_ledger(user_id, created_at)')
+    db.exec('CREATE INDEX IF NOT EXISTS idx_gam_ledger_task ON gam_points_ledger(task_id, created_at)')
+    db.exec('CREATE INDEX IF NOT EXISTS idx_gam_ledger_decision ON gam_points_ledger(decision_id, created_at)')
+    db.exec('CREATE INDEX IF NOT EXISTS idx_gam_ledger_reverted ON gam_points_ledger(task_id, reverted_at)')
+    log.info('schema_migrated', { table: 'gam_points_ledger', change: 'decision_id + task_id nullable' })
+  }
+  const gamLedgerIndexes = db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='gam_points_ledger'").all().map((r) => r.name)
+  if (!gamLedgerIndexes.includes('idx_gam_ledger_reverted')) {
+    db.exec('CREATE INDEX IF NOT EXISTS idx_gam_ledger_reverted ON gam_points_ledger(task_id, reverted_at)')
+    log.info('schema_migrated', { table: 'gam_points_ledger', index: 'idx_gam_ledger_reverted' })
+  }
   let expenseCols = db.prepare('PRAGMA table_info(expenses)').all().map((c) => c.name)
   if (!expenseCols.includes('deleted_at')) {
     db.exec('ALTER TABLE expenses ADD COLUMN deleted_at INTEGER')
@@ -636,18 +733,6 @@ function backfillShortIds(db) {
   })
   tx()
   log.info('schema_backfilled', { table: 'tasks', column: 'short_id', rows: missing })
-
-  // Gamificación: columna de reversión de puntos (si la tarea sale de 'hecho').
-  const gamLedgerCols = db.prepare('PRAGMA table_info(gam_points_ledger)').all().map((c) => c.name)
-  if (!gamLedgerCols.includes('reverted_at')) {
-    db.exec('ALTER TABLE gam_points_ledger ADD COLUMN reverted_at INTEGER')
-    log.info('schema_migrated', { table: 'gam_points_ledger', column: 'reverted_at' })
-  }
-  const gamLedgerIndexes = db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='gam_points_ledger'").all().map((r) => r.name)
-  if (!gamLedgerIndexes.includes('idx_gam_ledger_reverted')) {
-    db.exec('CREATE INDEX IF NOT EXISTS idx_gam_ledger_reverted ON gam_points_ledger(task_id, reverted_at)')
-    log.info('schema_migrated', { table: 'gam_points_ledger', index: 'idx_gam_ledger_reverted' })
-  }
 }
 
 // Proyecto "Sin proyecto" (bandeja de tareas sin proyecto). Es un proyecto real

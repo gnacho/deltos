@@ -1,5 +1,5 @@
-// routes-gamification.js - gamificacion: puntos por completar tareas,
-// recompensas canjeables y resumen (karma semanal, rachas, saldo).
+// routes-gamification.js - gamificacion: puntos por completar tareas y por
+// decisiones, recompensas canjeables y resumen (karma semanal, rachas, saldo).
 //
 // Reglas de puntos:
 //   - Al mover una tarea a 'hecho' (move o done-and-archive desde otra
@@ -11,6 +11,10 @@
 //     marca como revertida (reverted_at). Al volver a 'hecho' se reactiva la
 //     entrada revertida si aun esta dentro de la ventana anti-farming;
 //     si no, se crea una nueva.
+//   - Decisiones (issue #280): elegir una solucion concede +8 a su autor
+//     (se revierten al reabrir/cambiar; reelegir reactiva) y votar concede
+//     +1 una vez por usuario y decision (retirar revierte, revotar reactiva).
+//     Nada por proponer soluciones ni por cerrar.
 // El saldo de un usuario es SUM(ledger activo) - SUM(canjes). Todas las rutas
 // bajo requireAuth (middleware global /api/*).
 import crypto from 'node:crypto'
@@ -22,6 +26,10 @@ import { ERROR_CODES } from './error-codes.js'
 const BASE_POINTS = 5
 const PRIORITY_BONUS = { alta: 5, media: 2, baja: 0 }
 const ANTI_FARMING_MS = 23 * 60 * 60 * 1000
+// Gamificación de decisiones (issue #280): al autor de la solución ELEGIDA
+// +8 (se revierten al reabrir/cambiar); votar +1 una vez por decisión.
+const CHOSEN_POINTS = 8
+const VOTE_POINTS = 1
 
 const idParamSchema = z.object({ id: z.string().min(1).max(64) })
 
@@ -84,6 +92,107 @@ export function revertCompletionPoints(db, taskId) {
   return entry.points
 }
 
+/**
+ * Concede puntos al autor de la solución ELEGIDA de una decisión (+8, issue
+ * #280). Pensado para llamarse DENTRO de la transacción del choose, después
+ * de revertChosenPoints. Inserta con decision_id y task_id NULL.
+ *
+ * Idempotencia por decisión + autor (una decisión elegida solo paga a un
+ * autor: si ya hay entrada activa suya, no-op; si hay una revertida, la
+ * reactiva, mismo patrón que las tareas).
+ */
+export function grantChosenPoints(db, decision, solutionId) {
+  const solution = db
+    .prepare('SELECT proposer_id FROM decision_solutions WHERE id = ? AND decision_id = ?')
+    .get(solutionId, decision.id)
+  if (!solution) return 0
+  const active = db
+    .prepare(
+      "SELECT id, points FROM gam_points_ledger WHERE decision_id = ? AND user_id = ? AND reason = 'decision_chosen' AND reverted_at IS NULL LIMIT 1"
+    )
+    .get(decision.id, solution.proposer_id)
+  if (active) return 0
+  const cutoff = Date.now() - ANTI_FARMING_MS
+  const reverted = db
+    .prepare(
+      "SELECT id, points FROM gam_points_ledger WHERE decision_id = ? AND user_id = ? AND reason = 'decision_chosen' AND reverted_at IS NOT NULL AND created_at >= ? ORDER BY created_at DESC LIMIT 1"
+    )
+    .get(decision.id, solution.proposer_id, cutoff)
+  if (reverted) {
+    db.prepare('UPDATE gam_points_ledger SET reverted_at = NULL WHERE id = ?').run(reverted.id)
+    return reverted.points
+  }
+  db.prepare(
+    `INSERT INTO gam_points_ledger (id, user_id, task_id, decision_id, points, reason, created_at, reverted_at)
+     VALUES (?, ?, NULL, ?, ${CHOSEN_POINTS}, 'decision_chosen', ?, NULL)`
+  ).run(crypto.randomUUID(), solution.proposer_id, decision.id, Date.now())
+  return CHOSEN_POINTS
+}
+
+/**
+ * Revierte TODAS las concesiones decision_chosen activas de la decisión
+ * (reabrir, elegir otra/cerrar sin solución, borrar la solución elegida).
+ * Devuelve los puntos revertidos (0 si no había).
+ */
+export function revertChosenPoints(db, decisionId) {
+  const entries = db
+    .prepare(
+      "SELECT id, points FROM gam_points_ledger WHERE decision_id = ? AND reason = 'decision_chosen' AND reverted_at IS NULL"
+    )
+    .all(decisionId)
+  const now = Date.now()
+  let total = 0
+  for (const entry of entries) {
+    db.prepare('UPDATE gam_points_ledger SET reverted_at = ? WHERE id = ?').run(now, entry.id)
+    total += entry.points
+  }
+  return total
+}
+
+/**
+ * Concede +1 por votar en una decisión, UNA vez por usuario y decisión
+ * (issue #280). Pensado para llamarse DENTRO de la transacción del vote.
+ * Mover el voto no repite (entrada activa -> no-op); tras retirar el voto,
+ * volver a votar reactiva la entrada revertida (patrón del ledger).
+ */
+export function grantVotePoints(db, decisionId, userId) {
+  const active = db
+    .prepare(
+      "SELECT 1 FROM gam_points_ledger WHERE decision_id = ? AND user_id = ? AND reason = 'decision_vote' AND reverted_at IS NULL LIMIT 1"
+    )
+    .get(decisionId, userId)
+  if (active) return 0
+  const reverted = db
+    .prepare(
+      "SELECT id, points FROM gam_points_ledger WHERE decision_id = ? AND user_id = ? AND reason = 'decision_vote' AND reverted_at IS NOT NULL ORDER BY created_at DESC LIMIT 1"
+    )
+    .get(decisionId, userId)
+  if (reverted) {
+    db.prepare('UPDATE gam_points_ledger SET reverted_at = NULL WHERE id = ?').run(reverted.id)
+    return reverted.points
+  }
+  db.prepare(
+    `INSERT INTO gam_points_ledger (id, user_id, task_id, decision_id, points, reason, created_at, reverted_at)
+     VALUES (?, ?, NULL, ?, ${VOTE_POINTS}, 'decision_vote', ?, NULL)`
+  ).run(crypto.randomUUID(), userId, decisionId, Date.now())
+  return VOTE_POINTS
+}
+
+/**
+ * Revierte el +1 del voto de un usuario en una decisión (al retirarlo).
+ * Devuelve los puntos revertidos (0 si no había entrada activa).
+ */
+export function revertVotePoints(db, decisionId, userId) {
+  const entry = db
+    .prepare(
+      "SELECT id, points FROM gam_points_ledger WHERE decision_id = ? AND user_id = ? AND reason = 'decision_vote' AND reverted_at IS NULL LIMIT 1"
+    )
+    .get(decisionId, userId)
+  if (!entry) return 0
+  db.prepare('UPDATE gam_points_ledger SET reverted_at = ? WHERE id = ?').run(Date.now(), entry.id)
+  return entry.points
+}
+
 /** Lunes 00:00 local de la semana actual (epoch ms). */
 function mondayStartMs(now = new Date()) {
   const d = new Date(now.getFullYear(), now.getMonth(), now.getDate())
@@ -131,8 +240,14 @@ export function registerGamificationRoutes(app, { hub }) {
     const weekStart = mondayStartMs()
     const activeWhere = 'reverted_at IS NULL'
 
+    // tasks_done_total cuenta SOLO entradas de tarea: las de decisión
+    // (decision_chosen/decision_vote, task_id NULL) no son tareas.
     const earned = db
-      .prepare(`SELECT user_id, SUM(points) AS total, COUNT(*) AS n FROM gam_points_ledger WHERE ${activeWhere} GROUP BY user_id`)
+      .prepare(
+        `SELECT user_id, SUM(points) AS total,
+                SUM(CASE WHEN task_id IS NOT NULL THEN 1 ELSE 0 END) AS n
+         FROM gam_points_ledger WHERE ${activeWhere} GROUP BY user_id`
+      )
       .all()
     const earnedWeek = db
       .prepare(`SELECT user_id, SUM(points) AS total FROM gam_points_ledger WHERE created_at >= ? AND ${activeWhere} GROUP BY user_id`)
@@ -171,10 +286,12 @@ export function registerGamificationRoutes(app, { hub }) {
     const recent = db
       .prepare(
         `SELECT l.id, l.user_id, u.username, u.display_name, l.task_id, t.title AS task_title,
+                l.decision_id, d.title AS decision_title,
                 l.points, l.reason, l.created_at
          FROM gam_points_ledger l
          JOIN users u ON u.id = l.user_id
          LEFT JOIN tasks t ON t.id = l.task_id
+         LEFT JOIN decisions d ON d.id = l.decision_id
          WHERE l.reverted_at IS NULL
          ORDER BY l.created_at DESC, l.id DESC
          LIMIT 10`

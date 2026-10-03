@@ -745,7 +745,16 @@
       "closeWithoutSolution": "Cerrar sin solución",
       "reopen": "Reabrir",
       "comments": "Comentarios",
-      "noSolutions": "Todavía no hay soluciones. Propón la primera."
+      "noSolutions": "Todavía no hay soluciones. Propón la primera.",
+      "editSolution": "Editar solución"
+    },
+    "attachment": {
+      "add": "Adjuntar archivo",
+      "uploading": "Subiendo…",
+      "uploadError": "No se ha podido subir el archivo",
+      "uploadedBy": "subido por {{name}}",
+      "download": "Descargar {{name}}",
+      "delete": "Borrar {{name}}"
     }
   },
   "demo": {
@@ -788,6 +797,7 @@
     "UPLOAD_FILE_REQUIRED": "Falta el fichero a subir",
     "UPLOAD_TOO_LARGE": "El fichero supera el límite de subida",
     "UPLOAD_INVALID_MIME": "El tipo de fichero no está permitido",
+    "ATTACHMENTS_LIMIT_EXCEEDED": "Se ha alcanzado el límite de adjuntos",
     "SETTINGS_PROD_ONLY": "Este ajuste solo se puede cambiar desde la sesión de producción",
     "SSE_TOO_MANY_CLIENTS": "Demasiados clientes conectados",
     "PUSH_NOT_CONFIGURED": "El servidor no tiene claves push configuradas",
@@ -910,6 +920,8 @@
     "streak_one": "racha de {{count}} día",
     "streak_other": "racha de {{count}} días",
     "balance": "Saldo",
+    "reasonDecisionChosen": "solución elegida",
+    "reasonDecisionVote": "voto en decisión",
     "tasksDone_one": "{{count}} tarea completada",
     "tasksDone_other": "{{count}} tareas completadas",
     "rewardsTitle": "Recompensas",

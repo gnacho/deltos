@@ -16,6 +16,7 @@
  * - Login/check inicial/logout pasan `noAuthEvent` para no auto-disparar.
  */
 import type {
+  DecisionAttachment,
   DecisionDetail,
   DecisionInput,
   DecisionListItem,
@@ -405,6 +406,34 @@ export function addDecisionComment(
   return apiPost<{ ok: boolean; id: string }>(
     `/api/decisions/${encodeURIComponent(id)}/comments`,
     { body },
+    init,
+  );
+}
+
+/** POST /api/decisions/:id/attachments multipart (201). solutionId = adjunto de solución. */
+export function uploadDecisionAttachment(
+  id: string,
+  file: File,
+  solutionId?: string,
+  init?: ApiOptions,
+): Promise<{ attachment: DecisionAttachment }> {
+  const form = new FormData();
+  form.append('file', file);
+  if (solutionId) form.append('solution_id', solutionId);
+  return apiUpload<{ attachment: DecisionAttachment }>(
+    `/api/decisions/${encodeURIComponent(id)}/attachments`,
+    form,
+    init,
+  );
+}
+
+/** DELETE /api/decisions/attachments/:aid (204, quien subió o admin). */
+export function deleteDecisionAttachment(
+  attachmentId: string,
+  init?: ApiOptions,
+): Promise<void> {
+  return apiDelete<void>(
+    `/api/decisions/attachments/${encodeURIComponent(attachmentId)}`,
     init,
   );
 }

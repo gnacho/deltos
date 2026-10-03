@@ -329,11 +329,26 @@ export interface DecisionActivityEvent {
   created_at: number;
 }
 
+/** Adjunto de decisión: solution_id null = adjunto de la descripción. */
+export interface DecisionAttachment {
+  id: string;
+  decision_id: string;
+  solution_id: string | null;
+  filename: string;
+  size: number;
+  mime: string;
+  created_at: number;
+  uploaded_by: string;
+  uploaded_by_username: string | null;
+  uploaded_by_color: string | null;
+}
+
 export interface DecisionDetail {
   decision: Decision;
   solutions: DecisionSolution[];
   comments: DecisionComment[];
   activity: DecisionActivityEvent[];
+  attachments: DecisionAttachment[];
 }
 
 export interface DecisionInput {
@@ -361,14 +376,20 @@ export interface GamUserSummary {
   tasks_done_total: number;
 }
 
-/** Entrada reciente del ledger de puntos (una concesión por tarea completada). */
+/**
+ * Entrada reciente del ledger de puntos (una concesión por tarea completada o
+ * por decisión: solution elegida / voto). task_id y decision_id son
+ * excluyentes; en las de decisión el título viene en decision_title.
+ */
 export interface GamLedgerEntry {
   id: string;
   user_id: string;
   username: string;
   display_name: string | null;
-  task_id: string;
+  task_id: string | null;
   task_title: string | null;
+  decision_id: string | null;
+  decision_title: string | null;
   points: number;
   reason: string;
   created_at: number;

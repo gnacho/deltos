@@ -82,7 +82,7 @@ export function ProjectActions({
             type="button"
             onClick={onClose}
             aria-label={t('common.close')}
-            className="h-9 w-9 shrink-0 rounded-lg text-muted hover:bg-surface2 flex items-center justify-center border border-app"
+            className="h-9 w-9 shrink-0 rounded-lg text-muted hover:bg-surface2 hover:text-brand flex items-center justify-center border border-app"
           >
             <X className="w-4 h-4" aria-hidden="true" />
           </button>

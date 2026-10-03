@@ -160,6 +160,8 @@ export interface DataApi {
   chooseDecision: (id: string, solutionId: string | null) => Promise<void>;
   reopenDecision: (id: string) => Promise<void>;
   addDecisionComment: (id: string, body: string) => Promise<void>;
+  uploadDecisionAttachment: (id: string, file: File, solutionId?: string) => Promise<void>;
+  deleteDecisionAttachment: (id: string, attachmentId: string) => Promise<void>;
 }
 
 export const DataContext = createContext<DataApi | null>(null);
