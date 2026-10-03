@@ -78,7 +78,7 @@ const SSE_CHANGED_EVENTS = [
   'user.changed',
   'settings.changed',
   'expenses.changed',
-  'decisions.changed',
+  'decision.changed',
 ] as const;
 
 /**
