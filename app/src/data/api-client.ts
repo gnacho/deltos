@@ -16,6 +16,11 @@
  * - Login/check inicial/logout pasan `noAuthEvent` para no auto-disparar.
  */
 import type {
+  DecisionDetail,
+  DecisionInput,
+  DecisionListItem,
+  DecisionPatch,
+  DecisionSolution,
   GamificationSummary,
   Redemption,
   Reward,
@@ -131,9 +136,10 @@ export async function apiFetch<T>(path: string, init?: ApiOptions): Promise<T> {
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (needsCsrf && csrfToken) headers['x-csrf-token'] = csrfToken;
   if (rest.headers) {
-    const h = rest.headers instanceof Headers
-      ? Object.fromEntries(rest.headers.entries())
-      : rest.headers as Record<string, string>;
+    const h =
+      rest.headers instanceof Headers
+        ? Object.fromEntries(rest.headers.entries())
+        : (rest.headers as Record<string, string>);
     Object.assign(headers, h);
   }
   const res = await fetch(path, {
@@ -252,6 +258,153 @@ export function redeemReward(
   return apiPost<{ redemption: Redemption; balance: number }>(
     `/api/rewards/${encodeURIComponent(id)}/redeem`,
     {},
+    init,
+  );
+}
+
+/* --- Decisiones (server/src/routes-decisions.js) --- */
+
+/** GET /api/decisions: lista filtrable por proyecto y estado. */
+export function getDecisions(
+  params?: { project_id?: string; status?: 'open' | 'decided' },
+  init?: ApiOptions,
+): Promise<{ decisions: DecisionListItem[] }> {
+  const qs = new URLSearchParams();
+  if (params?.project_id) qs.set('project_id', params.project_id);
+  if (params?.status) qs.set('status', params.status);
+  const q = qs.toString();
+  return apiFetch<{ decisions: DecisionListItem[] }>(`/api/decisions${q ? `?${q}` : ''}`, init);
+}
+
+/** POST /api/decisions (201). */
+export function createDecision(
+  input: DecisionInput,
+  init?: ApiOptions,
+): Promise<{ decision: DecisionListItem }> {
+  return apiPost<{ decision: DecisionListItem }>('/api/decisions', input, init);
+}
+
+/** GET /api/decisions/:id: detalle completo. */
+export function getDecisionDetail(id: string, init?: ApiOptions): Promise<DecisionDetail> {
+  return apiFetch<DecisionDetail>(`/api/decisions/${encodeURIComponent(id)}`, init);
+}
+
+/** PATCH /api/decisions/:id. */
+export function patchDecision(
+  id: string,
+  patch: DecisionPatch,
+  init?: ApiOptions,
+): Promise<{ decision: DecisionDetail['decision'] }> {
+  return apiPatch<{ decision: DecisionDetail['decision'] }>(
+    `/api/decisions/${encodeURIComponent(id)}`,
+    patch,
+    init,
+  );
+}
+
+/** DELETE /api/decisions/:id (204). */
+export function deleteDecision(id: string, init?: ApiOptions): Promise<void> {
+  return apiDelete<void>(`/api/decisions/${encodeURIComponent(id)}`, init);
+}
+
+/** POST /api/decisions/:id/solutions (201). */
+export function addSolution(
+  id: string,
+  input: { title: string; description?: string },
+  init?: ApiOptions,
+): Promise<{ solution: DecisionSolution }> {
+  return apiPost<{ solution: DecisionSolution }>(
+    `/api/decisions/${encodeURIComponent(id)}/solutions`,
+    input,
+    init,
+  );
+}
+
+/** PATCH /api/decisions/:id/solutions/:solutionId. */
+export function patchSolution(
+  id: string,
+  solutionId: string,
+  patch: { title?: string; description?: string },
+  init?: ApiOptions,
+): Promise<{ ok: boolean }> {
+  return apiPatch<{ ok: boolean }>(
+    `/api/decisions/${encodeURIComponent(id)}/solutions/${encodeURIComponent(solutionId)}`,
+    patch,
+    init,
+  );
+}
+
+/** DELETE /api/decisions/:id/solutions/:solutionId (204). */
+export function deleteSolution(id: string, solutionId: string, init?: ApiOptions): Promise<void> {
+  return apiDelete<void>(
+    `/api/decisions/${encodeURIComponent(id)}/solutions/${encodeURIComponent(solutionId)}`,
+    init,
+  );
+}
+
+/** PUT /api/decisions/:id/vote. */
+export function voteDecision(
+  id: string,
+  solutionId: string,
+  init?: ApiOptions,
+): Promise<{ ok: boolean }> {
+  return apiPut<{ ok: boolean }>(
+    `/api/decisions/${encodeURIComponent(id)}/vote`,
+    { solution_id: solutionId },
+    init,
+  );
+}
+
+/** DELETE /api/decisions/:id/vote (204). */
+export function unvoteDecision(id: string, init?: ApiOptions): Promise<void> {
+  return apiDelete<void>(`/api/decisions/${encodeURIComponent(id)}/vote`, init);
+}
+
+/** POST /api/decisions/:id/choose. */
+export function chooseDecision(
+  id: string,
+  solutionId: string | null,
+  init?: ApiOptions,
+): Promise<{ decision: DecisionDetail['decision'] }> {
+  return apiPost<{ decision: DecisionDetail['decision'] }>(
+    `/api/decisions/${encodeURIComponent(id)}/choose`,
+    { solution_id: solutionId },
+    init,
+  );
+}
+
+/** POST /api/decisions/:id/reopen. */
+export function reopenDecision(
+  id: string,
+  init?: ApiOptions,
+): Promise<{ decision: DecisionDetail['decision'] }> {
+  return apiPost<{ decision: DecisionDetail['decision'] }>(
+    `/api/decisions/${encodeURIComponent(id)}/reopen`,
+    {},
+    init,
+  );
+}
+
+/** GET /api/decisions/:id/comments. */
+export function getDecisionComments(
+  id: string,
+  init?: ApiOptions,
+): Promise<{ comments: DecisionDetail['comments'] }> {
+  return apiFetch<{ comments: DecisionDetail['comments'] }>(
+    `/api/decisions/${encodeURIComponent(id)}/comments`,
+    init,
+  );
+}
+
+/** POST /api/decisions/:id/comments (201). */
+export function addDecisionComment(
+  id: string,
+  body: string,
+  init?: ApiOptions,
+): Promise<{ ok: boolean; id: string }> {
+  return apiPost<{ ok: boolean; id: string }>(
+    `/api/decisions/${encodeURIComponent(id)}/comments`,
+    { body },
     init,
   );
 }

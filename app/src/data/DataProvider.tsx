@@ -1,6 +1,27 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { apiDelete, apiFetch, apiPatch, apiPost, apiPut, apiUpload, getGamificationSummary } from './api-client';
+import {
+  apiDelete,
+  apiFetch,
+  apiPatch,
+  apiPost,
+  apiPut,
+  apiUpload,
+  getGamificationSummary,
+  getDecisions as apiGetDecisions,
+  createDecision as apiCreateDecision,
+  getDecisionDetail as apiGetDecisionDetail,
+  patchDecision as apiPatchDecision,
+  deleteDecision as apiDeleteDecision,
+  addSolution as apiAddSolution,
+  patchSolution as apiPatchSolution,
+  deleteSolution as apiDeleteSolution,
+  voteDecision as apiVoteDecision,
+  unvoteDecision as apiUnvoteDecision,
+  chooseDecision as apiChooseDecision,
+  reopenDecision as apiReopenDecision,
+  addDecisionComment as apiAddDecisionComment,
+} from './api-client';
 import {
   DataContext,
   type ConnectionStatus,
@@ -9,7 +30,25 @@ import {
   type DataApi,
   type UpdateProjectInput,
 } from './data-context';
-import type { Bootstrap, Expense, ExpenseDetail, ExpenseInput, ExpensePatch, GamificationSummary, Label, Project, ProjectMember, Task, TaskDetail, TaskPatch, TaskRecurrence } from './types';
+import type {
+  Bootstrap,
+  Expense,
+  ExpenseDetail,
+  ExpenseInput,
+  ExpensePatch,
+  GamificationSummary,
+  Label,
+  Project,
+  ProjectMember,
+  Task,
+  TaskDetail,
+  TaskPatch,
+  TaskRecurrence,
+  DecisionDetail,
+  DecisionInput,
+  DecisionListItem,
+  DecisionPatch,
+} from './types';
 import i18n from '@/i18n';
 import { showToast } from '@/lib/toast-store';
 import { fireConfetti } from '@/lib/confetti';
@@ -39,6 +78,7 @@ const SSE_CHANGED_EVENTS = [
   'user.changed',
   'settings.changed',
   'expenses.changed',
+  'decision.changed',
 ] as const;
 
 /**
@@ -63,6 +103,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const expenseDetailPending = useRef(new Set<string>());
   const gamRef = useRef<GamificationSummary | null>(null);
   const gamInFlight = useRef<Promise<void> | null>(null);
+  const decisionsRef = useRef<DecisionListItem[]>([]);
+  const decisionsInFlight = useRef<Promise<void> | null>(null);
+  const decisionDetailCache = useRef(new Map<string, DecisionDetail>());
+  const decisionDetailPending = useRef(new Set<string>());
   const mounted = useRef(true);
 
   const bump = useCallback(() => setVersion((v) => v + 1), []);
@@ -130,6 +174,24 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return p;
   }, [bump]);
 
+  const fetchDecisions = useCallback(async (): Promise<void> => {
+    if (decisionsInFlight.current) return decisionsInFlight.current;
+    const p = (async () => {
+      try {
+        const data = await apiGetDecisions();
+        if (!mounted.current) return;
+        decisionsRef.current = data.decisions;
+        bump();
+      } catch {
+        /* se reintenta con el próximo evento SSE */
+      } finally {
+        decisionsInFlight.current = null;
+      }
+    })();
+    decisionsInFlight.current = p;
+    return p;
+  }, [bump]);
+
   const fetchDetail = useCallback(
     async (id: string): Promise<void> => {
       if (detailPending.current.has(id)) return;
@@ -148,14 +210,34 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [bump],
   );
 
+  const fetchDecisionDetail = useCallback(
+    async (id: string): Promise<void> => {
+      if (decisionDetailPending.current.has(id)) return;
+      decisionDetailPending.current.add(id);
+      try {
+        const detail = await apiGetDecisionDetail(id);
+        if (!mounted.current) return;
+        decisionDetailCache.current.set(id, detail);
+        bump();
+      } catch {
+        /* se reintenta al reabrir */
+      } finally {
+        decisionDetailPending.current.delete(id);
+      }
+    },
+    [bump],
+  );
+
   /* Refetch tras mutaciones propias y eventos SSE (debounce para ráfagas). */
   const sseTimer = useRef<number | null>(null);
   const refreshAll = useCallback(() => {
     void fetchBootstrap();
     void fetchExpenses();
+    void fetchDecisions();
     for (const id of detailCache.current.keys()) void fetchDetail(id);
     for (const id of expenseDetailCache.current.keys()) void fetchExpenseDetail(id);
-  }, [fetchBootstrap, fetchExpenses, fetchDetail]);
+    for (const id of decisionDetailCache.current.keys()) void fetchDecisionDetail(id);
+  }, [fetchBootstrap, fetchExpenses, fetchDecisions, fetchDetail, fetchDecisionDetail]);
 
   const scheduleRefresh = useCallback(() => {
     if (sseTimer.current !== null) window.clearTimeout(sseTimer.current);
@@ -177,6 +259,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     void fetchBootstrap();
     void fetchExpenses();
     void fetchGamification();
+    void fetchDecisions();
 
     let es: EventSource | null = null;
     let failures = 0;
@@ -214,7 +297,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
       if (sseTimer.current !== null) window.clearTimeout(sseTimer.current);
       es?.close();
     };
-  }, [fetchBootstrap, fetchGamification, scheduleRefresh, refreshAll, onGamificationChanged]);
+  }, [
+    fetchBootstrap,
+    fetchGamification,
+    fetchDecisions,
+    scheduleRefresh,
+    refreshAll,
+    onGamificationChanged,
+  ]);
 
   /* --- Mutaciones: API + refresco de cachés --- */
 
@@ -245,29 +335,23 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [fetchBootstrap, fetchDetail],
   );
 
-  const parseTaskText = useCallback(
-    async (text: string, lang: 'es' | 'en') => {
-      return apiPost<{
-        parsed: boolean;
-        due_date?: string | null;
-        recurrence?: TaskRecurrence | null;
-        cleanedTitle?: string;
-      }>('/api/tasks/parse', { text, lang });
-    },
-    [],
-  );
+  const parseTaskText = useCallback(async (text: string, lang: 'es' | 'en') => {
+    return apiPost<{
+      parsed: boolean;
+      due_date?: string | null;
+      recurrence?: TaskRecurrence | null;
+      cleanedTitle?: string;
+    }>('/api/tasks/parse', { text, lang });
+  }, []);
 
-  const parseExpenseText = useCallback(
-    async (text: string, lang: 'es' | 'en') => {
-      return apiPost<{
-        parsed: boolean;
-        spent_at?: string | null;
-        amount_cents?: number | null;
-        cleanedTitle?: string;
-      }>('/api/expenses/parse', { text, lang });
-    },
-    [],
-  );
+  const parseExpenseText = useCallback(async (text: string, lang: 'es' | 'en') => {
+    return apiPost<{
+      parsed: boolean;
+      spent_at?: string | null;
+      amount_cents?: number | null;
+      cleanedTitle?: string;
+    }>('/api/expenses/parse', { text, lang });
+  }, []);
 
   const moveTask = useCallback(
     async (id: string, column: string, position: number): Promise<void> => {
@@ -339,7 +423,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
   );
 
   const updateSubtask = useCallback(
-    async (taskId: string, subtaskId: string, patch: { title?: string; done?: boolean }): Promise<void> => {
+    async (
+      taskId: string,
+      subtaskId: string,
+      patch: { title?: string; done?: boolean },
+    ): Promise<void> => {
       await apiPatch(`/api/subtasks/${encodeURIComponent(subtaskId)}`, patch);
       await Promise.all([fetchBootstrap(), fetchDetail(taskId)]);
     },
@@ -391,9 +479,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const setProjectMembers = useCallback(
     async (id: string, memberIds: string[]): Promise<void> => {
-      await apiPut<{ members: ProjectMember[] }>(`/api/projects/${encodeURIComponent(id)}/members`, {
-        member_ids: memberIds,
-      });
+      await apiPut<{ members: ProjectMember[] }>(
+        `/api/projects/${encodeURIComponent(id)}/members`,
+        {
+          member_ids: memberIds,
+        },
+      );
       await fetchBootstrap();
     },
     [fetchBootstrap],
@@ -453,7 +544,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const moveExpense = useCallback(
     async (id: string, step: string, position: number): Promise<void> => {
-      await apiPut<{ expense: Expense }>(`/api/expenses/${encodeURIComponent(id)}/move`, { step, position });
+      await apiPut<{ expense: Expense }>(`/api/expenses/${encodeURIComponent(id)}/move`, {
+        step,
+        position,
+      });
       await fetchExpenses();
     },
     [fetchExpenses],
@@ -485,12 +579,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
       if (expenseDetailPending.current.has(id)) return;
       expenseDetailPending.current.add(id);
       try {
-        const detail = await apiFetch<ExpenseDetail>(`/api/expenses/${encodeURIComponent(id)}/detail`);
+        const detail = await apiFetch<ExpenseDetail>(
+          `/api/expenses/${encodeURIComponent(id)}/detail`,
+        );
         if (!mounted.current) return;
         expenseDetailCache.current.set(id, detail);
         bump();
-      } catch { /* se reintenta al reabrir */ }
-      finally { expenseDetailPending.current.delete(id); }
+      } catch {
+        /* se reintenta al reabrir */
+      } finally {
+        expenseDetailPending.current.delete(id);
+      }
     },
     [bump],
   );
@@ -534,7 +633,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const deleteExpenseAttachment = useCallback(
     async (expenseId: string, attId: string): Promise<void> => {
-      await apiDelete(`/api/expenses/${encodeURIComponent(expenseId)}/attachments/${encodeURIComponent(attId)}`);
+      await apiDelete(
+        `/api/expenses/${encodeURIComponent(expenseId)}/attachments/${encodeURIComponent(attId)}`,
+      );
       await Promise.all([fetchExpenses(), fetchExpenseDetail(expenseId)]);
     },
     [fetchExpenses, fetchExpenseDetail],
@@ -559,7 +660,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
   );
 
   const refreshExpenseDetail = useCallback(
-    (id: string) => { expenseDetailCache.current.delete(id); void fetchExpenseDetail(id); },
+    (id: string) => {
+      expenseDetailCache.current.delete(id);
+      void fetchExpenseDetail(id);
+    },
     [fetchExpenseDetail],
   );
 
@@ -578,6 +682,102 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const releaseTaskDetail = useCallback((id: string) => {
     detailCache.current.delete(id);
   }, []);
+
+  /* --- Mutaciones de decisiones --- */
+
+  const createDecision = useCallback(
+    async (input: DecisionInput): Promise<DecisionListItem> => {
+      const res = await apiCreateDecision(input);
+      await fetchDecisions();
+      return res.decision;
+    },
+    [fetchDecisions],
+  );
+
+  const patchDecision = useCallback(
+    async (id: string, patch: DecisionPatch): Promise<void> => {
+      await apiPatchDecision(id, patch);
+      await Promise.all([fetchDecisions(), fetchDecisionDetail(id)]);
+    },
+    [fetchDecisions, fetchDecisionDetail],
+  );
+
+  const deleteDecision = useCallback(
+    async (id: string): Promise<void> => {
+      await apiDeleteDecision(id);
+      decisionDetailCache.current.delete(id);
+      await fetchDecisions();
+    },
+    [fetchDecisions],
+  );
+
+  const addSolution = useCallback(
+    async (id: string, title: string, description?: string): Promise<void> => {
+      await apiAddSolution(id, { title, ...(description ? { description } : {}) });
+      await Promise.all([fetchDecisions(), fetchDecisionDetail(id)]);
+    },
+    [fetchDecisions, fetchDecisionDetail],
+  );
+
+  const patchSolution = useCallback(
+    async (
+      id: string,
+      solutionId: string,
+      patch: { title?: string; description?: string },
+    ): Promise<void> => {
+      await apiPatchSolution(id, solutionId, patch);
+      await fetchDecisionDetail(id);
+    },
+    [fetchDecisionDetail],
+  );
+
+  const deleteSolution = useCallback(
+    async (id: string, solutionId: string): Promise<void> => {
+      await apiDeleteSolution(id, solutionId);
+      await Promise.all([fetchDecisions(), fetchDecisionDetail(id)]);
+    },
+    [fetchDecisions, fetchDecisionDetail],
+  );
+
+  const voteDecision = useCallback(
+    async (id: string, solutionId: string): Promise<void> => {
+      await apiVoteDecision(id, solutionId);
+      await fetchDecisionDetail(id);
+    },
+    [fetchDecisionDetail],
+  );
+
+  const unvoteDecision = useCallback(
+    async (id: string): Promise<void> => {
+      await apiUnvoteDecision(id);
+      await fetchDecisionDetail(id);
+    },
+    [fetchDecisionDetail],
+  );
+
+  const chooseDecision = useCallback(
+    async (id: string, solutionId: string | null): Promise<void> => {
+      await apiChooseDecision(id, solutionId);
+      await Promise.all([fetchDecisions(), fetchDecisionDetail(id)]);
+    },
+    [fetchDecisions, fetchDecisionDetail],
+  );
+
+  const reopenDecision = useCallback(
+    async (id: string): Promise<void> => {
+      await apiReopenDecision(id);
+      await Promise.all([fetchDecisions(), fetchDecisionDetail(id)]);
+    },
+    [fetchDecisions, fetchDecisionDetail],
+  );
+
+  const addDecisionComment = useCallback(
+    async (id: string, body: string): Promise<void> => {
+      await apiAddDecisionComment(id, body);
+      await Promise.all([fetchDecisions(), fetchDecisionDetail(id)]);
+    },
+    [fetchDecisions, fetchDecisionDetail],
+  );
 
   /* value = useMemo([version, ...]) con closures nuevas (regla a fuego). */
   const value = useMemo<DataApi>(() => {
@@ -650,6 +850,32 @@ export function DataProvider({ children }: { children: ReactNode }) {
       deleteExpenseAttachment,
       getGamificationSummary: () => gamRef.current,
       refreshGamification: () => void fetchGamification(),
+      getDecisions: () => decisionsRef.current,
+      getDecision: (id) => decisionsRef.current.find((d) => d.id === id),
+      refreshDecisions: () => void fetchDecisions(),
+      getDecisionDetail: (id) => {
+        const cached = decisionDetailCache.current.get(id);
+        if (!cached) void fetchDecisionDetail(id);
+        return cached ?? null;
+      },
+      refreshDecisionDetail: (id) => {
+        decisionDetailCache.current.delete(id);
+        void fetchDecisionDetail(id);
+      },
+      releaseDecisionDetail: (id) => {
+        decisionDetailCache.current.delete(id);
+      },
+      createDecision,
+      patchDecision,
+      deleteDecision,
+      addSolution,
+      patchSolution,
+      deleteSolution,
+      voteDecision,
+      unvoteDecision,
+      chooseDecision,
+      reopenDecision,
+      addDecisionComment,
     };
     // version es el disparador de recomputo (cachés en refs)
     // eslint-disable-next-line react-hooks/exhaustive-deps

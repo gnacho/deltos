@@ -296,6 +296,69 @@ CREATE TABLE IF NOT EXISTS expense_activity_events (
 );
 CREATE INDEX IF NOT EXISTS idx_expense_activity_expense ON expense_activity_events(expense_id, created_at);
 
+-- Decisiones (problema -> soluciones -> voto -> decision). Pertenece a un
+-- proyecto (misma visibilidad que tasks). Soft-delete en decisions; las
+-- entidades interiores (soluciones/votos/comentarios) van en cascada real.
+CREATE TABLE IF NOT EXISTS decisions (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  description TEXT DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','decided')),
+  chosen_solution_id TEXT,             -- FK lógica a decision_solutions (por el ciclo)
+  created_by TEXT NOT NULL REFERENCES users(id),
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  decided_at INTEGER,
+  deleted_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_decisions_project ON decisions(project_id, status, created_at);
+
+-- Soluciones propuestas. Un autor puede proponer varias.
+CREATE TABLE IF NOT EXISTS decision_solutions (
+  id TEXT PRIMARY KEY,
+  decision_id TEXT NOT NULL REFERENCES decisions(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  description TEXT DEFAULT '',
+  proposer_id TEXT NOT NULL REFERENCES users(id),
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_decision_solutions_decision ON decision_solutions(decision_id, created_at);
+
+-- Votos: un voto por usuario y decisión (UNIQUE lo garantiza; mover voto = UPDATE).
+CREATE TABLE IF NOT EXISTS decision_votes (
+  decision_id TEXT NOT NULL REFERENCES decisions(id) ON DELETE CASCADE,
+  solution_id TEXT NOT NULL REFERENCES decision_solutions(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (decision_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_decision_votes_solution ON decision_votes(solution_id);
+
+-- Comentarios de matización (espejo de expense_comments; sin author_name).
+CREATE TABLE IF NOT EXISTS decision_comments (
+  id TEXT PRIMARY KEY,
+  decision_id TEXT NOT NULL REFERENCES decisions(id) ON DELETE CASCADE,
+  user_id TEXT REFERENCES users(id),
+  body TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_decision_comments_decision ON decision_comments(decision_id, created_at);
+
+-- Historial (espejo de expense_activity_events) para el feed de actividad.
+CREATE TABLE IF NOT EXISTS decision_activity_events (
+  id TEXT PRIMARY KEY,
+  decision_id TEXT REFERENCES decisions(id) ON DELETE CASCADE,
+  user_id TEXT REFERENCES users(id),
+  type TEXT NOT NULL CHECK (type IN
+    ('created','title','description','solution_added','solution_edited','solution_removed',
+     'voted','unchosen','chosen','comment','reopened','deleted')),
+  data TEXT DEFAULT '{}',
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_decision_activity_decision ON decision_activity_events(decision_id, created_at);
+
 -- Idempotency: cache de respuestas POST para reintentos seguros (TTL 24h).
 CREATE TABLE IF NOT EXISTS idempotency_keys (
   key TEXT PRIMARY KEY,
@@ -643,6 +706,8 @@ export function hourlyMaintenance(db, label) {
   if (trashChanges > 0) log.info('trash_purged', { db: label, count: trashChanges })
   const { changes: expenseTrashChanges } = db.prepare('DELETE FROM expenses WHERE deleted_at IS NOT NULL AND deleted_at < ?').run(thirtyDaysAgo)
   if (expenseTrashChanges > 0) log.info('expense_trash_purged', { db: label, count: expenseTrashChanges })
+  const { changes: decisionTrashChanges } = db.prepare('DELETE FROM decisions WHERE deleted_at IS NOT NULL AND deleted_at < ?').run(thirtyDaysAgo)
+  if (decisionTrashChanges > 0) log.info('decision_trash_purged', { db: label, count: decisionTrashChanges })
   const oneHourAgo = Date.now() - 3600 * 1000
   const { changes: attChanges } = db.prepare('DELETE FROM login_attempts WHERE locked_until > 0 AND locked_until < ?').run(oneHourAgo)
   if (attChanges > 0) log.info('login_attempts_purged', { db: label, count: attChanges })

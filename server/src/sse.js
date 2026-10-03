@@ -25,6 +25,7 @@ const DOMAIN = {
   comments: 'comment',
   attachments: 'attachment',
   settings: 'settings',
+  decisions: 'decision',
 }
 
 export function eventName(entity) {

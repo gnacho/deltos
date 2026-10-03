@@ -48,6 +48,9 @@ export const ERROR_CODES = {
   SUBTASK_NOT_FOUND: 'SUBTASK_NOT_FOUND',
   EXPENSE_NOT_FOUND: 'EXPENSE_NOT_FOUND',
   EXPENSE_NOT_DONE: 'EXPENSE_NOT_DONE', // 422, solo se pueden archivar gastos pagados
+  DECISION_NOT_FOUND: 'DECISION_NOT_FOUND', // 404, decisión inexistente o borrada
+  DECISION_NOT_OPEN: 'DECISION_NOT_OPEN', // 409, la decisión ya está cerrada (decided)
+  SOLUTION_NOT_FOUND: 'SOLUTION_NOT_FOUND', // 404, solución inexistente o de otra decisión
   ASSIGNEE_NOT_FOUND: 'ASSIGNEE_NOT_FOUND',
   ATTACHMENT_NOT_FOUND: 'ATTACHMENT_NOT_FOUND',
   ATTACHMENT_FILE_MISSING: 'ATTACHMENT_FILE_MISSING', // 404, fichero no está en disco
@@ -110,6 +113,9 @@ export const ERROR_MESSAGES_ES = {
   [ERROR_CODES.SUBTASK_NOT_FOUND]: 'Subtarea no encontrada',
   [ERROR_CODES.EXPENSE_NOT_FOUND]: 'Gasto no encontrado',
   [ERROR_CODES.EXPENSE_NOT_DONE]: 'Solo se pueden archivar gastos pagados',
+  [ERROR_CODES.DECISION_NOT_FOUND]: 'Decisión no encontrada',
+  [ERROR_CODES.DECISION_NOT_OPEN]: 'La decisión ya está cerrada',
+  [ERROR_CODES.SOLUTION_NOT_FOUND]: 'Solución no encontrada',
   [ERROR_CODES.ASSIGNEE_NOT_FOUND]: 'Usuario asignado no encontrado',
   [ERROR_CODES.ATTACHMENT_NOT_FOUND]: 'Adjunto no encontrado',
   [ERROR_CODES.ATTACHMENT_FILE_MISSING]: 'Fichero no disponible en disco',

@@ -19,6 +19,7 @@ import {
   Trash2,
   Search,
   Sparkles,
+  Scale,
 } from 'lucide-react';
 import { useData } from '@/data/data-context';
 import PullToRefresh from '@/components/PullToRefresh';
@@ -59,7 +60,15 @@ const UPDATE_DISMISS_KEY = 'deltos-release-dismissed';
 const UPDATE_URL = 'https://github.com/gnacho/deltos/releases';
 
 /** Rutas del bottom-nav móvil en orden (para la dirección del deslizamiento). */
-const BOTTOM_NAV_ORDER = ['/', '/projects', '/expenses', '/summary', '/routines', '/settings'];
+const BOTTOM_NAV_ORDER = [
+  '/',
+  '/projects',
+  '/expenses',
+  '/decisions',
+  '/summary',
+  '/routines',
+  '/settings',
+];
 
 function isActivePath(pathname: string, to: string): boolean {
   if (to === '/') return pathname === '/';
@@ -81,7 +90,11 @@ function ThemeTogglePill() {
     { m: 'dark', icon: Moon, label: t('settings.themeDark') },
   ];
   return (
-    <div role="radiogroup" aria-label={t('settings.appearance')} className="flex h-8 items-center rounded-full border border-app bg-surface2 p-0.5">
+    <div
+      role="radiogroup"
+      aria-label={t('settings.appearance')}
+      className="flex h-8 items-center rounded-full border border-app bg-surface2 p-0.5"
+    >
       {opts.map(({ m, icon: Icon, label }) => {
         const active = mode === m;
         return (
@@ -221,7 +234,9 @@ function UpdateBanner() {
   const [dialogOpen, setDialogOpen] = useState(false);
 
   if (!serverChanged && !checkResult.available && !checkResult.swWaiting)
-    return <>{dialogOpen && <UpdateDialog open={dialogOpen} onClose={() => setDialogOpen(false)} />}</>;
+    return (
+      <>{dialogOpen && <UpdateDialog open={dialogOpen} onClose={() => setDialogOpen(false)} />}</>
+    );
 
   // Estado "hay release nueva" (#186): banner sólido y notorio; el resto de
   // estados (redeploy del server) mantiene el aviso sutil.
@@ -232,36 +247,19 @@ function UpdateBanner() {
 
   const applyAction =
     checkResult.swWaiting && checkResult.applySw ? (
-      <button
-        type="button"
-        onClick={checkResult.applySw}
-        className={actionBtn}
-      >
+      <button type="button" onClick={checkResult.applySw} className={actionBtn}>
         {t('update.reload')}
       </button>
     ) : checkResult.available && checkResult.applyRelease ? (
-      <button
-        type="button"
-        onClick={() => setDialogOpen(true)}
-        className={actionBtn}
-      >
+      <button type="button" onClick={() => setDialogOpen(true)} className={actionBtn}>
         {t('update.installNow')}
       </button>
     ) : checkResult.available && checkResult.url ? (
-      <a
-        href={checkResult.url}
-        target="_blank"
-        rel="noreferrer"
-        className={actionBtn}
-      >
+      <a href={checkResult.url} target="_blank" rel="noreferrer" className={actionBtn}>
         {t('update.openRelease')}
       </a>
     ) : (
-      <button
-        type="button"
-        onClick={() => location.reload()}
-        className={actionBtn}
-      >
+      <button type="button" onClick={() => location.reload()} className={actionBtn}>
         {t('update.reload')}
       </button>
     );
@@ -329,7 +327,7 @@ function UpdateAutoCheck() {
     void (async () => {
       try {
         const s = await apiFetch<{ current: string; latest: string | null; available: boolean }>(
-          '/api/update/status'
+          '/api/update/status',
         );
         if (stale || !s?.available || !s.latest) return;
         const latest = s.latest;
@@ -361,7 +359,7 @@ function UpdateAutoCheck() {
   return null;
 }
 
-/** Barra de modo demo (patrón zfsctl): siempre visible con sesión demo. */function DemoBanner() {
+/** Barra de modo demo (patrón zfsctl): siempre visible con sesión demo. */ function DemoBanner() {
   const { t } = useTranslation();
   const exitDemo = async () => {
     try {
@@ -395,6 +393,7 @@ const TITLE_KEYS: [RegExp, string][] = [
   [/^\/summary/, 'nav.summary'],
   [/^\/routines/, 'nav.routines'],
   [/^\/expenses/, 'nav.expenses'],
+  [/^\/decisions/, 'nav.decisions'],
   [/^\/settings/, 'nav.settings'],
 ];
 
@@ -439,12 +438,10 @@ export default function Layout() {
 
   /* Re-tap del tab activo (o logo): scroll suave arriba. */
   const reduceMotion = () =>
-    typeof window !== 'undefined' &&
-    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   const scrollTopIfActive = (to: string) => () => {
-    const active =
-      to === '/' ? location.pathname === '/' : location.pathname.startsWith(to);
+    const active = to === '/' ? location.pathname === '/' : location.pathname.startsWith(to);
     if (active && window.scrollY > 0) {
       window.scrollTo({ top: 0, behavior: reduceMotion() ? 'auto' : 'smooth' });
     }
@@ -461,8 +458,7 @@ export default function Layout() {
     const target = navIndex(BOTTOM_NAV_ORDER, to);
     if (target !== -1 && from !== target) {
       try {
-        document.documentElement.dataset.navDir =
-          from === -1 || target > from ? 'forward' : 'back';
+        document.documentElement.dataset.navDir = from === -1 || target > from ? 'forward' : 'back';
       } catch {
         /* sin dataset */
       }
@@ -508,7 +504,8 @@ export default function Layout() {
     return `${d.getFullYear()}-${m}-${day}`;
   })();
   const todayCount = tasks.filter(
-    (tk) => !tk.archived_at && tk.column !== 'hecho' && tk.due_date !== null && tk.due_date <= todayKey,
+    (tk) =>
+      !tk.archived_at && tk.column !== 'hecho' && tk.due_date !== null && tk.due_date <= todayKey,
   ).length;
 
   const boardView: 'todo' | 'project' | null = location.pathname.startsWith('/p/')
@@ -522,7 +519,7 @@ export default function Layout() {
   const titleKey = TITLE_KEYS.find(([re]) => re.test(location.pathname))?.[1];
   const title =
     boardView === 'project'
-      ? (projectDisplayName(currentProject, t) || t('nav.projects'))
+      ? projectDisplayName(currentProject, t) || t('nav.projects')
       : t(titleKey ?? 'nav.todo');
 
   const sideItemCls = ({ isActive }: { isActive: boolean }) =>
@@ -666,6 +663,9 @@ export default function Layout() {
                 <Receipt className="w-[18px] h-[18px]" aria-hidden="true" />
               </IconNavLink>
             )}
+            <IconNavLink to="/decisions" label={t('nav.decisions')}>
+              <Scale className="w-[18px] h-[18px]" aria-hidden="true" />
+            </IconNavLink>
             <IconNavLink to="/trash" label={t('nav.trash')}>
               <Trash2 className="w-[18px] h-[18px]" aria-hidden="true" />
             </IconNavLink>
@@ -717,7 +717,6 @@ export default function Layout() {
           </div>
 
           <nav className="flex-1 overflow-y-auto nice-scroll px-3 pb-3" aria-label={t('nav.main')}>
-
             <button
               type="button"
               onClick={() => setSearchOpen(true)}
@@ -765,6 +764,12 @@ export default function Layout() {
                   <span className="flex-1 text-left">{t('nav.expenses')}</span>
                 </NavLink>
               )}
+              <NavLink to="/decisions" className={sideItemCls}>
+                <span className="text-faint">
+                  <Scale className="w-4 h-4" aria-hidden="true" />
+                </span>
+                <span className="flex-1 text-left">{t('nav.decisions')}</span>
+              </NavLink>
               <NavLink to="/trash" className={sideItemCls}>
                 <span className="text-faint">
                   <Trash2 className="w-4 h-4" aria-hidden="true" />
@@ -873,6 +878,9 @@ export default function Layout() {
               <Receipt className="w-[18px] h-[18px]" aria-hidden="true" />
             </IconNavLink>
           )}
+          <IconNavLink to="/decisions" label={t('nav.decisions')}>
+            <Scale className="w-[18px] h-[18px]" aria-hidden="true" />
+          </IconNavLink>
           <IconNavLink to="/trash" label={t('nav.trash')}>
             <Trash2 className="w-[18px] h-[18px]" aria-hidden="true" />
           </IconNavLink>
@@ -904,7 +912,12 @@ export default function Layout() {
         className="md:hidden fixed top-0 inset-x-0 h-14 bg-surface border-b border-app z-40 flex items-center gap-2 px-3 [view-transition-name:deltos-header]"
         style={{ paddingTop: 'env(safe-area-inset-top)' }}
       >
-        <Link to="/" className="flex items-center gap-2 shrink-0" aria-label={t('nav.goTodo')} onClick={scrollTopIfActive('/')}>
+        <Link
+          to="/"
+          className="flex items-center gap-2 shrink-0"
+          aria-label={t('nav.goTodo')}
+          onClick={scrollTopIfActive('/')}
+        >
           <LogoMark size={28} />
           <span className="font-display font-bold text-base tracking-tight">
             {t('common.appName')}
@@ -944,7 +957,7 @@ export default function Layout() {
         className="bottom-nav md:hidden fixed bottom-0 inset-x-0 z-40 bg-surface border-t border-app [view-transition-name:deltos-nav]"
         aria-label={t('nav.main')}
       >
-        <div className="h-16 grid grid-cols-6">
+        <div className="h-16 grid grid-cols-7">
           <NavLink
             to="/"
             end
@@ -975,6 +988,15 @@ export default function Layout() {
               <span className="text-[11px] font-medium">{t('nav.expenses')}</span>
             </NavLink>
           )}
+          <NavLink
+            to="/decisions"
+            className={({ isActive }) => bnCls(isActive)}
+            aria-label={t('nav.decisions')}
+            onClick={handleMobileNav('/decisions')}
+          >
+            <Scale className="w-5 h-5" aria-hidden="true" />
+            <span className="text-[11px] font-medium">{t('nav.decisions')}</span>
+          </NavLink>
           <NavLink
             to="/summary"
             className={({ isActive }) => bnCls(isActive)}

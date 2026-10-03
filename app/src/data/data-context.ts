@@ -1,5 +1,22 @@
 import { createContext, useContext } from 'react';
-import type { BoardUser, Label, Project, Task, TaskDetail, TaskPatch, TaskRecurrence, Expense, ExpenseInput, ExpensePatch, ExpenseDetail, GamificationSummary } from './types';
+import type {
+  BoardUser,
+  Label,
+  Project,
+  Task,
+  TaskDetail,
+  TaskPatch,
+  TaskRecurrence,
+  Expense,
+  ExpenseInput,
+  ExpensePatch,
+  ExpenseDetail,
+  GamificationSummary,
+  DecisionDetail,
+  DecisionInput,
+  DecisionListItem,
+  DecisionPatch,
+} from './types';
 
 export type ConnectionStatus = 'connected' | 'reconnecting';
 
@@ -64,20 +81,30 @@ export interface DataApi {
   doTodayTask: (id: string) => Promise<void>;
   deleteTask: (id: string) => Promise<void>;
   restoreTask: (id: string) => Promise<void>;
-  parseTaskText: (text: string, lang: 'es' | 'en') => Promise<{
+  parseTaskText: (
+    text: string,
+    lang: 'es' | 'en',
+  ) => Promise<{
     parsed: boolean;
     due_date?: string | null;
     recurrence?: TaskRecurrence | null;
     cleanedTitle?: string;
   }>;
-  parseExpenseText: (text: string, lang: 'es' | 'en') => Promise<{
+  parseExpenseText: (
+    text: string,
+    lang: 'es' | 'en',
+  ) => Promise<{
     parsed: boolean;
     spent_at?: string | null;
     amount_cents?: number | null;
     cleanedTitle?: string;
   }>;
   addSubtask: (taskId: string, title: string, parentId?: string | null) => Promise<void>;
-  updateSubtask: (taskId: string, subtaskId: string, patch: { title?: string; done?: boolean }) => Promise<void>;
+  updateSubtask: (
+    taskId: string,
+    subtaskId: string,
+    patch: { title?: string; done?: boolean },
+  ) => Promise<void>;
   deleteSubtask: (taskId: string, subtaskId: string) => Promise<void>;
   addComment: (id: string, body: string) => Promise<void>;
   uploadAttachment: (id: string, file: File) => Promise<void>;
@@ -111,6 +138,28 @@ export interface DataApi {
   getGamificationSummary: () => GamificationSummary | null;
   /** Refetch explícito del resumen de gamificación. */
   refreshGamification: () => void;
+
+  getDecisions: () => DecisionListItem[];
+  getDecision: (id: string) => DecisionListItem | undefined;
+  refreshDecisions: () => void;
+  getDecisionDetail: (id: string) => DecisionDetail | null;
+  refreshDecisionDetail: (id: string) => void;
+  releaseDecisionDetail: (id: string) => void;
+  createDecision: (input: DecisionInput) => Promise<DecisionListItem>;
+  patchDecision: (id: string, patch: DecisionPatch) => Promise<void>;
+  deleteDecision: (id: string) => Promise<void>;
+  addSolution: (id: string, title: string, description?: string) => Promise<void>;
+  patchSolution: (
+    id: string,
+    solutionId: string,
+    patch: { title?: string; description?: string },
+  ) => Promise<void>;
+  deleteSolution: (id: string, solutionId: string) => Promise<void>;
+  voteDecision: (id: string, solutionId: string) => Promise<void>;
+  unvoteDecision: (id: string) => Promise<void>;
+  chooseDecision: (id: string, solutionId: string | null) => Promise<void>;
+  reopenDecision: (id: string) => Promise<void>;
+  addDecisionComment: (id: string, body: string) => Promise<void>;
 }
 
 export const DataContext = createContext<DataApi | null>(null);

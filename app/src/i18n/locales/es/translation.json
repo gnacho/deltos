@@ -42,6 +42,7 @@
     "collapse": "Plegar menú",
     "expand": "Desplegar menú",
     "expenses": "Gastos",
+    "decisions": "Decisiones",
     "summary": "Resumen",
     "routines": "Periódicas",
     "trash": "Papelera"
@@ -711,6 +712,42 @@
   "a11y": {
     "announce": "Avisos de movimientos de tarjetas"
   },
+  "decisions": {
+    "title": "Decisiones",
+    "subtitle": "Plantea un problema, propón soluciones y vota.",
+    "empty": "Sin decisiones todavía. Plantea la primera con el botón de arriba.",
+    "new": "Nueva decisión",
+    "all": "Todas",
+    "open": "Abiertas",
+    "decided": "Decididas",
+    "statusOpen": "Abierta",
+    "statusDecided": "Decidida",
+    "solutions": "{{count}} soluciones",
+    "votes": "{{count}} votos",
+    "by": "por {{name}}",
+    "form": {
+      "createTitle": "Nueva decisión",
+      "titleLabel": "Título",
+      "titlePlaceholder": "¿Qué hay que decidir?",
+      "descriptionLabel": "Descripción",
+      "descriptionPlaceholder": "Matiza el problema…",
+      "create": "Crear",
+      "creating": "Creando…"
+    },
+    "modal": {
+      "description": "Descripción",
+      "solutions": "Soluciones",
+      "proposePlaceholder": "Propón una solución…",
+      "propose": "Proponer",
+      "chosen": "Elegida",
+      "choose": "Elegir",
+      "chooseConfirm": "Puede no ser la más votada. ¿Confirmas elegir esta solución?",
+      "closeWithoutSolution": "Cerrar sin solución",
+      "reopen": "Reabrir",
+      "comments": "Comentarios",
+      "noSolutions": "Todavía no hay soluciones. Propón la primera."
+    }
+  },
   "demo": {
     "banner": "Demostración (solo lectura): estás viendo datos de ejemplo. Sal para volver a tus tableros.",
     "exit": "Salir de la demo"
@@ -756,6 +793,9 @@
     "PUSH_NOT_CONFIGURED": "El servidor no tiene claves push configuradas",
     "PUSH_DEMO_UNAVAILABLE": "Las notificaciones push no están disponibles en modo demo",
     "EXPENSE_NOT_FOUND": "Gasto no encontrado",
+    "DECISION_NOT_FOUND": "Decisión no encontrada",
+    "DECISION_NOT_OPEN": "La decisión ya está cerrada",
+    "SOLUTION_NOT_FOUND": "Solución no encontrada",
     "INSUFFICIENT_POINTS": "No tienes puntos suficientes para canjear esta recompensa",
     "REWARD_NOT_FOUND": "Recompensa no encontrada"
   },

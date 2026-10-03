@@ -42,6 +42,7 @@
     "collapse": "Collapse menu",
     "expand": "Expand menu",
     "expenses": "Expenses",
+    "decisions": "Decisions",
     "summary": "Summary",
     "routines": "Routines",
     "trash": "Trash"
@@ -711,6 +712,42 @@
   "a11y": {
     "announce": "Card movement announcements"
   },
+  "decisions": {
+    "title": "Decisions",
+    "subtitle": "Raise a problem, propose solutions and vote.",
+    "empty": "No decisions yet. Raise the first one with the button above.",
+    "new": "New decision",
+    "all": "All",
+    "open": "Open",
+    "decided": "Decided",
+    "statusOpen": "Open",
+    "statusDecided": "Decided",
+    "solutions": "{{count}} solutions",
+    "votes": "{{count}} votes",
+    "by": "by {{name}}",
+    "form": {
+      "createTitle": "New decision",
+      "titleLabel": "Title",
+      "titlePlaceholder": "What needs deciding?",
+      "descriptionLabel": "Description",
+      "descriptionPlaceholder": "Refine the problem…",
+      "create": "Create",
+      "creating": "Creating…"
+    },
+    "modal": {
+      "description": "Description",
+      "solutions": "Solutions",
+      "proposePlaceholder": "Propose a solution…",
+      "propose": "Propose",
+      "chosen": "Chosen",
+      "choose": "Choose",
+      "chooseConfirm": "It may not be the most voted. Confirm choosing this solution?",
+      "closeWithoutSolution": "Close without solution",
+      "reopen": "Reopen",
+      "comments": "Comments",
+      "noSolutions": "No solutions yet. Propose the first one."
+    }
+  },
   "demo": {
     "banner": "Demo (read-only): you are viewing sample data. Exit to go back to your boards.",
     "exit": "Exit demo"
@@ -756,6 +793,9 @@
     "PUSH_NOT_CONFIGURED": "The server has no push keys configured",
     "PUSH_DEMO_UNAVAILABLE": "Push notifications are not available in demo mode",
     "EXPENSE_NOT_FOUND": "Expense not found",
+    "DECISION_NOT_FOUND": "Decision not found",
+    "DECISION_NOT_OPEN": "The decision is already closed",
+    "SOLUTION_NOT_FOUND": "Solution not found",
     "INSUFFICIENT_POINTS": "You don't have enough points to redeem this reward",
     "REWARD_NOT_FOUND": "Reward not found"
   },
