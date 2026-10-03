@@ -255,7 +255,7 @@ export function ExpenseModal(props: Props) {
             <button
               type="button"
               onClick={onClose}
-              className="w-10 h-10 rounded-lg text-muted hover:bg-surface2 flex items-center justify-center"
+              className="w-10 h-10 rounded-lg text-muted hover:bg-surface2 hover:text-brand flex items-center justify-center"
               aria-label={t('common.close')}
             >
               <X className="w-5 h-5" aria-hidden="true" />
@@ -306,7 +306,7 @@ export function ExpenseModal(props: Props) {
           <button
             type="button"
             onClick={onClose}
-            className="w-10 h-10 rounded-lg text-muted hover:bg-surface2 flex items-center justify-center"
+            className="w-10 h-10 rounded-lg text-muted hover:bg-surface2 hover:text-brand flex items-center justify-center"
             aria-label={t('common.close')}
           >
             <X className="w-5 h-5" aria-hidden="true" />

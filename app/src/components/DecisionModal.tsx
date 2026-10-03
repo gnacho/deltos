@@ -1,6 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Check, Plus, RotateCcw, ThumbsUp } from 'lucide-react';
+import {
+  X,
+  Check,
+  Plus,
+  RotateCcw,
+  ThumbsUp,
+  Pencil,
+  Paperclip,
+  Download,
+  Trash2,
+  FileText,
+  FileImage,
+  File as FileIcon,
+} from 'lucide-react';
+import { motion, MotionConfig } from 'framer-motion';
 import type { FormEvent } from 'react';
 import { useData } from '@/data/data-context';
 import { useSession } from '@/auth/session-context';
@@ -9,6 +23,93 @@ import LazyMarkdown from '@/components/LazyMarkdown';
 import { relTime } from '@/i18n';
 import { apiErrorText } from '@/lib/errors';
 import { announce } from '@/lib/announce';
+import { fmtSize } from '@/lib/format';
+import type { DecisionAttachment } from '@/data/types';
+
+/** Allowlist del input de subida (el server revalida el MIME real). */
+const ATTACH_ACCEPT = 'image/*,.txt,.csv,.json,.pdf';
+
+/** Icono según mime (allowlist de decisiones: imágenes, texto y pdf). */
+function iconForAttachment(mime: string) {
+  if (mime.startsWith('image/')) {
+    return {
+      Icon: FileImage,
+      cls: 'bg-violet-100 text-violet-600 dark:bg-violet-500/15 dark:text-violet-300',
+    };
+  }
+  if (mime === 'application/pdf' || mime.startsWith('text/') || mime === 'application/json') {
+    return {
+      Icon: FileText,
+      cls: 'bg-rose-100 text-rose-600 dark:bg-rose-500/15 dark:text-rose-300',
+    };
+  }
+  return { Icon: FileIcon, cls: 'bg-sky-100 text-sky-600 dark:bg-sky-500/15 dark:text-sky-300' };
+}
+
+/** Fila de adjunto de decisión: icono, nombre, meta, descargar y papelera. */
+function AttachmentRow({
+  att,
+  compact = false,
+  canDelete,
+  onDelete,
+}: {
+  att: DecisionAttachment;
+  compact?: boolean;
+  canDelete: boolean;
+  onDelete: (att: DecisionAttachment) => void | Promise<void>;
+}) {
+  const { t, i18n } = useTranslation();
+  const [deleting, setDeleting] = useState(false);
+  const { Icon, cls } = iconForAttachment(att.mime);
+  return (
+    <li
+      className={`flex items-center gap-2 ${
+        compact ? 'min-w-0' : 'rounded-xl border border-app px-3 py-2'
+      }`}
+    >
+      <span
+        className={`${
+          compact ? 'w-6 h-6 rounded-md' : 'w-8 h-8 rounded-lg'
+        } ${cls} flex items-center justify-center shrink-0`}
+      >
+        <Icon className="w-3.5 h-3.5" aria-hidden="true" />
+      </span>
+      <span className="flex-1 min-w-0">
+        <span className={`block font-medium truncate ${compact ? 'text-[12px]' : 'text-[13px]'}`}>
+          {att.filename}
+        </span>
+        <span className="block text-[11px] text-faint truncate">
+          {fmtSize(att.size, i18n.language)}
+          {!compact && att.uploaded_by_username
+            ? ` · ${t('decisions.attachment.uploadedBy', { name: att.uploaded_by_username })}`
+            : ''}
+        </span>
+      </span>
+      <a
+        href={`/api/decisions/attachments/${encodeURIComponent(att.id)}`}
+        download={att.filename}
+        className="w-7 h-7 rounded-lg text-muted hover:bg-surface2 flex items-center justify-center shrink-0"
+        aria-label={t('decisions.attachment.download', { name: att.filename })}
+      >
+        <Download className="w-3.5 h-3.5" aria-hidden="true" />
+      </a>
+      {canDelete && (
+        <button
+          type="button"
+          disabled={deleting}
+          onClick={() => {
+            setDeleting(true);
+            void Promise.resolve(onDelete(att)).finally(() => setDeleting(false));
+          }}
+          className="w-7 h-7 rounded-lg text-faint hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10 flex items-center justify-center shrink-0 disabled:opacity-60"
+          aria-label={t('decisions.attachment.delete', { name: att.filename })}
+        >
+          <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+        </button>
+      )}
+    </li>
+  );
+}
 
 /**
  * Modal de detalle de una decisión: título y descripción editables inline,
@@ -27,8 +128,7 @@ export function DecisionModal({
   const { t } = useTranslation();
   const data = useData();
   const { user } = useSession();
-  const [solutionTitle, setSolutionTitle] = useState('');
-  const [solutionDesc, setSolutionDesc] = useState('');
+  const [solutionText, setSolutionText] = useState('');
   const [proposing, setProposing] = useState(false);
   const [chooseTarget, setChooseTarget] = useState<string | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
@@ -39,6 +139,19 @@ export function DecisionModal({
   const [descDraft, setDescDraft] = useState('');
   const descRef = useRef<HTMLTextAreaElement>(null);
   const descCancelRef = useRef(false);
+  const [editingSolutionId, setEditingSolutionId] = useState<string | null>(null);
+  const [solutionDraft, setSolutionDraft] = useState('');
+  const [editError, setEditError] = useState<string | null>(null);
+  const solutionEditRef = useRef<HTMLTextAreaElement>(null);
+  const solutionCancelRef = useRef(false);
+  const [attUploading, setAttUploading] = useState(false);
+  const [attError, setAttError] = useState<string | null>(null);
+  const decAttInputRef = useRef<HTMLInputElement>(null);
+  // Subida a soluciones: input file único + solución destino elegida al pulsar
+  // el clip de cada fila (null = la subida en curso no es de solución).
+  const [solAttTarget, setSolAttTarget] = useState<string | null>(null);
+  const [solAttError, setSolAttError] = useState<{ solutionId: string; message: string } | null>(null);
+  const solAttInputRef = useRef<HTMLInputElement>(null);
 
   const detail = data.getDecisionDetail(decisionId);
 
@@ -49,6 +162,21 @@ export function DecisionModal({
       descRef.current.setSelectionRange(len, len);
     }
   }, [descEditing]);
+
+  useEffect(() => {
+    if (editingSolutionId && solutionEditRef.current) {
+      solutionEditRef.current.focus();
+      const len = solutionEditRef.current.value.length;
+      solutionEditRef.current.setSelectionRange(len, len);
+    }
+  }, [editingSolutionId]);
+
+  useEffect(() => {
+    setEditingSolutionId(null);
+    setEditError(null);
+    setSolAttError(null);
+    setAttError(null);
+  }, [decisionId]);
 
   useEffect(() => {
     setDescEditing(false);
@@ -109,14 +237,15 @@ export function DecisionModal({
 
   const handlePropose = async (e: FormEvent) => {
     e.preventDefault();
-    const text = solutionTitle.trim();
+    const [title, ...rest] = solutionText.split('\n');
+    const text = (title ?? '').trim().slice(0, 200);
     if (!text || proposing) return;
+    const description = rest.join('\n').trim();
     setProposing(true);
     setError(null);
     try {
-      await data.addSolution(decision.id, text, solutionDesc.trim() || undefined);
-      setSolutionTitle('');
-      setSolutionDesc('');
+      await data.addSolution(decision.id, text, description || undefined);
+      setSolutionText('');
     } catch (err) {
       setError(apiErrorText(err, t('common.error')));
     } finally {
@@ -124,8 +253,31 @@ export function DecisionModal({
     }
   };
 
-  const handleVote = async (solutionId: string, myVote: boolean) => {
-    try {
+  const startEditSolution = (solutionId: string, title: string, description: string) => {
+    setSolutionDraft(description ? `${title}\n${description}` : title);
+    setEditError(null);
+    setEditingSolutionId(solutionId);
+  };
+
+  const handleSaveSolution = async (solutionId: string, originalTitle: string, originalDescription: string) => {
+    const [first, ...rest] = solutionDraft.split('\n');
+    const title = (first ?? '').trim().slice(0, 200);
+    const description = rest.join('\n').trim();
+    // El clic fuera siempre cierra el modo edicion: se guarda solo si hay
+    // titulo valido y algo cambio; si falla el guardado se anuncia, pero no
+    // se retiene al usuario en edicion (debe poder votar de nuevo).
+    if (title && (title !== originalTitle || description !== originalDescription)) {
+      try {
+        await data.patchSolution(decision.id, solutionId, { title, description });
+        setEditError(null);
+      } catch (err) {
+        announce(apiErrorText(err, t('common.error')));
+      }
+    }
+    setEditingSolutionId(null);
+  };
+
+  const handleVote = async (solutionId: string, myVote: boolean) => {    try {
       if (myVote) await data.unvoteDecision(decision.id);
       else await data.voteDecision(decision.id, solutionId);
     } catch {
@@ -172,6 +324,52 @@ export function DecisionModal({
       setCommentError(apiErrorText(err, t('comments.error')));
     } finally {
       setCommentSending(false);
+    }
+  };
+
+  // --- Adjuntos ---
+  const decisionAttachments = detail.attachments.filter((a) => a.solution_id === null);
+  const canDeleteAttachment = (a: DecisionAttachment) =>
+    user?.id === a.uploaded_by || user?.role === 'admin';
+
+  const uploadDecisionAttachment = async (file: File | undefined) => {
+    if (!file) return;
+    setAttError(null);
+    setAttUploading(true);
+    try {
+      await data.uploadDecisionAttachment(decision.id, file);
+    } catch (err) {
+      setAttError(apiErrorText(err, t('decisions.attachment.uploadError')));
+    } finally {
+      setAttUploading(false);
+      if (decAttInputRef.current) decAttInputRef.current.value = '';
+    }
+  };
+
+  const uploadSolutionAttachment = async (file: File | undefined) => {
+    const target = solAttTarget;
+    if (!file || !target) return;
+    setSolAttError(null);
+    setAttUploading(true);
+    try {
+      await data.uploadDecisionAttachment(decision.id, file, target);
+    } catch (err) {
+      setSolAttError({
+        solutionId: target,
+        message: apiErrorText(err, t('decisions.attachment.uploadError')),
+      });
+    } finally {
+      setAttUploading(false);
+      setSolAttTarget(null);
+      if (solAttInputRef.current) solAttInputRef.current.value = '';
+    }
+  };
+
+  const deleteAttachment = async (att: DecisionAttachment) => {
+    try {
+      await data.deleteDecisionAttachment(decision.id, att.id);
+    } catch {
+      announce(t('common.error'));
     }
   };
 
@@ -226,7 +424,7 @@ export function DecisionModal({
               <button
                 type="button"
                 onClick={onClose}
-                className="w-10 h-10 rounded-lg text-muted hover:bg-surface2 flex items-center justify-center shrink-0"
+                className="w-10 h-10 rounded-lg text-muted hover:bg-surface2 hover:text-brand flex items-center justify-center shrink-0"
                 aria-label={t('task.closeDetail')}
               >
                 <X className="w-5 h-5" aria-hidden="true" />
@@ -303,6 +501,52 @@ export function DecisionModal({
               )}
             </div>
 
+            {/* Adjuntos de la decisión: añade cualquier miembro; borra quien subió o admin */}
+            <div>
+              {decisionAttachments.length > 0 && (
+                <ul className="space-y-2">
+                  {decisionAttachments.map((a) => (
+                    <AttachmentRow
+                      key={a.id}
+                      att={a}
+                      canDelete={canDeleteAttachment(a)}
+                      onDelete={deleteAttachment}
+                    />
+                  ))}
+                </ul>
+              )}
+              <input
+                ref={decAttInputRef}
+                type="file"
+                accept={ATTACH_ACCEPT}
+                className="sr-only"
+                aria-hidden="true"
+                tabIndex={-1}
+                onChange={(e) => void uploadDecisionAttachment(e.target.files?.[0])}
+              />
+              <button
+                type="button"
+                disabled={attUploading}
+                onClick={() => decAttInputRef.current?.click()}
+                className={`w-full flex items-center justify-center gap-2 rounded-xl border border-dashed border-app px-4 py-3 text-[13px] font-medium text-muted hover:bg-surface2 disabled:opacity-60 ${
+                  decisionAttachments.length > 0 ? 'mt-2' : ''
+                }`}
+              >
+                <Paperclip className="w-4 h-4" aria-hidden="true" />
+                {attUploading
+                  ? t('decisions.attachment.uploading')
+                  : t('decisions.attachment.add')}
+              </button>
+              {attError && (
+                <p
+                  role="alert"
+                  className="text-[13px] font-medium text-rose-600 dark:text-rose-400 mt-2"
+                >
+                  {attError}
+                </p>
+              )}
+            </div>
+
             {/* Soluciones */}
             <div>
               <p className="text-[12px] font-semibold tracking-wide uppercase text-faint mb-2">
@@ -311,96 +555,192 @@ export function DecisionModal({
               {solutions.length === 0 ? (
                 <p className="text-sm text-muted py-2">{t('decisions.modal.noSolutions')}</p>
               ) : (
-                <ul className="space-y-2.5">
-                  {solutions.map((s) => {
-                    const chosen = decision.chosen_solution_id === s.id;
-                    return (
-                      <li
-                        key={s.id}
-                        className={`flex items-start gap-3 rounded-xl border px-3.5 py-3 ${
-                          chosen ? 'border-brand bg-brand-soft' : 'border-app bg-surface2/50'
-                        }`}
-                      >
+                <MotionConfig reducedMotion="user">
+                  <ul className="space-y-2.5">
+                    {solutions.map((s) => {
+                      const chosen = decision.chosen_solution_id === s.id;
+                      return (
+                        <motion.li
+                          layout
+                          transition={{ type: 'spring', stiffness: 500, damping: 40, mass: 0.8 }}
+                          key={s.id}
+                          className={`flex items-start gap-3 rounded-xl border px-3.5 py-3 ${
+                            chosen ? 'border-brand bg-brand-soft' : 'border-app bg-surface2/50'
+                          }`}
+                        >
                         <Avatar name={s.proposer_username} color={s.proposer_color} size="lg" />
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <p className="text-[15px] font-medium">{s.title}</p>
-                            {chosen && (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-brand text-brandfg px-2 py-0.5 text-[11px] font-semibold">
-                                <Check className="w-3 h-3" aria-hidden="true" />
-                                {t('decisions.modal.chosen')}
-                              </span>
-                            )}
-                          </div>
-                          {s.description && (
-                            <p className="text-[13px] text-muted mt-0.5 break-words">
-                              {s.description}
-                            </p>
+                          {editingSolutionId === s.id ? (
+                            <div>
+                              <textarea
+                                ref={solutionEditRef}
+                                value={solutionDraft}
+                                maxLength={5000}
+                                rows={Math.min(12, Math.max(2, solutionDraft.split('\n').length + 1))}
+                                placeholder={t('decisions.modal.proposePlaceholder')}
+                                onChange={(e) => setSolutionDraft(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Escape') {
+                                    e.stopPropagation();
+                                    solutionCancelRef.current = true;
+                                    setEditingSolutionId(null);
+                                  }
+                                }}
+                                onBlur={() => {
+                                  if (solutionCancelRef.current) {
+                                    solutionCancelRef.current = false;
+                                    setEditingSolutionId(null);
+                                    return;
+                                  }
+                                  void handleSaveSolution(s.id, s.title, s.description);
+                                }}
+                                className="w-full px-3 py-2 rounded-lg bg-surface2 border border-app text-sm text-text focus:outline-none focus:border-brand resize-none"
+                              />
+                              {editError && (
+                                <p
+                                  role="alert"
+                                  className="text-[13px] font-medium text-rose-600 dark:text-rose-400 mt-1"
+                                >
+                                  {editError}
+                                </p>
+                              )}
+                            </div>
+                          ) : (
+                            <>
+                              <div className="flex items-center gap-2">
+                                <p
+                                  className={`font-medium ${
+                                    s.description
+                                      ? 'text-[17px] font-semibold uppercase'
+                                      : 'text-[15px]'
+                                  }`}
+                                >
+                                  {s.title}
+                                </p>
+                                {chosen && (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-brand text-brandfg px-2 py-0.5 text-[11px] font-semibold">
+                                    <Check className="w-3 h-3" aria-hidden="true" />
+                                    {t('decisions.modal.chosen')}
+                                  </span>
+                                )}
+                              </div>
+                              {s.description && (
+                                <p className="text-[13px] text-muted mt-0.5 break-words">
+                                  {s.description}
+                                </p>
+                              )}
+                              <p className="text-[12px] text-faint mt-0.5">
+                                {t('decisions.by', { name: s.proposer_username })}
+                              </p>
+                              {detail.attachments.some((a) => a.solution_id === s.id) && (
+                                <ul className="mt-2 space-y-1.5">
+                                  {detail.attachments
+                                    .filter((a) => a.solution_id === s.id)
+                                    .map((a) => (
+                                      <AttachmentRow
+                                        key={a.id}
+                                        att={a}
+                                        compact
+                                        canDelete={canDeleteAttachment(a)}
+                                        onDelete={deleteAttachment}
+                                      />
+                                    ))}
+                                </ul>
+                              )}
+                              {solAttError?.solutionId === s.id && (
+                                <p
+                                  role="alert"
+                                  className="text-[12px] font-medium text-rose-600 dark:text-rose-400 mt-1"
+                                >
+                                  {solAttError.message}
+                                </p>
+                              )}
+                            </>
                           )}
-                          <p className="text-[12px] text-faint mt-0.5">
-                            {t('decisions.by', { name: s.proposer_username })}
-                          </p>
                         </div>
                         <div className="flex items-center gap-1.5 shrink-0">
-                          {decision.status === 'open' && (
-                            <button
-                              type="button"
-                              onClick={() => void handleVote(s.id, s.my_vote)}
-                              className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[13px] font-semibold transition-colors ${
-                                s.my_vote
-                                  ? 'bg-brand text-brandfg'
-                                  : 'bg-surface border border-app text-muted hover:bg-surface2'
-                              }`}
-                              aria-label={t('decisions.votes', { count: s.votes })}
-                            >
-                              <ThumbsUp className="w-3.5 h-3.5" aria-hidden="true" />
-                              {s.votes}
-                            </button>
-                          )}
-                          {decision.status !== 'open' && (
-                            <span className="inline-flex items-center gap-1 text-[13px] font-semibold text-muted">
-                              <ThumbsUp className="w-3.5 h-3.5" aria-hidden="true" />
-                              {s.votes}
-                            </span>
-                          )}
-                          {decision.status === 'open' && canDecide && (
-                            <button
-                              type="button"
-                              onClick={() => setChooseTarget(s.id)}
-                              className="px-2.5 py-1.5 rounded-lg text-[12px] font-medium bg-surface border border-app text-muted hover:text-brand"
-                            >
-                              {t('decisions.modal.choose')}
-                            </button>
+                          {editingSolutionId !== s.id && (
+                            <>
+                              {(s.proposer_id === user?.id || user?.role === 'admin') && (
+                                <>
+                                  <button
+                                    type="button"
+                                    disabled={attUploading}
+                                    onClick={() => {
+                                      setSolAttTarget(s.id);
+                                      solAttInputRef.current?.click();
+                                    }}
+                                    className="w-8 h-8 rounded-lg text-faint hover:text-muted hover:bg-surface flex items-center justify-center disabled:opacity-60"
+                                    aria-label={t('decisions.attachment.add')}
+                                    title={t('decisions.attachment.add')}
+                                  >
+                                    <Paperclip className="w-3.5 h-3.5" aria-hidden="true" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => startEditSolution(s.id, s.title, s.description)}
+                                    className="w-8 h-8 rounded-lg text-faint hover:text-muted hover:bg-surface flex items-center justify-center"
+                                    aria-label={t('decisions.modal.editSolution')}
+                                    title={t('decisions.modal.editSolution')}
+                                  >
+                                    <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
+                                  </button>
+                                </>
+                              )}
+                              {decision.status === 'open' && (
+                                <button
+                                  type="button"
+                                  onClick={() => void handleVote(s.id, s.my_vote)}
+                                  className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[13px] font-semibold transition-colors ${
+                                    s.my_vote
+                                      ? 'bg-brand text-brandfg'
+                                      : 'bg-surface border border-app text-muted hover:bg-surface2'
+                                  }`}
+                                  aria-label={t('decisions.votes', { count: s.votes })}
+                                >
+                                  <ThumbsUp className="w-3.5 h-3.5" aria-hidden="true" />
+                                  {s.votes}
+                                </button>
+                              )}
+                              {decision.status !== 'open' && (
+                                <span className="inline-flex items-center gap-1 text-[13px] font-semibold text-muted">
+                                  <ThumbsUp className="w-3.5 h-3.5" aria-hidden="true" />
+                                  {s.votes}
+                                </span>
+                              )}
+                              {decision.status === 'open' && canDecide && (
+                                <button
+                                  type="button"
+                                  onClick={() => setChooseTarget(s.id)}
+                                  className="px-2.5 py-1.5 rounded-lg text-[12px] font-medium bg-surface border border-app text-muted hover:text-brand"
+                                >
+                                  {t('decisions.modal.choose')}
+                                </button>
+                              )}
+                            </>
                           )}
                         </div>
-                      </li>
-                    );
-                  })}
-                </ul>
+                      </motion.li>
+                      );
+                    })}
+                  </ul>
+                </MotionConfig>
               )}
 
               {/* Proponer solución */}
               {decision.status === 'open' && (
                 <form onSubmit={handlePropose} className="mt-3 space-y-2">
-                  <input
-                    type="text"
-                    value={solutionTitle}
-                    maxLength={200}
-                    onChange={(e) => setSolutionTitle(e.target.value)}
-                    placeholder={t('decisions.modal.proposePlaceholder')}
-                    className="w-full px-3 py-2 rounded-lg bg-surface2 border border-app text-sm outline-none focus:border-brand"
-                  />
                   <textarea
-                    value={solutionDesc}
+                    value={solutionText}
                     maxLength={5000}
-                    onChange={(e) => setSolutionDesc(e.target.value)}
-                    rows={1}
-                    placeholder={t('decisions.form.descriptionPlaceholder')}
+                    rows={2}
+                    onChange={(e) => setSolutionText(e.target.value)}
+                    placeholder={t('decisions.modal.proposePlaceholder')}
                     className="w-full px-3 py-2 rounded-lg bg-surface2 border border-app text-sm outline-none focus:border-brand resize-none"
                   />
                   <button
                     type="submit"
-                    disabled={proposing || !solutionTitle.trim()}
+                    disabled={proposing || !solutionText.split('\n')[0]?.trim()}
                     className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-brand text-brandfg text-[13px] font-semibold hover:brightness-110 disabled:opacity-60"
                   >
                     <Plus className="w-4 h-4" aria-hidden="true" />
@@ -416,6 +756,17 @@ export function DecisionModal({
                   {error}
                 </p>
               )}
+
+              {/* Input único para subidas a soluciones (el clip fija el destino) */}
+              <input
+                ref={solAttInputRef}
+                type="file"
+                accept={ATTACH_ACCEPT}
+                className="sr-only"
+                aria-hidden="true"
+                tabIndex={-1}
+                onChange={(e) => void uploadSolutionAttachment(e.target.files?.[0])}
+              />
             </div>
 
             {/* Acciones del creador */}

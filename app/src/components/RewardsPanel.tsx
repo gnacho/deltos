@@ -25,8 +25,21 @@ type ConfirmAction = { kind: 'redeem' | 'delete'; id: string } | null;
 
 /** Una línea del historial: concesión de puntos o canje, ordenables por fecha. */
 type HistoryItem =
-  | { kind: 'earned'; at: number; name: string; points: number; title: string }
+  | {
+      kind: 'earned';
+      at: number;
+      name: string;
+      points: number;
+      title: string;
+      reason: string;
+    }
   | { kind: 'redeemed'; at: number; name: string; cost: number; emoji: string; title: string };
+
+/** Clave i18n de la etiqueta de cada motivo de concesión no trivial. */
+const REASON_LABEL: Record<string, string> = {
+  decision_chosen: 'gamification.reasonDecisionChosen',
+  decision_vote: 'gamification.reasonDecisionVote',
+};
 
 function buildHistory(summary: GamificationSummary | null): HistoryItem[] {
   if (!summary) return [];
@@ -36,7 +49,8 @@ function buildHistory(summary: GamificationSummary | null): HistoryItem[] {
       at: e.created_at,
       name: e.display_name ?? e.username,
       points: e.points,
-      title: e.task_title ?? '?',
+      title: e.task_title ?? e.decision_title ?? '?',
+      reason: e.reason,
     })),
     ...summary.redemptions.map((r) => ({
       kind: 'redeemed' as const,
@@ -414,6 +428,9 @@ export default function RewardsPanel({ open, onClose }: Props) {
                         <span className="tnum font-semibold text-emerald-600 dark:text-emerald-400">
                           +{h.points}
                         </span>
+                        {REASON_LABEL[h.reason] && (
+                          <span className="text-faint"> · {t(REASON_LABEL[h.reason])}</span>
+                        )}
                         <span className="text-muted"> · {h.title}</span>
                         <span className="text-faint"> · {h.name}</span>
                       </span>
