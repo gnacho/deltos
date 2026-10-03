@@ -62,6 +62,7 @@ export default function TodayPage() {
       });
   };
 
+  const openRow = (task: Task) => openTask(task.id, 'tarea');
 
   const renderRow = (task: Task, extra?: ReactNode) => {
     const project = data.getProject(task.project_id);
