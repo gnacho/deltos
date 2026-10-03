@@ -34,6 +34,8 @@ interface CardProps {
   index: number;
   onOpen: (id: string) => void;
   onMove?: (id: string, toCol: ColumnId) => void;
+  /** Tabindex roving del tablero (el foco de teclado salta entre tarjetas). */
+  tabIndex?: number;
   /** Tarea archivada: sin drag, con acción de desarchivar. */
   archived?: boolean;
   /** Archivado manual (solo tarjetas en Hecho). */
@@ -46,7 +48,7 @@ interface CardProps {
  *  del título y contadores al pie. Es un div role=button (no un <button>)
  *  para poder anidar las acciones de archivar/desarchivar sin elementos
  *  interactivos anidados inválidos. */
-export function TaskCard({ task, project, index, onOpen, archived, onArchive, onUnarchive }: CardProps) {
+export function TaskCard({ task, project, index, onOpen, tabIndex = 0, archived, onArchive, onUnarchive }: CardProps) {
   const { t } = useTranslation();
   const done = task.column === 'hecho';
   const delay = Math.min(index, 10) * 40;
@@ -54,7 +56,7 @@ export function TaskCard({ task, project, index, onOpen, archived, onArchive, on
   return (
     <div
       role="button"
-      tabIndex={0}
+      tabIndex={tabIndex}
       data-task={archived ? undefined : task.id}
       data-archived={archived ? task.id : undefined}
       draggable={!archived}

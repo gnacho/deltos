@@ -18,6 +18,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { colorOf, COLUMN_ACCENT_RGB } from '@/lib/colors';
 import { announce } from '@/lib/announce';
 import { ProjectActions } from '@/components/ProjectActions';
+import { ShortcutsHelp } from '@/components/ShortcutsHelp';
 
 export default function BoardPage() {
   const { t } = useTranslation();
@@ -35,6 +36,10 @@ export default function BoardPage() {
   const [projectActionsOpen, setProjectActionsOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  /** Roving tabindex: una vez se navega con flechas, solo esa tarjeta es
+   *  alcanzable con Tab hasta que desaparece de la vista. */
+  const [focusId, setFocusId] = useState<string | null>(null);
 
   const activeFilterCount =
     filters.projects.size + filters.people.size + filters.priorities.size + filters.tags.size;
@@ -113,6 +118,116 @@ export default function BoardPage() {
   }, [visible]);
 
   const openCount = visible.filter((tk) => tk.column !== 'hecho').length;
+
+  /* ---------- Atajos de teclado del tablero (#256) ---------- */
+
+  /* Limpia el roving focus si la tarjeta deja de estar visible (filtro/borrado) */
+  useEffect(() => {
+    if (focusId && !visible.some((tk) => tk.id === focusId)) setFocusId(null);
+  }, [visible, focusId]);
+
+  useEffect(() => {
+    const isTyping = (el: Element | null) =>
+      el instanceof HTMLElement &&
+      (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
+
+    /* Tarjetas visibles del tablero escritorio (las móviles no llevan data-task
+       y las archivadas tampoco: la navegación las salta) */
+    const cards = () =>
+      Array.from(document.querySelectorAll<HTMLElement>('[data-task]')).filter(
+        (el) => el.offsetParent !== null,
+      );
+
+    const focusedCard = () =>
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement.closest<HTMLElement>('[data-task]')
+        : null;
+
+    const move = (dir: 'up' | 'down' | 'left' | 'right') => {
+      const cs = cards();
+      if (cs.length === 0) return;
+      const cur = focusedCard();
+      if (!cur) {
+        cs[0].focus();
+        setFocusId(cs[0].dataset.task ?? null);
+        return;
+      }
+      const cb = cur.getBoundingClientRect();
+      const cx = cb.left + cb.width / 2;
+      const cy = cb.top + cb.height / 2;
+      let best: HTMLElement | null = null;
+      let bestScore = Infinity;
+      for (const el of cs) {
+        if (el === cur) continue;
+        const r = el.getBoundingClientRect();
+        const dx = r.left + r.width / 2 - cx;
+        const dy = r.top + r.height / 2 - cy;
+        if (dir === 'left' && dx >= -1) continue;
+        if (dir === 'right' && dx <= 1) continue;
+        if (dir === 'up' && dy >= -1) continue;
+        if (dir === 'down' && dy <= 1) continue;
+        const primary = dir === 'left' || dir === 'right' ? Math.abs(dx) : Math.abs(dy);
+        const secondary = dir === 'left' || dir === 'right' ? Math.abs(dy) : Math.abs(dx);
+        const score = primary + secondary * 2.5;
+        if (score < bestScore) {
+          bestScore = score;
+          best = el;
+        }
+      }
+      if (best) {
+        best.focus();
+        setFocusId(best.dataset.task ?? null);
+      }
+    };
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      // Con cualquier modal abierto (tarea / crear / ayuda) el tablero no
+      // reacciona; Esc y ? los gestiona cada modal por su cuenta.
+      if (document.querySelector('[role="dialog"]')) return;
+      if (isTyping(document.activeElement)) return;
+      if (e.key === '?') {
+        e.preventDefault();
+        setHelpOpen(true);
+        return;
+      }
+      if (e.key === 'n' || e.key === 'N') {
+        e.preventDefault();
+        openNewTask({ projectId: isTodo ? undefined : view, column: seg });
+        return;
+      }
+      const c = focusedCard();
+      if (e.key === 'Enter') {
+        if (c?.dataset.task) {
+          e.preventDefault();
+          openTask(c.dataset.task);
+        }
+        return;
+      }
+      if (e.key === 'e' || e.key === 'E') {
+        if (c?.dataset.task) {
+          e.preventDefault();
+          openTask(c.dataset.task, 'detalles');
+        }
+        return;
+      }
+      if (e.key.startsWith('Arrow')) {
+        e.preventDefault();
+        move(
+          e.key === 'ArrowLeft'
+            ? 'left'
+            : e.key === 'ArrowRight'
+              ? 'right'
+              : e.key === 'ArrowUp'
+                ? 'up'
+                : 'down',
+        );
+      }
+    };
+
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [helpOpen, isTodo, view, seg, openNewTask, openTask]);
 
   /* ---------- DnD compartido (hook): antes de los early-returns ---------- */
 
@@ -488,6 +603,7 @@ export default function BoardPage() {
                       project={isTodo ? data.getProject(tk.project_id) : undefined}
                       index={i}
                       onOpen={(id) => openTask(id)}
+                      tabIndex={focusId === null || focusId === tk.id ? 0 : -1}
                       onArchive={col.id === 'hecho' ? doArchive : undefined}
                     />
                   ))}
@@ -566,6 +682,8 @@ export default function BoardPage() {
       {projectActionsOpen && project && (
         <ProjectActions project={project} onClose={() => setProjectActionsOpen(false)} />
       )}
+
+      {helpOpen && <ShortcutsHelp onClose={() => setHelpOpen(false)} />}
     </div>
   );
 }

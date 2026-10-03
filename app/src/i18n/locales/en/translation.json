@@ -882,5 +882,16 @@
     "historyEmpty": "No activity yet.",
     "earned": "+{{points}} · {{title}}",
     "redeemed": "{{name}} redeemed {{emoji}} {{title}}"
+  },
+  "shortcuts": {
+    "title": "Keyboard shortcuts",
+    "newTask": "New task",
+    "openTask": "Open task",
+    "editTask": "Edit task (Details)",
+    "navigate": "Move between cards",
+    "search": "Search",
+    "close": "Close / Cancel",
+    "openHelp": "Show this help",
+    "mobileHint": "No keyboard shortcuts on touch screens."
   }
 }
