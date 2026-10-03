@@ -47,6 +47,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   grows to fill it, markdown section headers rendered bold, and the
   confirmation actions pinned to the bottom. Mobile keeps the compact sheet.
 
+## [2.6.43] - 2026-10-03
+
+### Fixed
+
+- **Update dialog sized to the Pulse reference (#268).** The update dialog no
+  longer fills the screen: about 800x600 on desktop with the release notes
+  scrolling inside, and the page behind is now clearly blurred instead of
+  just dimmed.
+
 ## [Unreleased]
 
 ## [2.6.38] - 2026-09-14
