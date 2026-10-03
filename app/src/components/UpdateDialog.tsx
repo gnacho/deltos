@@ -177,7 +177,7 @@ export default function UpdateDialog({ open, onClose }: { open: boolean; onClose
       onClick={() => !busy && onClose()}
     >
       <div
-        className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-700 dark:bg-slate-900"
+        className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl md:flex md:h-[calc(100vh-2rem)] md:w-[calc(100vw-2rem)] md:max-w-none md:flex-col md:overflow-hidden dark:border-slate-700 dark:bg-slate-900"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-start justify-between gap-3">
@@ -198,7 +198,7 @@ export default function UpdateDialog({ open, onClose }: { open: boolean; onClose
         </div>
 
         {phase === 'confirm' && (
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-4 md:min-h-0 md:flex-1">
             <div className="flex items-center justify-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-800/60">
               <span className="font-mono text-sm text-slate-500 dark:text-slate-400">
                 {status?.current || '…'}
@@ -212,29 +212,38 @@ export default function UpdateDialog({ open, onClose }: { open: boolean; onClose
               {t('update.dialog.desc')}
             </p>
             {changelogLines.length > 0 && (
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-1.5 md:min-h-0 md:flex-1">
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                   {t('update.dialog.changelogTitle')}
                 </p>
-                <div className="max-h-44 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 dark:border-slate-700 dark:bg-slate-800/60">
+                <div className="max-h-44 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 md:min-h-0 md:max-h-none md:flex-1 dark:border-slate-700 dark:bg-slate-800/60">
                   <ul className="flex flex-col gap-1">
-                    {changelogLines.map((l, i) => (
-                      <li
-                        key={i}
-                        className="flex items-start gap-2 text-[12px] leading-snug text-slate-600 dark:text-slate-300"
-                      >
-                        <span
-                          className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-slate-400"
-                          aria-hidden
-                        />
-                        {l}
-                      </li>
-                    ))}
+                    {changelogLines.map((l, i) =>
+                      /^#{1,3}\s/.test(l) ? (
+                        <li
+                          key={i}
+                          className="pt-1 text-[12px] font-bold text-slate-900 first:pt-0 dark:text-white"
+                        >
+                          {l.replace(/^#{1,3}\s+/, '')}
+                        </li>
+                      ) : (
+                        <li
+                          key={i}
+                          className="flex items-start gap-2 text-[12px] leading-snug text-slate-600 dark:text-slate-300"
+                        >
+                          <span
+                            className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-slate-400"
+                            aria-hidden
+                          />
+                          {l}
+                        </li>
+                      ),
+                    )}
                   </ul>
                 </div>
               </div>
             )}
-            <div className="flex justify-end gap-2">
+            <div className="flex justify-end gap-2 md:mt-auto">
               <button
                 type="button"
                 onClick={onClose}
