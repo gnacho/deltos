@@ -403,7 +403,7 @@ export function PhotoCropDialog({
             type="button"
             onClick={onClose}
             aria-label={t('crop.close')}
-            className="w-8 h-8 rounded-lg text-muted hover:bg-surface2 flex items-center justify-center transition-colors"
+            className="w-8 h-8 rounded-lg text-muted hover:bg-surface2 hover:text-brand flex items-center justify-center transition-colors"
           >
             <X className="w-4 h-4" aria-hidden="true" />
           </button>

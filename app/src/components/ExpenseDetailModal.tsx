@@ -318,7 +318,7 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
             <button
               type="button"
               onClick={onClose}
-              className="w-10 h-10 rounded-lg text-muted hover:bg-surface2 flex items-center justify-center shrink-0"
+              className="w-10 h-10 rounded-lg text-muted hover:bg-surface2 hover:text-brand flex items-center justify-center shrink-0"
               aria-label={t('task.closeDetail')}
             >
               <X className="w-5 h-5" aria-hidden="true" />
