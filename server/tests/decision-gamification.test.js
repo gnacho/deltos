@@ -4,7 +4,7 @@
 // nullable, task_id deja de ser NOT NULL sin perder filas).
 import { describe, it, expect } from 'vitest'
 import { makeInstance, loginAdmin, loginUser, jsonReq } from './helpers.js'
-import { migrateSchema } from '../src/db.js'
+import { migrateSchema, SCHEMA } from '../src/db.js'
 
 const PASS = 'passwd1234567'
 
@@ -411,5 +411,9 @@ describe('migración gam_points_ledger (decision_id + task_id nullable)', () => 
     const me = balanceOf(s, 'admin')
     expect(me.balance).toBe(5 + 1 + 5) // task1 + decision_vote + task2
     expect(me.tasks_done_total).toBe(2) // solo las dos tareas
+  })
+
+  it('el índice de decisión NO vive en el SCHEMA (en BD viejas el CREATE INDEX revienta antes de migrar, lección #246 / issue #282)', () => {
+    expect(SCHEMA.includes('idx_gam_ledger_decision')).toBe(false)
   })
 })
