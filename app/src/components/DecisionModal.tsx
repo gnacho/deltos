@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X, Check, Plus, RotateCcw, ThumbsUp, Pencil } from 'lucide-react';
+import { motion, MotionConfig } from 'framer-motion';
 import type { FormEvent } from 'react';
 import { useData } from '@/data/data-context';
 import { useSession } from '@/auth/session-context';
@@ -349,16 +350,19 @@ export function DecisionModal({
               {solutions.length === 0 ? (
                 <p className="text-sm text-muted py-2">{t('decisions.modal.noSolutions')}</p>
               ) : (
-                <ul className="space-y-2.5">
-                  {solutions.map((s) => {
-                    const chosen = decision.chosen_solution_id === s.id;
-                    return (
-                      <li
-                        key={s.id}
-                        className={`flex items-start gap-3 rounded-xl border px-3.5 py-3 ${
-                          chosen ? 'border-brand bg-brand-soft' : 'border-app bg-surface2/50'
-                        }`}
-                      >
+                <MotionConfig reducedMotion="user">
+                  <ul className="space-y-2.5">
+                    {solutions.map((s) => {
+                      const chosen = decision.chosen_solution_id === s.id;
+                      return (
+                        <motion.li
+                          layout
+                          transition={{ type: 'spring', stiffness: 500, damping: 40, mass: 0.8 }}
+                          key={s.id}
+                          className={`flex items-start gap-3 rounded-xl border px-3.5 py-3 ${
+                            chosen ? 'border-brand bg-brand-soft' : 'border-app bg-surface2/50'
+                          }`}
+                        >
                         <Avatar name={s.proposer_username} color={s.proposer_color} size="lg" />
                         <div className="flex-1 min-w-0">
                           {editingSolutionId === s.id ? (
@@ -473,10 +477,11 @@ export function DecisionModal({
                             </>
                           )}
                         </div>
-                      </li>
-                    );
-                  })}
-                </ul>
+                      </motion.li>
+                      );
+                    })}
+                  </ul>
+                </MotionConfig>
               )}
 
               {/* Proponer solución */}

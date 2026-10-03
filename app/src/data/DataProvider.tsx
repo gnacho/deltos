@@ -739,20 +739,61 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [fetchDecisions, fetchDecisionDetail],
   );
 
+  /**
+   * Toggle optimista del voto en el detalle cacheado: marca my_vote en la
+   * solución objetivo (y lo quita de la anterior, pues el voto se MUEVE),
+   * ajusta contadores y reordena como el server (votes DESC, created_at ASC)
+   * para que la fila suba/baje con animación layout en el modal.
+   * solutionId null = retirar voto.
+   */
+  const applyOptimisticVote = useCallback(
+    (id: string, solutionId: string | null) => {
+      const detail = decisionDetailCache.current.get(id);
+      if (!detail) return;
+      decisionDetailCache.current.set(id, {
+        ...detail,
+        solutions: detail.solutions
+          .map((s) => {
+            if (solutionId !== null && s.id === solutionId) {
+              return s.my_vote ? s : { ...s, my_vote: true, votes: s.votes + 1 };
+            }
+            return s.my_vote ? { ...s, my_vote: false, votes: Math.max(0, s.votes - 1) } : s;
+          })
+          .sort((a, b) => b.votes - a.votes || a.created_at - b.created_at),
+      });
+      bump();
+    },
+    [bump],
+  );
+
   const voteDecision = useCallback(
     async (id: string, solutionId: string): Promise<void> => {
-      await apiVoteDecision(id, solutionId);
+      applyOptimisticVote(id, solutionId);
+      try {
+        await apiVoteDecision(id, solutionId);
+      } catch (err) {
+        decisionDetailCache.current.delete(id);
+        bump();
+        throw err;
+      }
       await fetchDecisionDetail(id);
     },
-    [fetchDecisionDetail],
+    [applyOptimisticVote, bump, fetchDecisionDetail],
   );
 
   const unvoteDecision = useCallback(
     async (id: string): Promise<void> => {
-      await apiUnvoteDecision(id);
+      applyOptimisticVote(id, null);
+      try {
+        await apiUnvoteDecision(id);
+      } catch (err) {
+        decisionDetailCache.current.delete(id);
+        bump();
+        throw err;
+      }
       await fetchDecisionDetail(id);
     },
-    [fetchDecisionDetail],
+    [applyOptimisticVote, bump, fetchDecisionDetail],
   );
 
   const chooseDecision = useCallback(
