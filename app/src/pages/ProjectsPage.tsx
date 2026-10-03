@@ -89,7 +89,7 @@ export default function ProjectsPage() {
             <div
               key={p.id}
               style={{ animationDelay: `${i * 50}ms` }}
-              className="card rounded-2xl bg-surface border border-app shadow-soft p-4 transition-transform duration-150 hover:-translate-y-0.5 hover:shadow-md"
+              className="card rounded-2xl bg-surface border border-app shadow-soft p-4 transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md hover:border-brand/50 group cursor-pointer"
             >
               <div className="flex items-start gap-2">
                 <button
@@ -106,13 +106,13 @@ export default function ProjectsPage() {
                     <span className="w-5 h-5 shrink-0 flex items-center justify-center text-muted" aria-hidden="true">
                       <ProjectIcon name={p.emoji} className="w-5 h-5" />
                     </span>
-                    <span className="flex-1 min-w-0 font-display font-semibold text-[16px] truncate">
+                    <span className="flex-1 min-w-0 font-display font-semibold text-[16px] truncate transition-colors group-hover:text-brand">
                       {p.name}
                     </span>
                     <span className="tnum text-[13px] text-muted shrink-0">
                       {t('projects.open', { count: open })}
                     </span>
-                    <span className="text-faint shrink-0">
+                    <span className="text-faint shrink-0 transition-colors group-hover:text-brand">
                       <ChevronRight className="w-4 h-4" aria-hidden="true" />
                     </span>
                   </span>

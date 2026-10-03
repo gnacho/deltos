@@ -4,6 +4,7 @@ import { NavLink, Link, Outlet, useLocation, useNavigate, useParams } from 'reac
 import { useTranslation } from 'react-i18next';
 import {
   LayoutGrid,
+  SquareCheck,
   Folder,
   ListTodo,
   Repeat,
@@ -777,10 +778,10 @@ export default function Layout() {
                 <span className="flex-1 text-left">{t('nav.trash')}</span>
               </NavLink>
             </div>
-            <div className="flex items-center justify-between px-2 pb-2">
+            <div className="mb-2 flex items-center justify-between rounded-xl px-2 py-1 transition-colors duration-150 hover:bg-hover">
               <Link
                 to="/projects"
-                className="text-[11px] font-semibold tracking-widest text-faint hover:text-muted"
+                className="flex flex-1 items-center pl-1 text-left text-[11px] font-semibold tracking-widest text-faint transition-colors duration-150 hover:text-muted"
                 aria-label={t('nav.projects')}
               >
                 {t('nav.projectsSection')}
@@ -789,9 +790,9 @@ export default function Layout() {
                 to="/projects"
                 aria-label={t('nav.projects')}
                 title={t('nav.projects')}
-                className="inline-flex w-7 h-7 items-center justify-center rounded-lg text-faint hover:bg-surface2 hover:text-text"
+                className="inline-flex w-7 h-7 items-center justify-center rounded-lg text-faint transition-colors duration-150 hover:text-text"
               >
-                <LayoutGrid className="w-4 h-4" aria-hidden="true" />
+                <SquareCheck className="w-4 h-4" aria-hidden="true" />
               </Link>
             </div>
             <div className="space-y-0.5">
