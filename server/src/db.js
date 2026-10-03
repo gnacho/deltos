@@ -9,7 +9,7 @@ const log = logger.child({ component: 'db' })
 
 // Esquema completo: base común (users/sessions/login_attempts/kv) + dominio Deltos.
 // Las fechas son epoch ms (INTEGER) salvo due_date, que es 'YYYY-MM-DD'.
-const SCHEMA = `
+export const SCHEMA = `
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   username TEXT UNIQUE NOT NULL,
@@ -403,7 +403,9 @@ CREATE TABLE IF NOT EXISTS gam_points_ledger (
 );
 CREATE INDEX IF NOT EXISTS idx_gam_ledger_user ON gam_points_ledger(user_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_gam_ledger_task ON gam_points_ledger(task_id, created_at);
-CREATE INDEX IF NOT EXISTS idx_gam_ledger_decision ON gam_points_ledger(decision_id, created_at);
+-- SIN indice por decision aqui: el SCHEMA corre ANTES de migrateSchema y en
+-- BD viejas la tabla aun no tiene esa columna (leccion #246, issue #282). Lo
+-- crea migrateSchema siempre.
 
 -- Recompensas canjeables con puntos (borrado lógico con active=0).
 CREATE TABLE IF NOT EXISTS gam_rewards (
@@ -627,6 +629,13 @@ export function migrateSchema(db) {
     db.exec('CREATE INDEX IF NOT EXISTS idx_gam_ledger_reverted ON gam_points_ledger(task_id, reverted_at)')
     log.info('schema_migrated', { table: 'gam_points_ledger', change: 'decision_id + task_id nullable' })
   }
+  // Indices del ledger SIEMPRE aqui, fuera del SCHEMA (issue #282, leccion
+  // #246): el SCHEMA corre antes de la migracion y en BD viejas la tabla aun
+  // no tiene decision_id. IF NOT EXISTS: barato y cubre nuevas y migradas.
+  db.exec('CREATE INDEX IF NOT EXISTS idx_gam_ledger_user ON gam_points_ledger(user_id, created_at)')
+  db.exec('CREATE INDEX IF NOT EXISTS idx_gam_ledger_task ON gam_points_ledger(task_id, created_at)')
+  db.exec('CREATE INDEX IF NOT EXISTS idx_gam_ledger_decision ON gam_points_ledger(decision_id, created_at)')
+  db.exec('CREATE INDEX IF NOT EXISTS idx_gam_ledger_reverted ON gam_points_ledger(task_id, reverted_at)')
   const gamLedgerIndexes = db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='gam_points_ledger'").all().map((r) => r.name)
   if (!gamLedgerIndexes.includes('idx_gam_ledger_reverted')) {
     db.exec('CREATE INDEX IF NOT EXISTS idx_gam_ledger_reverted ON gam_points_ledger(task_id, reverted_at)')
