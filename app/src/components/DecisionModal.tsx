@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X, Check, Plus, RotateCcw, ThumbsUp } from 'lucide-react';
 import type { FormEvent } from 'react';
@@ -35,8 +35,24 @@ export function DecisionModal({
   const [commentBody, setCommentBody] = useState('');
   const [commentSending, setCommentSending] = useState(false);
   const [commentError, setCommentError] = useState<string | null>(null);
+  const [descEditing, setDescEditing] = useState(false);
+  const [descDraft, setDescDraft] = useState('');
+  const descRef = useRef<HTMLTextAreaElement>(null);
+  const descCancelRef = useRef(false);
 
   const detail = data.getDecisionDetail(decisionId);
+
+  useEffect(() => {
+    if (descEditing && descRef.current) {
+      descRef.current.focus();
+      const len = descRef.current.value.length;
+      descRef.current.setSelectionRange(len, len);
+    }
+  }, [descEditing]);
+
+  useEffect(() => {
+    setDescEditing(false);
+  }, [decisionId]);
 
   useEffect(() => {
     const lastFocus = document.activeElement;
@@ -221,25 +237,70 @@ export function DecisionModal({
 
         <div className="flex-1 overflow-y-auto nice-scroll">
           <div className="px-5 lg:px-7 py-5 pb-8 space-y-6 max-w-2xl">
-            {/* Descripción editable */}
+            {/* Descripción: preview de solo lectura; clic para editar inline */}
             <div>
               <p className="text-[12px] font-semibold tracking-wide uppercase text-faint mb-1.5">
                 {t('decisions.modal.description')}
               </p>
-              <div className="mb-1.5">
-                <LazyMarkdown>{decision.description || ' '}</LazyMarkdown>
-              </div>
-              <textarea
-                defaultValue={decision.description}
-                onBlur={(e) => {
-                  if (e.target.value !== decision.description) {
-                    void patch({ description: e.target.value });
-                  }
-                }}
-                rows={2}
-                placeholder={t('decisions.form.descriptionPlaceholder')}
-                className="w-full px-3 py-2 rounded-lg bg-surface2 border border-app text-sm text-text focus:outline-none focus:border-brand resize-none"
-              />
+              {descEditing ? (
+                <textarea
+                  ref={descRef}
+                  value={descDraft}
+                  maxLength={5000}
+                  rows={Math.min(12, Math.max(2, descDraft.split('\n').length + 1))}
+                  placeholder={t('decisions.form.descriptionPlaceholder')}
+                  onChange={(e) => setDescDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') {
+                      e.stopPropagation();
+                      descCancelRef.current = true;
+                      setDescEditing(false);
+                    }
+                  }}
+                  onBlur={() => {
+                    setDescEditing(false);
+                    if (descCancelRef.current) {
+                      descCancelRef.current = false;
+                      return;
+                    }
+                    if (descDraft !== decision.description) {
+                      void patch({ description: descDraft });
+                    }
+                  }}
+                  className="w-full px-3 py-2 rounded-lg bg-surface2 border border-app text-sm text-text focus:outline-none focus:border-brand resize-none"
+                />
+              ) : decision.description.trim() !== '' ? (
+                <div
+                  role="button"
+                  tabIndex={0}
+                  aria-label={t('decisions.modal.description')}
+                  onClick={() => {
+                    setDescDraft(decision.description);
+                    setDescEditing(true);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setDescDraft(decision.description);
+                      setDescEditing(true);
+                    }
+                  }}
+                  className="cursor-text rounded-lg"
+                >
+                  <LazyMarkdown>{decision.description}</LazyMarkdown>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDescDraft(decision.description);
+                    setDescEditing(true);
+                  }}
+                  className="text-sm text-faint italic hover:text-muted"
+                >
+                  {t('decisions.form.descriptionPlaceholder')}
+                </button>
+              )}
             </div>
 
             {/* Soluciones */}
