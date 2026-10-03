@@ -17,6 +17,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   remains, the session extends and the cookie is re-issued, so active users are
   no longer logged out on a fixed schedule.
 
+## [2.6.41] - 2026-10-03
+
+### Added
+
+- **Today view (#254).** A new Today view groups overdue, due and completed
+  tasks so the daily standup with the board starts on one screen.
+- **Keyboard shortcuts for the board (#256).** Navigate and act on the board
+  from the keyboard, with a help overlay listing every binding.
+- **Anti-procrastination flag (#255).** Tasks that keep slipping their due
+  date get flagged, so repeatedly postponed work stops hiding in the board.
+
+### Changed
+
+- **Compact task cards (#258).** Task cards are decluttered and the project
+  name moved next to the priority; the task modal height now fits its content
+  instead of stretching.
+- **Dependency refresh (#259).** Routine stack review: React 19.3, Vite 8.3,
+  eslint 10, lucide-react 1.x, framer-motion 14, i18next 26.4 and the native
+  TypeScript 6 toolchain. No behaviour changes; build, lint, the server suite
+  and npm audit all stay green.
+
 ## [Unreleased]
 
 ## [2.6.38] - 2026-09-14
