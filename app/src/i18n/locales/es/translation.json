@@ -882,5 +882,16 @@
     "historyEmpty": "Todavía no hay actividad.",
     "earned": "+{{points}} · {{title}}",
     "redeemed": "{{name}} canjeó {{emoji}} {{title}}"
+  },
+  "shortcuts": {
+    "title": "Atajos de teclado",
+    "newTask": "Nueva tarea",
+    "openTask": "Abrir tarea",
+    "editTask": "Editar tarea (Detalles)",
+    "navigate": "Moverse entre tarjetas",
+    "search": "Buscar",
+    "close": "Cerrar / Cancelar",
+    "openHelp": "Ver esta ayuda",
+    "mobileHint": "En pantallas táctiles no hay atajos de teclado."
   }
 }
