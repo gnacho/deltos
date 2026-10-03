@@ -353,11 +353,27 @@ CREATE TABLE IF NOT EXISTS decision_activity_events (
   user_id TEXT REFERENCES users(id),
   type TEXT NOT NULL CHECK (type IN
     ('created','title','description','solution_added','solution_edited','solution_removed',
-     'voted','unchosen','chosen','comment','reopened','deleted')),
+     'voted','unchosen','chosen','comment','reopened','deleted','attachment')),
   data TEXT DEFAULT '{}',
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_decision_activity_decision ON decision_activity_events(decision_id, created_at);
+
+-- Adjuntos de decisiones: solution_id NULL = adjunto de la descripción; con
+-- valor, adjunto de esa solución. Patrón de attachments (nombre original +
+-- stored_name aleatorio en DATA_DIR/uploads).
+CREATE TABLE IF NOT EXISTS decision_attachments (
+  id TEXT PRIMARY KEY,
+  decision_id TEXT NOT NULL REFERENCES decisions(id) ON DELETE CASCADE,
+  solution_id TEXT REFERENCES decision_solutions(id) ON DELETE CASCADE,
+  filename TEXT NOT NULL,       -- nombre original mostrado al usuario
+  stored_name TEXT NOT NULL,    -- nombre aleatorio en disco (DATA_DIR/uploads)
+  size INTEGER NOT NULL,
+  mime TEXT DEFAULT 'application/octet-stream',
+  uploaded_by TEXT NOT NULL REFERENCES users(id),
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_decision_attachments_decision ON decision_attachments(decision_id);
 
 -- Idempotency: cache de respuestas POST para reintentos seguros (TTL 24h).
 CREATE TABLE IF NOT EXISTS idempotency_keys (
@@ -534,6 +550,36 @@ export function migrateSchema(db) {
     db.exec('CREATE INDEX IF NOT EXISTS idx_activity_task ON activity_events(task_id, created_at)')
     db.exec('CREATE INDEX IF NOT EXISTS idx_activity_created ON activity_events(created_at)')
     log.info('schema_migrated', { table: 'activity_events', change: 'type CHECK + project' })
+  }
+  // Adjuntos de decisiones: decision_activity_events.type gana 'attachment'
+  // (issue #279). SQLite no permite ALTER de CHECK → reconstrucción por tabla
+  // temporal, igual que activity_events. Protegido por el SQL actual de la
+  // tabla: si ya incluye 'attachment' (instalaciones nuevas), no se toca.
+  const decEvSql = db
+    .prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='decision_activity_events'")
+    .get()
+  if (decEvSql && !decEvSql.sql.includes("'attachment'")) {
+    db.transaction(() => {
+      db.exec(`
+        ALTER TABLE decision_activity_events RENAME TO decision_activity_events_old;
+        CREATE TABLE decision_activity_events (
+          id TEXT PRIMARY KEY,
+          decision_id TEXT REFERENCES decisions(id) ON DELETE CASCADE,
+          user_id TEXT REFERENCES users(id),
+          type TEXT NOT NULL CHECK (type IN
+            ('created','title','description','solution_added','solution_edited','solution_removed',
+             'voted','unchosen','chosen','comment','reopened','deleted','attachment')),
+          data TEXT DEFAULT '{}',
+          created_at INTEGER NOT NULL
+        );
+        INSERT INTO decision_activity_events (id, decision_id, user_id, type, data, created_at)
+          SELECT id, decision_id, user_id, type, data, created_at FROM decision_activity_events_old;
+        DROP TABLE decision_activity_events_old;
+      `)
+    })()
+    // El DROP de la tabla vieja se lleva el índice: recrearlo.
+    db.exec('CREATE INDEX IF NOT EXISTS idx_decision_activity_decision ON decision_activity_events(decision_id, created_at)')
+    log.info('schema_migrated', { table: 'decision_activity_events', change: 'type CHECK + attachment' })
   }
   let expenseCols = db.prepare('PRAGMA table_info(expenses)').all().map((c) => c.name)
   if (!expenseCols.includes('deleted_at')) {

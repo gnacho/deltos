@@ -5,6 +5,8 @@
 // httpError(), 201+Location al crear, 204 sin cuerpo en DELETE, transacción
 // cuando tocan >=2 tablas y hub.broadcast('decisions') al final de cada mutación.
 import crypto from 'node:crypto'
+import fs from 'node:fs'
+import path from 'node:path'
 import { z } from 'zod'
 import { zValidator } from '@hono/zod-validator'
 import { httpError, validationHook } from './errors.js'
@@ -14,6 +16,7 @@ import { logger } from './logger.js'
 const log = logger.child({ component: 'decisions' })
 
 const idParamSchema = z.object({ id: z.string().min(1).max(100) })
+const aidParamSchema = z.object({ aid: z.string().min(1).max(100) })
 const solutionParamSchema = z.object({ id: z.string().min(1).max(100), solutionId: z.string().min(1).max(100) })
 
 const createSchema = z.object({
@@ -49,6 +52,22 @@ const listQuerySchema = z.object({
   project_id: z.string().min(1).max(100).optional(),
   status: z.enum(['open', 'decided']).optional(),
 })
+
+// --- Adjuntos (issue #279) ---------------------------------------------------
+// Allowlist MÁS ESTRICTA que tareas/gastos: sin office ni comprimidos.
+const ALLOWED_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+  'image/svg+xml',
+  'text/plain',
+  'text/csv',
+  'application/json',
+  'application/pdf',
+])
+// Límite de adjuntos por decisión (constante local; el de tareas es kv).
+const MAX_ATTACHMENTS_PER_DECISION = 50
 
 // --- Membresía y permisos ---------------------------------------------------
 
@@ -179,6 +198,16 @@ function hydrateDetail(db, user, id) {
     )
     .all(id)
     .map((e) => ({ ...e, data: JSON.parse(e.data || '{}') }))
+  // Adjuntos en array plano (todos los de la decisión): solution_id distingue
+  // los de cada solución (NULL = adjuntos de la descripción).
+  const attachments = db
+    .prepare(
+      `SELECT a.id, a.decision_id, a.solution_id, a.filename, a.size, a.mime, a.created_at,
+              a.uploaded_by, u.username AS uploaded_by_username, u.color AS uploaded_by_color
+       FROM decision_attachments a LEFT JOIN users u ON u.id = a.uploaded_by
+       WHERE a.decision_id = ? ORDER BY a.created_at`
+    )
+    .all(id)
   const row = db
     .prepare(
       `SELECT d.*, u.username AS created_by_username, u.color AS created_by_color
@@ -203,12 +232,13 @@ function hydrateDetail(db, user, id) {
     solutions,
     comments,
     activity,
+    attachments,
   }
 }
 
 // --- Rutas ------------------------------------------------------------------
 
-export function registerDecisionRoutes(app, { hub }) {
+export function registerDecisionRoutes(app, { hub, uploadsDir }) {
   // --- Listar decisiones ---
   app.get('/api/decisions', zValidator('query', listQuerySchema, validationHook), (c) => {
     const db = c.get('db')
@@ -513,4 +543,142 @@ export function registerDecisionRoutes(app, { hub }) {
       return c.json({ ok: true, id: commentId }, 201)
     }
   )
+
+  // --- Adjuntos (issue #279) ---
+  // Subida multipart: cualquier miembro adjunta a la decisión (descripción);
+  // a una solución solo su autor o admin (coherente con editar la propia).
+  app.post(
+    '/api/decisions/:id/attachments',
+    zValidator('param', idParamSchema, validationHook),
+    async (c) => {
+      const db = c.get('db')
+      const user = c.get('user')
+      const id = c.req.valid('param').id
+      loadDecision(db, user, id)
+      // Multipart: no va por zValidator('json'); se validan presencia y tamaño.
+      const body = await c.req.parseBody().catch(() => null)
+      const file = body?.file
+      if (!file || typeof file.arrayBuffer !== 'function') {
+        httpError(400, ERROR_CODES.UPLOAD_FILE_REQUIRED)
+      }
+      if (file.size > c.get('maxUploadBytes')) {
+        httpError(413, ERROR_CODES.UPLOAD_TOO_LARGE)
+      }
+      const mime = String(file.type || 'application/octet-stream').slice(0, 100)
+      if (!ALLOWED_MIME_TYPES.has(mime)) {
+        httpError(415, ERROR_CODES.UPLOAD_INVALID_MIME)
+      }
+      const solutionId =
+        typeof body.solution_id === 'string' && body.solution_id.trim() ? body.solution_id.trim() : null
+      if (solutionId) {
+        const solution = db
+          .prepare('SELECT * FROM decision_solutions WHERE id = ? AND decision_id = ?')
+          .get(solutionId, id)
+        if (!solution) httpError(404, ERROR_CODES.SOLUTION_NOT_FOUND)
+        if (user.role !== 'admin' && solution.proposer_id !== user.id) {
+          httpError(403, ERROR_CODES.PROJECT_NOT_OWNER)
+        }
+      }
+      const currentCount = db
+        .prepare('SELECT COUNT(*) AS n FROM decision_attachments WHERE decision_id = ?')
+        .get(id).n
+      if (currentCount >= MAX_ATTACHMENTS_PER_DECISION) {
+        httpError(409, ERROR_CODES.ATTACHMENTS_LIMIT_EXCEEDED)
+      }
+      // Nombre aleatorio en disco; la extensión se sanea (solo alfanumérica, máx 10)
+      const ext = path.extname(file.name || '').replace(/[^a-zA-Z0-9.]/g, '').slice(0, 10)
+      const stored = `${crypto.randomUUID()}${ext}`
+      const buffer = Buffer.from(await file.arrayBuffer())
+      fs.mkdirSync(uploadsDir, { recursive: true })
+      fs.writeFileSync(path.join(uploadsDir, stored), buffer)
+
+      const attId = crypto.randomUUID()
+      const now = Date.now()
+      const filename = String(file.name || 'adjunto').slice(0, 200)
+      db.transaction(() => {
+        db.prepare(
+          `INSERT INTO decision_attachments (id, decision_id, solution_id, filename, stored_name, size, mime, uploaded_by, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ).run(attId, id, solutionId, filename, stored, buffer.length, mime, user.id, now)
+        db.prepare('UPDATE decisions SET updated_at = ? WHERE id = ?').run(now, id)
+        addDecisionEvent(db, id, user.id, 'attachment', {
+          filename,
+          ...(solutionId ? { solution_id: solutionId } : {}),
+        })
+      })()
+      hub.broadcast('decisions')
+      c.header('Location', `/api/decisions/attachments/${attId}`)
+      return c.json(
+        {
+          attachment: {
+            id: attId,
+            decision_id: id,
+            solution_id: solutionId,
+            filename,
+            size: buffer.length,
+            mime,
+            created_at: now,
+            uploaded_by: user.id,
+            uploaded_by_username: user.username,
+          },
+        },
+        201
+      )
+    }
+  )
+
+  // Descarga: solo miembros del proyecto de la decisión (404 para no revelar
+  // existencia, mismo criterio que adjuntos de tarea).
+  app.get('/api/decisions/attachments/:aid', zValidator('param', aidParamSchema, validationHook), (c) => {
+    const db = c.get('db')
+    const user = c.get('user')
+    const att = db
+      .prepare(
+        `SELECT a.*, d.project_id FROM decision_attachments a
+         JOIN decisions d ON d.id = a.decision_id WHERE a.id = ?`
+      )
+      .get(c.req.valid('param').aid)
+    if (!att || !isMember(db, user.id, att.project_id)) {
+      httpError(404, ERROR_CODES.ATTACHMENT_NOT_FOUND)
+    }
+    const filePath = path.join(uploadsDir, path.basename(att.stored_name))
+    if (!fs.existsSync(filePath)) httpError(404, ERROR_CODES.ATTACHMENT_FILE_MISSING)
+    c.header('Content-Type', att.mime || 'application/octet-stream')
+    c.header(
+      'Content-Disposition',
+      `attachment; filename*=UTF-8''${encodeURIComponent(att.filename)}`
+    )
+    return c.body(fs.readFileSync(filePath))
+  })
+
+  // Borrado: quien lo subió o admin.
+  app.delete('/api/decisions/attachments/:aid', zValidator('param', aidParamSchema, validationHook), (c) => {
+    const db = c.get('db')
+    const user = c.get('user')
+    const att = db
+      .prepare(
+        `SELECT a.*, d.project_id FROM decision_attachments a
+         JOIN decisions d ON d.id = a.decision_id WHERE a.id = ?`
+      )
+      .get(c.req.valid('param').aid)
+    if (!att) httpError(404, ERROR_CODES.ATTACHMENT_NOT_FOUND)
+    if (!isMember(db, user.id, att.project_id)) httpError(404, ERROR_CODES.ATTACHMENT_NOT_FOUND)
+    if (user.role !== 'admin' && att.uploaded_by !== user.id) {
+      httpError(403, ERROR_CODES.PROJECT_NOT_OWNER)
+    }
+    const filePath = path.join(uploadsDir, path.basename(att.stored_name))
+    try {
+      fs.unlinkSync(filePath)
+    } catch {}
+    db.transaction(() => {
+      db.prepare('DELETE FROM decision_attachments WHERE id = ?').run(att.id)
+      db.prepare('UPDATE decisions SET updated_at = ? WHERE id = ?').run(Date.now(), att.decision_id)
+      addDecisionEvent(db, att.decision_id, user.id, 'attachment', {
+        filename: att.filename,
+        removed: true,
+      })
+    })()
+    hub.broadcast('decisions')
+    return c.body(null, 204)
+  })
 }
