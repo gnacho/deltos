@@ -920,6 +920,8 @@
     "streak_one": "racha de {{count}} día",
     "streak_other": "racha de {{count}} días",
     "balance": "Saldo",
+    "reasonDecisionChosen": "solución elegida",
+    "reasonDecisionVote": "voto en decisión",
     "tasksDone_one": "{{count}} tarea completada",
     "tasksDone_other": "{{count}} tareas completadas",
     "rewardsTitle": "Recompensas",

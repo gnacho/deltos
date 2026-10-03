@@ -920,6 +920,8 @@
     "streak_one": "{{count}}-day streak",
     "streak_other": "{{count}}-day streak",
     "balance": "Balance",
+    "reasonDecisionChosen": "chosen solution",
+    "reasonDecisionVote": "decision vote",
     "tasksDone_one": "{{count}} task completed",
     "tasksDone_other": "{{count}} tasks completed",
     "rewardsTitle": "Rewards",
