@@ -4,6 +4,7 @@ import { NavLink, Link, Outlet, useLocation, useNavigate, useParams } from 'reac
 import { useTranslation } from 'react-i18next';
 import {
   LayoutGrid,
+  SquareCheck,
   Folder,
   ListTodo,
   Repeat,
@@ -791,7 +792,7 @@ export default function Layout() {
                 title={t('nav.projects')}
                 className="inline-flex w-7 h-7 items-center justify-center rounded-lg text-faint transition-colors duration-150 hover:text-text"
               >
-                <LayoutGrid className="w-4 h-4" aria-hidden="true" />
+                <SquareCheck className="w-4 h-4" aria-hidden="true" />
               </Link>
             </div>
             <div className="space-y-0.5">
