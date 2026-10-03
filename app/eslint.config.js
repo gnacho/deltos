@@ -19,6 +19,15 @@ export default tseslint.config(
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
+      // eslint 10 + react-hooks 7 trae las reglas del compilador de React
+      // (purity, set-state-in-effect, immutability...): demasiado ruido sobre
+      // código existente validado; se desactivan para mantener el lint
+      // equivalente al de eslint 9 + react-hooks 5.
+      'react-hooks/purity': 'off',
+      'react-hooks/set-state-in-effect': 'off',
+      'react-hooks/immutability': 'off',
+      'react-hooks/preserve-manual-memoization': 'off',
+      'react-hooks/exhaustive-deps': 'warn',
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
     },
   },
