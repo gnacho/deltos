@@ -262,16 +262,19 @@ export function DecisionModal({
   const handleSaveSolution = async (solutionId: string, originalTitle: string, originalDescription: string) => {
     const [first, ...rest] = solutionDraft.split('\n');
     const title = (first ?? '').trim().slice(0, 200);
-    if (!title) return;
     const description = rest.join('\n').trim();
-    if (title === originalTitle && description === originalDescription) return;
-    try {
-      await data.patchSolution(decision.id, solutionId, { title, description });
-      setEditingSolutionId(null);
-      setEditError(null);
-    } catch (err) {
-      setEditError(apiErrorText(err, t('common.error')));
+    // El clic fuera siempre cierra el modo edicion: se guarda solo si hay
+    // titulo valido y algo cambio; si falla el guardado se anuncia, pero no
+    // se retiene al usuario en edicion (debe poder votar de nuevo).
+    if (title && (title !== originalTitle || description !== originalDescription)) {
+      try {
+        await data.patchSolution(decision.id, solutionId, { title, description });
+        setEditError(null);
+      } catch (err) {
+        announce(apiErrorText(err, t('common.error')));
+      }
     }
+    setEditingSolutionId(null);
   };
 
   const handleVote = async (solutionId: string, myVote: boolean) => {    try {
