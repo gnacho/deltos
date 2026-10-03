@@ -780,7 +780,7 @@ export default function Layout() {
             <div className="flex items-center justify-between px-2 pb-2">
               <Link
                 to="/projects"
-                className="-ml-2 inline-flex items-center rounded-lg px-2 py-1 text-[11px] font-semibold tracking-widest text-faint transition-colors duration-150 hover:bg-hover hover:text-muted"
+                className="-ml-2 mr-1 flex flex-1 items-center rounded-lg px-2 py-1 text-left text-[11px] font-semibold tracking-widest text-faint transition-colors duration-150 hover:bg-hover hover:text-muted"
                 aria-label={t('nav.projects')}
               >
                 {t('nav.projectsSection')}
