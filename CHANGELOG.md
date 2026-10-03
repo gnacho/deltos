@@ -5,6 +5,22 @@ All notable changes to Deltos are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.45] - 2026-10-03
+
+### Fixed
+
+- **Upgrade crash on existing databases (#282).** v2.6.44 created the new
+  gam_points_ledger index inside the schema template, which runs before the
+  migrations; upgrading an existing database failed at startup with
+  "no such column: decision_id" and the service crash-looped. The index is
+  now created by the migrations (idempotent, covers fresh and existing
+  installs), with a regression test so it cannot ship in the schema again.
+  Fresh installs were never affected.
+- **Project icon fallback (#272).** Projects whose stored icon name is not in
+  the catalog (e.g. "folder" from old installs) rendered the raw name as
+  overlapping text; unknown names now fall back to a neutral folder icon and
+  legacy emoji values keep rendering as before.
+
 ## [2.6.44] - 2026-10-03
 
 ### Added
