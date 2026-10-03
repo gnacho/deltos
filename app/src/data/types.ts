@@ -86,6 +86,8 @@ export interface Task {
   created_by: string;
   created_at: number;
   updated_at: number;
+  /** epoch ms de la última entrada en 'hecho'; null si nunca se completó. */
+  done_at: number | null;
   archived_at: number | null; // epoch ms; null = activa en el tablero
   labels: Label[];
   counts: { comments: number; attachments: number };

@@ -117,7 +117,7 @@ export default function RoutinesPage() {
 
   const edit = (s: RecurringSeries) => {
     if (!s.active_task_id) return;
-    openTask(s.active_task_id, 'detalles');
+    openTask(s.active_task_id, 'tarea');
   };
 
   const projectDot = (p: { color: string }) => (

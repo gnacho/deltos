@@ -30,6 +30,7 @@
   },
   "nav": {
     "todo": "Tasks",
+    "today": "Today",
     "projects": "Projects",
     "activity": "Activity",
     "settings": "Settings",
@@ -130,6 +131,7 @@
   "task": {
     "tabs": {
       "label": "Detail sections",
+      "tarea": "Task",
       "detalles": "Details",
       "adjuntos": "Attachments",
       "comentarios": "Comments",
@@ -149,6 +151,7 @@
     "labelError": "Could not create the label",
     "description": "Description",
     "descriptionPlaceholder": "Add a description…",
+    "markdownHint": "Markdown supported",
     "titleLabel": "Title",
     "titlePlaceholder": "Task title",
     "moveTo": "Move to",
@@ -830,6 +833,22 @@
     "resumeAria": "Resume series {{title}}",
     "edit": "Edit",
     "editAria": "Edit series {{title}}"
+  },
+  "today": {
+    "title": "Today",
+    "subtitle": "{{date}}",
+    "complete": "Complete",
+    "completeAria": "Complete task {{title}}",
+    "completeError": "Could not complete \"{{title}}\"",
+    "openAria": "Open task {{title}}",
+    "emptyAll": "Nothing pending or done today.",
+    "groups": {
+      "overdue": "Overdue",
+      "dueToday": "Due today",
+      "doneToday": "Done today"
+    },
+    "overdueDays_one": "{{count}} day overdue",
+    "overdueDays_other": "{{count}} days overdue"
   },
   "gamification": {
     "points": "points",

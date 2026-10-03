@@ -30,6 +30,7 @@
   },
   "nav": {
     "todo": "Tareas",
+    "today": "Hoy",
     "projects": "Proyectos",
     "activity": "Actividad",
     "settings": "Ajustes",
@@ -130,6 +131,7 @@
   "task": {
     "tabs": {
       "label": "Secciones del detalle",
+      "tarea": "Tarea",
       "detalles": "Detalles",
       "adjuntos": "Adjuntos",
       "comentarios": "Comentarios",
@@ -149,6 +151,7 @@
     "labelError": "No se ha podido crear la etiqueta",
     "description": "Descripción",
     "descriptionPlaceholder": "Añade una descripción…",
+    "markdownHint": "Admite Markdown",
     "titleLabel": "Título",
     "titlePlaceholder": "Título de la tarea",
     "moveTo": "Mover a",
@@ -830,6 +833,22 @@
     "resumeAria": "Reanudar serie {{title}}",
     "edit": "Editar",
     "editAria": "Editar serie {{title}}"
+  },
+  "today": {
+    "title": "Hoy",
+    "subtitle": "{{date}}",
+    "complete": "Completar",
+    "completeAria": "Completar tarea {{title}}",
+    "completeError": "No se pudo completar «{{title}}»",
+    "openAria": "Abrir tarea {{title}}",
+    "emptyAll": "Nada pendiente ni completado hoy.",
+    "groups": {
+      "overdue": "Vencidas",
+      "dueToday": "Vencen hoy",
+      "doneToday": "Hechas hoy"
+    },
+    "overdueDays_one": "lleva {{count}} día",
+    "overdueDays_other": "lleva {{count}} días"
   },
   "gamification": {
     "points": "puntos",

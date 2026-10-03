@@ -289,6 +289,7 @@ function hydrateTasks(db, whereSql = '', params = []) {
     created_by: t.created_by,
     created_at: t.created_at,
     updated_at: t.updated_at,
+    done_at: t.done_at ?? null,
     archived_at: t.archived_at ?? null,
     labels: byTask.get(t.id) || [],
     counts: { comments: t.comments_count, attachments: t.attachments_count },
