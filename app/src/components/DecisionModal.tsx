@@ -27,8 +27,7 @@ export function DecisionModal({
   const { t } = useTranslation();
   const data = useData();
   const { user } = useSession();
-  const [solutionTitle, setSolutionTitle] = useState('');
-  const [solutionDesc, setSolutionDesc] = useState('');
+  const [solutionText, setSolutionText] = useState('');
   const [proposing, setProposing] = useState(false);
   const [chooseTarget, setChooseTarget] = useState<string | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
@@ -109,14 +108,15 @@ export function DecisionModal({
 
   const handlePropose = async (e: FormEvent) => {
     e.preventDefault();
-    const text = solutionTitle.trim();
+    const [title, ...rest] = solutionText.split('\n');
+    const text = (title ?? '').trim().slice(0, 200);
     if (!text || proposing) return;
+    const description = rest.join('\n').trim();
     setProposing(true);
     setError(null);
     try {
-      await data.addSolution(decision.id, text, solutionDesc.trim() || undefined);
-      setSolutionTitle('');
-      setSolutionDesc('');
+      await data.addSolution(decision.id, text, description || undefined);
+      setSolutionText('');
     } catch (err) {
       setError(apiErrorText(err, t('common.error')));
     } finally {
@@ -324,7 +324,15 @@ export function DecisionModal({
                         <Avatar name={s.proposer_username} color={s.proposer_color} size="lg" />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
-                            <p className="text-[15px] font-medium">{s.title}</p>
+                            <p
+                              className={`font-medium ${
+                                s.description
+                                  ? 'text-[17px] font-semibold uppercase'
+                                  : 'text-[15px]'
+                              }`}
+                            >
+                              {s.title}
+                            </p>
                             {chosen && (
                               <span className="inline-flex items-center gap-1 rounded-full bg-brand text-brandfg px-2 py-0.5 text-[11px] font-semibold">
                                 <Check className="w-3 h-3" aria-hidden="true" />
@@ -382,25 +390,17 @@ export function DecisionModal({
               {/* Proponer solución */}
               {decision.status === 'open' && (
                 <form onSubmit={handlePropose} className="mt-3 space-y-2">
-                  <input
-                    type="text"
-                    value={solutionTitle}
-                    maxLength={200}
-                    onChange={(e) => setSolutionTitle(e.target.value)}
-                    placeholder={t('decisions.modal.proposePlaceholder')}
-                    className="w-full px-3 py-2 rounded-lg bg-surface2 border border-app text-sm outline-none focus:border-brand"
-                  />
                   <textarea
-                    value={solutionDesc}
+                    value={solutionText}
                     maxLength={5000}
-                    onChange={(e) => setSolutionDesc(e.target.value)}
-                    rows={1}
-                    placeholder={t('decisions.form.descriptionPlaceholder')}
+                    rows={2}
+                    onChange={(e) => setSolutionText(e.target.value)}
+                    placeholder={t('decisions.modal.proposePlaceholder')}
                     className="w-full px-3 py-2 rounded-lg bg-surface2 border border-app text-sm outline-none focus:border-brand resize-none"
                   />
                   <button
                     type="submit"
-                    disabled={proposing || !solutionTitle.trim()}
+                    disabled={proposing || !solutionText.split('\n')[0]?.trim()}
                     className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-brand text-brandfg text-[13px] font-semibold hover:brightness-110 disabled:opacity-60"
                   >
                     <Plus className="w-4 h-4" aria-hidden="true" />
