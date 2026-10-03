@@ -12,6 +12,12 @@ import { zValidator } from '@hono/zod-validator'
 import { httpError, validationHook } from './errors.js'
 import { ERROR_CODES } from './error-codes.js'
 import { logger } from './logger.js'
+import {
+  grantChosenPoints,
+  revertChosenPoints,
+  grantVotePoints,
+  revertVotePoints,
+} from './routes-gamification.js'
 
 const log = logger.child({ component: 'decisions' })
 
@@ -395,15 +401,20 @@ export function registerDecisionRoutes(app, { hub, uploadsDir }) {
       httpError(403, ERROR_CODES.PROJECT_NOT_OWNER)
     }
     const wasChosen = current.chosen_solution_id === solutionId
+    let revertedPoints = 0
     db.transaction(() => {
       db.prepare('DELETE FROM decision_solutions WHERE id = ?').run(solutionId)
       if (wasChosen) {
         db.prepare(
           "UPDATE decisions SET chosen_solution_id = NULL, status = 'open', decided_at = NULL, updated_at = ? WHERE id = ?"
         ).run(Date.now(), id)
+        // Borrar la solución elegida reabre la decisión: los puntos del autor
+        // se revierten igual que en un reopen (issue #280).
+        revertedPoints = revertChosenPoints(db, id)
       }
       addDecisionEvent(db, id, user.id, 'solution_removed', { solution_id: solutionId, reopen: wasChosen })
     })()
+    if (revertedPoints > 0) hub.broadcast('gamification')
     hub.broadcast('decisions')
     return c.body(null, 204)
   })
@@ -424,6 +435,7 @@ export function registerDecisionRoutes(app, { hub, uploadsDir }) {
         httpError(404, ERROR_CODES.SOLUTION_NOT_FOUND)
       }
       const now = Date.now()
+      let granted = 0
       db.transaction(() => {
         db.prepare(
           `INSERT INTO decision_votes (decision_id, solution_id, user_id, created_at)
@@ -431,8 +443,11 @@ export function registerDecisionRoutes(app, { hub, uploadsDir }) {
            ON CONFLICT(decision_id, user_id) DO UPDATE SET solution_id = excluded.solution_id, created_at = excluded.created_at`
         ).run(id, solutionId, user.id, now)
         db.prepare('UPDATE decisions SET updated_at = ? WHERE id = ?').run(now, id)
+        // +1 por votar, una vez por usuario y decisión (mover el voto no repite).
+        granted = grantVotePoints(db, id, user.id)
         addDecisionEvent(db, id, user.id, 'voted', { solution_id: solutionId })
       })()
+      if (granted > 0) hub.broadcast('gamification')
       hub.broadcast('decisions')
       return c.json({ ok: true })
     }
@@ -444,11 +459,15 @@ export function registerDecisionRoutes(app, { hub, uploadsDir }) {
     const user = c.get('user')
     const id = c.req.valid('param').id
     loadDecision(db, user, id)
+    let reverted = 0
     db.transaction(() => {
       db.prepare('DELETE FROM decision_votes WHERE decision_id = ? AND user_id = ?').run(id, user.id)
       db.prepare('UPDATE decisions SET updated_at = ? WHERE id = ?').run(Date.now(), id)
+      // El +1 del voto se revierte; volver a votar lo reactiva.
+      reverted = revertVotePoints(db, id, user.id)
       addDecisionEvent(db, id, user.id, 'voted', { removed: true })
     })()
+    if (reverted > 0) hub.broadcast('gamification')
     hub.broadcast('decisions')
     return c.body(null, 204)
   })
@@ -466,6 +485,8 @@ export function registerDecisionRoutes(app, { hub, uploadsDir }) {
       requireCanDecide(db, user, current)
       const { solution_id: solutionId } = c.req.valid('json')
       const now = Date.now()
+      let gamGranted = 0
+      let gamReverted = 0
       db.transaction(() => {
         if (solutionId) {
           if (!db.prepare('SELECT id FROM decision_solutions WHERE id = ? AND decision_id = ?').get(solutionId, id)) {
@@ -474,14 +495,20 @@ export function registerDecisionRoutes(app, { hub, uploadsDir }) {
           db.prepare(
             "UPDATE decisions SET chosen_solution_id = ?, status = 'decided', decided_at = ?, updated_at = ? WHERE id = ?"
           ).run(solutionId, now, now, id)
+          // Puntos del autor (issue #280): primero revierte la elección
+          // anterior (si la había) y luego concede al autor de la nueva.
+          gamReverted += revertChosenPoints(db, id)
+          gamGranted += grantChosenPoints(db, current, solutionId)
           addDecisionEvent(db, id, user.id, 'chosen', { solution_id: solutionId })
         } else {
           db.prepare(
             "UPDATE decisions SET chosen_solution_id = NULL, status = 'decided', decided_at = ?, updated_at = ? WHERE id = ?"
           ).run(now, now, id)
+          gamReverted += revertChosenPoints(db, id)
           addDecisionEvent(db, id, user.id, 'unchosen', {})
         }
       })()
+      if (gamGranted > 0 || gamReverted > 0) hub.broadcast('gamification')
       hub.broadcast('decisions')
       return c.json({ decision: hydrateDetail(db, user, id).decision })
     }
@@ -494,12 +521,16 @@ export function registerDecisionRoutes(app, { hub, uploadsDir }) {
     const id = c.req.valid('param').id
     const current = loadDecision(db, user, id)
     requireCanDecide(db, user, current)
+    let reverted = 0
     db.transaction(() => {
       db.prepare(
         "UPDATE decisions SET status = 'open', chosen_solution_id = NULL, decided_at = NULL, updated_at = ? WHERE id = ?"
       ).run(Date.now(), id)
+      // Los puntos del autor elegido se revierten; los del voto NO se tocan.
+      reverted = revertChosenPoints(db, id)
       addDecisionEvent(db, id, user.id, 'reopened', {})
     })()
+    if (reverted > 0) hub.broadcast('gamification')
     hub.broadcast('decisions')
     return c.json({ decision: hydrateDetail(db, user, id).decision })
   })
