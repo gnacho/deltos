@@ -5,6 +5,39 @@ All notable changes to Deltos are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.44] - 2026-10-03
+
+### Added
+
+- **Decisions section (#270).** Collaborative problem solving: any member raises
+  a decision, everyone refines the description and comments, members propose
+  solutions, each member casts one advisory vote, and the creator picks the
+  winning solution (or closes without one). Live updates over SSE, markdown
+  descriptions, comment thread and activity events included.
+- **Decision attachments (#279).** Attach images, plain text files and PDFs to
+  a decision or to individual solutions. Uploads validate type and size,
+  downloads are restricted to project members, and uploader or admin can
+  delete.
+- **Decision points (#280).** The author of the chosen solution earns +8
+  points and casting a vote earns +1 (once per decision, moving the vote does
+  not repeat). Reopening or choosing another solution reverts the points.
+  Integrated with the existing points ledger, weekly karma, streaks and the
+  rewards history.
+- **Accent hover on dialog close buttons (#278).** The X that closes any
+  dialog now tints with the accent color on hover.
+
+### Changed
+
+- **Single-field solution input (#275).** Proposing a solution is now one
+  field: the first line becomes the title (rendered larger and uppercase when
+  there is more text) and the rest the description.
+- **Edit only your own solutions (#276).** Solution authors get an inline
+  editor with the same single-field pattern; clicking outside closes the
+  editor, saving when changed.
+- **Animated vote reordering (#277).** Moving your vote toggles the thumbs-up
+  immediately and animates the affected solution to its new rank, respecting
+  reduced-motion preferences.
+
 ## [2.6.40] - 2026-09-19
 
 ### Fixed
