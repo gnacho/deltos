@@ -21,6 +21,8 @@ import {
   chooseDecision as apiChooseDecision,
   reopenDecision as apiReopenDecision,
   addDecisionComment as apiAddDecisionComment,
+  uploadDecisionAttachment as apiUploadDecisionAttachment,
+  deleteDecisionAttachment as apiDeleteDecisionAttachment,
 } from './api-client';
 import {
   DataContext,
@@ -820,6 +822,24 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [fetchDecisions, fetchDecisionDetail],
   );
 
+  // Adjuntos de decisión: el broadcast 'decision.changed' ya refresca el cache
+  // en los demás clientes; aquí basta con re-pedir el detalle local.
+  const uploadDecisionAttachment = useCallback(
+    async (id: string, file: File, solutionId?: string): Promise<void> => {
+      await apiUploadDecisionAttachment(id, file, solutionId);
+      await fetchDecisionDetail(id);
+    },
+    [fetchDecisionDetail],
+  );
+
+  const deleteDecisionAttachment = useCallback(
+    async (id: string, attachmentId: string): Promise<void> => {
+      await apiDeleteDecisionAttachment(attachmentId);
+      await fetchDecisionDetail(id);
+    },
+    [fetchDecisionDetail],
+  );
+
   /* value = useMemo([version, ...]) con closures nuevas (regla a fuego). */
   const value = useMemo<DataApi>(() => {
     const getBootstrapData = () => bootstrapRef.current;
@@ -917,6 +937,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       chooseDecision,
       reopenDecision,
       addDecisionComment,
+      uploadDecisionAttachment,
+      deleteDecisionAttachment,
     };
     // version es el disparador de recomputo (cachés en refs)
     // eslint-disable-next-line react-hooks/exhaustive-deps

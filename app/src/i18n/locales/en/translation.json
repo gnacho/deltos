@@ -747,6 +747,14 @@
       "comments": "Comments",
       "noSolutions": "No solutions yet. Propose the first one.",
       "editSolution": "Edit solution"
+    },
+    "attachment": {
+      "add": "Attach file",
+      "uploading": "Uploading…",
+      "uploadError": "Could not upload the file",
+      "uploadedBy": "uploaded by {{name}}",
+      "download": "Download {{name}}",
+      "delete": "Delete {{name}}"
     }
   },
   "demo": {
@@ -789,6 +797,7 @@
     "UPLOAD_FILE_REQUIRED": "The file to upload is missing",
     "UPLOAD_TOO_LARGE": "The file exceeds the upload limit",
     "UPLOAD_INVALID_MIME": "This file type is not allowed",
+    "ATTACHMENTS_LIMIT_EXCEEDED": "Attachment limit reached",
     "SETTINGS_PROD_ONLY": "This setting can only be changed from the production session",
     "SSE_TOO_MANY_CLIENTS": "Too many connected clients",
     "PUSH_NOT_CONFIGURED": "The server has no push keys configured",

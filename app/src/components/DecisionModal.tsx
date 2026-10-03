@@ -1,6 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Check, Plus, RotateCcw, ThumbsUp, Pencil } from 'lucide-react';
+import {
+  X,
+  Check,
+  Plus,
+  RotateCcw,
+  ThumbsUp,
+  Pencil,
+  Paperclip,
+  Download,
+  Trash2,
+  FileText,
+  FileImage,
+  File as FileIcon,
+} from 'lucide-react';
 import { motion, MotionConfig } from 'framer-motion';
 import type { FormEvent } from 'react';
 import { useData } from '@/data/data-context';
@@ -10,6 +23,93 @@ import LazyMarkdown from '@/components/LazyMarkdown';
 import { relTime } from '@/i18n';
 import { apiErrorText } from '@/lib/errors';
 import { announce } from '@/lib/announce';
+import { fmtSize } from '@/lib/format';
+import type { DecisionAttachment } from '@/data/types';
+
+/** Allowlist del input de subida (el server revalida el MIME real). */
+const ATTACH_ACCEPT = 'image/*,.txt,.csv,.json,.pdf';
+
+/** Icono según mime (allowlist de decisiones: imágenes, texto y pdf). */
+function iconForAttachment(mime: string) {
+  if (mime.startsWith('image/')) {
+    return {
+      Icon: FileImage,
+      cls: 'bg-violet-100 text-violet-600 dark:bg-violet-500/15 dark:text-violet-300',
+    };
+  }
+  if (mime === 'application/pdf' || mime.startsWith('text/') || mime === 'application/json') {
+    return {
+      Icon: FileText,
+      cls: 'bg-rose-100 text-rose-600 dark:bg-rose-500/15 dark:text-rose-300',
+    };
+  }
+  return { Icon: FileIcon, cls: 'bg-sky-100 text-sky-600 dark:bg-sky-500/15 dark:text-sky-300' };
+}
+
+/** Fila de adjunto de decisión: icono, nombre, meta, descargar y papelera. */
+function AttachmentRow({
+  att,
+  compact = false,
+  canDelete,
+  onDelete,
+}: {
+  att: DecisionAttachment;
+  compact?: boolean;
+  canDelete: boolean;
+  onDelete: (att: DecisionAttachment) => void | Promise<void>;
+}) {
+  const { t, i18n } = useTranslation();
+  const [deleting, setDeleting] = useState(false);
+  const { Icon, cls } = iconForAttachment(att.mime);
+  return (
+    <li
+      className={`flex items-center gap-2 ${
+        compact ? 'min-w-0' : 'rounded-xl border border-app px-3 py-2'
+      }`}
+    >
+      <span
+        className={`${
+          compact ? 'w-6 h-6 rounded-md' : 'w-8 h-8 rounded-lg'
+        } ${cls} flex items-center justify-center shrink-0`}
+      >
+        <Icon className="w-3.5 h-3.5" aria-hidden="true" />
+      </span>
+      <span className="flex-1 min-w-0">
+        <span className={`block font-medium truncate ${compact ? 'text-[12px]' : 'text-[13px]'}`}>
+          {att.filename}
+        </span>
+        <span className="block text-[11px] text-faint truncate">
+          {fmtSize(att.size, i18n.language)}
+          {!compact && att.uploaded_by_username
+            ? ` · ${t('decisions.attachment.uploadedBy', { name: att.uploaded_by_username })}`
+            : ''}
+        </span>
+      </span>
+      <a
+        href={`/api/decisions/attachments/${encodeURIComponent(att.id)}`}
+        download={att.filename}
+        className="w-7 h-7 rounded-lg text-muted hover:bg-surface2 flex items-center justify-center shrink-0"
+        aria-label={t('decisions.attachment.download', { name: att.filename })}
+      >
+        <Download className="w-3.5 h-3.5" aria-hidden="true" />
+      </a>
+      {canDelete && (
+        <button
+          type="button"
+          disabled={deleting}
+          onClick={() => {
+            setDeleting(true);
+            void Promise.resolve(onDelete(att)).finally(() => setDeleting(false));
+          }}
+          className="w-7 h-7 rounded-lg text-faint hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10 flex items-center justify-center shrink-0 disabled:opacity-60"
+          aria-label={t('decisions.attachment.delete', { name: att.filename })}
+        >
+          <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+        </button>
+      )}
+    </li>
+  );
+}
 
 /**
  * Modal de detalle de una decisión: título y descripción editables inline,
@@ -44,6 +144,14 @@ export function DecisionModal({
   const [editError, setEditError] = useState<string | null>(null);
   const solutionEditRef = useRef<HTMLTextAreaElement>(null);
   const solutionCancelRef = useRef(false);
+  const [attUploading, setAttUploading] = useState(false);
+  const [attError, setAttError] = useState<string | null>(null);
+  const decAttInputRef = useRef<HTMLInputElement>(null);
+  // Subida a soluciones: input file único + solución destino elegida al pulsar
+  // el clip de cada fila (null = la subida en curso no es de solución).
+  const [solAttTarget, setSolAttTarget] = useState<string | null>(null);
+  const [solAttError, setSolAttError] = useState<{ solutionId: string; message: string } | null>(null);
+  const solAttInputRef = useRef<HTMLInputElement>(null);
 
   const detail = data.getDecisionDetail(decisionId);
 
@@ -66,6 +174,8 @@ export function DecisionModal({
   useEffect(() => {
     setEditingSolutionId(null);
     setEditError(null);
+    setSolAttError(null);
+    setAttError(null);
   }, [decisionId]);
 
   useEffect(() => {
@@ -214,6 +324,52 @@ export function DecisionModal({
     }
   };
 
+  // --- Adjuntos ---
+  const decisionAttachments = detail.attachments.filter((a) => a.solution_id === null);
+  const canDeleteAttachment = (a: DecisionAttachment) =>
+    user?.id === a.uploaded_by || user?.role === 'admin';
+
+  const uploadDecisionAttachment = async (file: File | undefined) => {
+    if (!file) return;
+    setAttError(null);
+    setAttUploading(true);
+    try {
+      await data.uploadDecisionAttachment(decision.id, file);
+    } catch (err) {
+      setAttError(apiErrorText(err, t('decisions.attachment.uploadError')));
+    } finally {
+      setAttUploading(false);
+      if (decAttInputRef.current) decAttInputRef.current.value = '';
+    }
+  };
+
+  const uploadSolutionAttachment = async (file: File | undefined) => {
+    const target = solAttTarget;
+    if (!file || !target) return;
+    setSolAttError(null);
+    setAttUploading(true);
+    try {
+      await data.uploadDecisionAttachment(decision.id, file, target);
+    } catch (err) {
+      setSolAttError({
+        solutionId: target,
+        message: apiErrorText(err, t('decisions.attachment.uploadError')),
+      });
+    } finally {
+      setAttUploading(false);
+      setSolAttTarget(null);
+      if (solAttInputRef.current) solAttInputRef.current.value = '';
+    }
+  };
+
+  const deleteAttachment = async (att: DecisionAttachment) => {
+    try {
+      await data.deleteDecisionAttachment(decision.id, att.id);
+    } catch {
+      announce(t('common.error'));
+    }
+  };
+
   const statusBadge =
     decision.status === 'decided' ? (
       <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300 px-2.5 py-0.5 text-[12px] font-medium">
@@ -342,6 +498,52 @@ export function DecisionModal({
               )}
             </div>
 
+            {/* Adjuntos de la decisión: añade cualquier miembro; borra quien subió o admin */}
+            <div>
+              {decisionAttachments.length > 0 && (
+                <ul className="space-y-2">
+                  {decisionAttachments.map((a) => (
+                    <AttachmentRow
+                      key={a.id}
+                      att={a}
+                      canDelete={canDeleteAttachment(a)}
+                      onDelete={deleteAttachment}
+                    />
+                  ))}
+                </ul>
+              )}
+              <input
+                ref={decAttInputRef}
+                type="file"
+                accept={ATTACH_ACCEPT}
+                className="sr-only"
+                aria-hidden="true"
+                tabIndex={-1}
+                onChange={(e) => void uploadDecisionAttachment(e.target.files?.[0])}
+              />
+              <button
+                type="button"
+                disabled={attUploading}
+                onClick={() => decAttInputRef.current?.click()}
+                className={`w-full flex items-center justify-center gap-2 rounded-xl border border-dashed border-app px-4 py-3 text-[13px] font-medium text-muted hover:bg-surface2 disabled:opacity-60 ${
+                  decisionAttachments.length > 0 ? 'mt-2' : ''
+                }`}
+              >
+                <Paperclip className="w-4 h-4" aria-hidden="true" />
+                {attUploading
+                  ? t('decisions.attachment.uploading')
+                  : t('decisions.attachment.add')}
+              </button>
+              {attError && (
+                <p
+                  role="alert"
+                  className="text-[13px] font-medium text-rose-600 dark:text-rose-400 mt-2"
+                >
+                  {attError}
+                </p>
+              )}
+            </div>
+
             {/* Soluciones */}
             <div>
               <p className="text-[12px] font-semibold tracking-wide uppercase text-faint mb-2">
@@ -427,6 +629,29 @@ export function DecisionModal({
                               <p className="text-[12px] text-faint mt-0.5">
                                 {t('decisions.by', { name: s.proposer_username })}
                               </p>
+                              {detail.attachments.some((a) => a.solution_id === s.id) && (
+                                <ul className="mt-2 space-y-1.5">
+                                  {detail.attachments
+                                    .filter((a) => a.solution_id === s.id)
+                                    .map((a) => (
+                                      <AttachmentRow
+                                        key={a.id}
+                                        att={a}
+                                        compact
+                                        canDelete={canDeleteAttachment(a)}
+                                        onDelete={deleteAttachment}
+                                      />
+                                    ))}
+                                </ul>
+                              )}
+                              {solAttError?.solutionId === s.id && (
+                                <p
+                                  role="alert"
+                                  className="text-[12px] font-medium text-rose-600 dark:text-rose-400 mt-1"
+                                >
+                                  {solAttError.message}
+                                </p>
+                              )}
                             </>
                           )}
                         </div>
@@ -434,15 +659,30 @@ export function DecisionModal({
                           {editingSolutionId !== s.id && (
                             <>
                               {(s.proposer_id === user?.id || user?.role === 'admin') && (
-                                <button
-                                  type="button"
-                                  onClick={() => startEditSolution(s.id, s.title, s.description)}
-                                  className="w-8 h-8 rounded-lg text-faint hover:text-muted hover:bg-surface flex items-center justify-center"
-                                  aria-label={t('decisions.modal.editSolution')}
-                                  title={t('decisions.modal.editSolution')}
-                                >
-                                  <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
-                                </button>
+                                <>
+                                  <button
+                                    type="button"
+                                    disabled={attUploading}
+                                    onClick={() => {
+                                      setSolAttTarget(s.id);
+                                      solAttInputRef.current?.click();
+                                    }}
+                                    className="w-8 h-8 rounded-lg text-faint hover:text-muted hover:bg-surface flex items-center justify-center disabled:opacity-60"
+                                    aria-label={t('decisions.attachment.add')}
+                                    title={t('decisions.attachment.add')}
+                                  >
+                                    <Paperclip className="w-3.5 h-3.5" aria-hidden="true" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => startEditSolution(s.id, s.title, s.description)}
+                                    className="w-8 h-8 rounded-lg text-faint hover:text-muted hover:bg-surface flex items-center justify-center"
+                                    aria-label={t('decisions.modal.editSolution')}
+                                    title={t('decisions.modal.editSolution')}
+                                  >
+                                    <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
+                                  </button>
+                                </>
                               )}
                               {decision.status === 'open' && (
                                 <button
@@ -513,6 +753,17 @@ export function DecisionModal({
                   {error}
                 </p>
               )}
+
+              {/* Input único para subidas a soluciones (el clip fija el destino) */}
+              <input
+                ref={solAttInputRef}
+                type="file"
+                accept={ATTACH_ACCEPT}
+                className="sr-only"
+                aria-hidden="true"
+                tabIndex={-1}
+                onChange={(e) => void uploadSolutionAttachment(e.target.files?.[0])}
+              />
             </div>
 
             {/* Acciones del creador */}

@@ -329,11 +329,26 @@ export interface DecisionActivityEvent {
   created_at: number;
 }
 
+/** Adjunto de decisión: solution_id null = adjunto de la descripción. */
+export interface DecisionAttachment {
+  id: string;
+  decision_id: string;
+  solution_id: string | null;
+  filename: string;
+  size: number;
+  mime: string;
+  created_at: number;
+  uploaded_by: string;
+  uploaded_by_username: string | null;
+  uploaded_by_color: string | null;
+}
+
 export interface DecisionDetail {
   decision: Decision;
   solutions: DecisionSolution[];
   comments: DecisionComment[];
   activity: DecisionActivityEvent[];
+  attachments: DecisionAttachment[];
 }
 
 export interface DecisionInput {
