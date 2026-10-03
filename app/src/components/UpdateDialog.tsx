@@ -170,14 +170,14 @@ export default function UpdateDialog({ open, onClose }: { open: boolean; onClose
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-md"
       role="dialog"
       aria-modal="true"
       aria-label={t('update.dialog.title')}
       onClick={() => !busy && onClose()}
     >
       <div
-        className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl md:flex md:h-[calc(100vh-2rem)] md:w-[calc(100vw-2rem)] md:max-w-none md:flex-col md:overflow-hidden dark:border-slate-700 dark:bg-slate-900"
+        className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl md:flex md:h-[600px] md:max-h-[calc(100vh-2rem)] md:w-[800px] md:max-w-[calc(100vw-2rem)] md:flex-col md:overflow-hidden dark:border-slate-700 dark:bg-slate-900"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-start justify-between gap-3">
