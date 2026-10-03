@@ -38,6 +38,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   TypeScript 6 toolchain. No behaviour changes; build, lint, the server suite
   and npm audit all stay green.
 
+## [2.6.42] - 2026-10-03
+
+### Changed
+
+- **Bigger update dialog (#266).** The in-app update dialog now opens
+  near-viewport on desktop with the release notes in a scrollable area that
+  grows to fill it, markdown section headers rendered bold, and the
+  confirmation actions pinned to the bottom. Mobile keeps the compact sheet.
+
 ## [Unreleased]
 
 ## [2.6.38] - 2026-09-14
