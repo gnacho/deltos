@@ -13,6 +13,7 @@ import {
   Cake,
   Calendar,
   Camera,
+  Folder,
   Car,
   ChefHat,
   Clipboard,
@@ -192,8 +193,10 @@ const ICON_MAP: Record<string, LucideIcon> = {
 
 /**
  * Icono de proyecto. Si `name` es un icono Lucide del catálogo lo pinta como
- * SVG (sigue el tema); si no (emoji legado guardado antes del selector) lo
- * renderiza como texto para no perder datos.
+ * SVG (sigue el tema); si es un emoji legado guardado antes del selector lo
+ * renderiza como texto (corto y sin letras: no destroza el layout); y si es
+ * cualquier otro valor desconocido (p.ej. "folder" de instalaciones antiguas)
+ * cae a un icono neutro en vez de pintar el nombre crudo solapado (#272).
  */
 export function ProjectIcon({
   name,
@@ -206,9 +209,15 @@ export function ProjectIcon({
   if (Icon) {
     return <Icon className={className} aria-hidden="true" />;
   }
-  return (
-    <span className={className} aria-hidden="true">
-      {name}
-    </span>
-  );
+  // Emoji legado: grafemas cortos sin letras ni números se pintan tal cual.
+  const emojiLike = name.length > 0 && name.length <= 8 && !/[\p{L}\p{N}]/u.test(name);
+  if (emojiLike) {
+    return (
+      <span className={className} aria-hidden="true">
+        {name}
+      </span>
+    );
+  }
+  const Fallback = Folder;
+  return <Fallback className={className} aria-hidden="true" />;
 }
