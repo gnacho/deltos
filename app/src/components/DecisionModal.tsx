@@ -746,7 +746,7 @@ export function DecisionModal({
 
               {/* Proponer solución */}
               {decision.status === 'open' && (
-                <form onSubmit={handlePropose} className="mt-3 space-y-2">
+                <form id="propose-solution" onSubmit={handlePropose} className="mt-3">
                   <textarea
                     value={solutionText}
                     maxLength={5000}
@@ -755,16 +755,50 @@ export function DecisionModal({
                     placeholder={t('decisions.modal.proposePlaceholder')}
                     className="w-full px-3 py-2 rounded-lg bg-surface2 border border-app text-sm outline-none focus:border-brand resize-none"
                   />
+                </form>
+              )}
+              {/* Fila de acciones: proponer + acciones del creador, todas juntas */}
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                {decision.status === 'open' && (
                   <button
                     type="submit"
+                    form="propose-solution"
                     disabled={proposing || !solutionText.split('\n')[0]?.trim()}
                     className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-brand text-brandfg text-[13px] font-semibold hover:brightness-110 disabled:opacity-60"
                   >
                     <Plus className="w-4 h-4" aria-hidden="true" />
                     {t('decisions.modal.propose')}
                   </button>
-                </form>
-              )}
+                )}
+                {canDecide &&
+                  (decision.status === 'decided' ? (
+                    <button
+                      type="button"
+                      onClick={() => void handleReopen()}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-medium bg-surface border border-app text-muted hover:bg-surface2"
+                    >
+                      <RotateCcw className="w-4 h-4" aria-hidden="true" />
+                      {t('decisions.modal.reopen')}
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setChooseTarget(null)}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-medium bg-surface border border-app text-muted hover:bg-surface2"
+                      >
+                        {t('decisions.modal.closeWithoutSolution')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleDelete()}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10"
+                      >
+                        {t('common.delete')}
+                      </button>
+                    </>
+                  ))}
+              </div>
               {error && (
                 <p
                   role="alert"
@@ -786,46 +820,18 @@ export function DecisionModal({
               />
             </div>
 
-            {/* Acciones del creador */}
-            {canDecide && (
-              <div className="border-t border-app pt-4 flex flex-wrap items-center gap-2">
-                {decision.status === 'decided' ? (
-                  <button
-                    type="button"
-                    onClick={() => void handleReopen()}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-medium bg-surface border border-app text-muted hover:bg-surface2"
-                  >
-                    <RotateCcw className="w-4 h-4" aria-hidden="true" />
-                    {t('decisions.modal.reopen')}
-                  </button>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => setChooseTarget(null)}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-medium bg-surface border border-app text-muted hover:bg-surface2"
-                    >
-                      {t('decisions.modal.closeWithoutSolution')}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void handleDelete()}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10"
-                    >
-                      {t('common.delete')}
-                    </button>
-                  </>
-                )}
-              </div>
-            )}
-
             {/* Comentarios */}
             <div className="border-t border-app pt-4">
-              <p className="text-[12px] font-semibold tracking-wide uppercase text-faint mb-3">
-                {t('decisions.modal.comments')}
-              </p>
-              {comments.length > 0 ? (
-                <ul className="space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[12px] font-semibold tracking-wide uppercase text-faint">
+                  {t('decisions.modal.comments')}
+                </p>
+                {comments.length === 0 && (
+                  <p className="text-[13px] text-faint">{t('comments.empty')}</p>
+                )}
+              </div>
+              {comments.length > 0 && (
+                <ul className="space-y-4 mt-4">
                   {comments.map((c) => (
                     <li key={c.id} className="flex gap-3">
                       <Avatar name={c.username ?? '?'} color={c.user_color} size="lg" />
@@ -841,21 +847,24 @@ export function DecisionModal({
                     </li>
                   ))}
                 </ul>
-              ) : (
-                <p className="text-[14px] text-faint py-4 text-center">{t('comments.empty')}</p>
               )}
 
-              <form onSubmit={handleAddComment} className="flex gap-3 items-center mt-4">
-                <Avatar name={user?.username ?? '?'} color={user?.color ?? 'slate'} size="lg" />
-                <div className="flex-1 flex items-center gap-2 rounded-xl border border-app bg-surface px-3.5 py-2">
-                  <input
-                    type="text"
-                    value={commentBody}
-                    maxLength={5000}
-                    onChange={(e) => setCommentBody(e.target.value)}
-                    placeholder={t('comments.placeholder')}
-                    className="flex-1 bg-transparent text-[14px] outline-none placeholder:text-faint"
-                  />
+              {/* Input y boton en dos filas: en movil la fila unica sobrepasa el ancho */}
+              <form onSubmit={handleAddComment} className="mt-4 space-y-2">
+                <div className="flex gap-3 items-center">
+                  <Avatar name={user?.username ?? '?'} color={user?.color ?? 'slate'} size="lg" />
+                  <div className="flex-1 flex items-center rounded-xl border border-app bg-surface px-3.5 py-2">
+                    <input
+                      type="text"
+                      value={commentBody}
+                      maxLength={5000}
+                      onChange={(e) => setCommentBody(e.target.value)}
+                      placeholder={t('comments.placeholder')}
+                      className="flex-1 bg-transparent text-[14px] outline-none placeholder:text-faint"
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end">
                   <button
                     type="submit"
                     disabled={commentSending || !commentBody.trim()}
