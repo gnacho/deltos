@@ -5,6 +5,28 @@ All notable changes to Deltos are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.46] - 2026-10-04
+
+### Changed
+
+- **Decision modal readability (#284).** Solution cards now keep the vote and
+  the edit button on the title row and let the text use the full width, while
+  the choose button (accent color, creator/admin only) floats on the author
+  line. Attachments are only visible while editing: the description keeps its
+  attachments inside the description editor and each solution keeps its own
+  attachments inside its editor, and upload/download/delete controls no longer
+  steal the focus from the editing textarea. Propose, close and delete share
+  one action row, and both comment forms (decisions and tasks) stack the
+  submit button below the input so narrow screens no longer overflow.
+- **Closing a decision (#284).** The close action is now a short "Close" label
+  with an armed double confirmation, and its confirmation dialog simply states
+  the decision will be closed without a chosen solution (the "may not be the
+  most voted" note stays only on the choose dialog).
+- **Settings on mobile (#285).** The mobile header now links to Settings where
+  the theme toggle used to be, and the header theme toggle is removed (theme
+  stays in Settings > Appearance). The bottom navigation goes back to six
+  items. Desktop is unchanged.
+
 ## [2.6.45] - 2026-10-03
 
 ### Fixed
