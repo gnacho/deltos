@@ -88,6 +88,8 @@ function AttachmentRow({
       <a
         href={`/api/decisions/attachments/${encodeURIComponent(att.id)}`}
         download={att.filename}
+        // Evita robar el foco al textarea de edicion (lo cerraria en blur)
+        onMouseDown={(e) => e.preventDefault()}
         className="w-7 h-7 rounded-lg text-muted hover:bg-surface2 flex items-center justify-center shrink-0"
         aria-label={t('decisions.attachment.download', { name: att.filename })}
       >
@@ -97,6 +99,7 @@ function AttachmentRow({
         <button
           type="button"
           disabled={deleting}
+          onMouseDown={(e) => e.preventDefault()}
           onClick={() => {
             setDeleting(true);
             void Promise.resolve(onDelete(att)).finally(() => setDeleting(false));
@@ -501,7 +504,9 @@ export function DecisionModal({
               )}
             </div>
 
-            {/* Adjuntos de la decisión: añade cualquier miembro; borra quien subió o admin */}
+            {/* Adjuntos de la decisión: solo visibles mientras se edita la descripción.
+                Añade cualquier miembro; borra quien subió o admin. */}
+            {descEditing && (
             <div>
               {decisionAttachments.length > 0 && (
                 <ul className="space-y-2">
@@ -527,6 +532,8 @@ export function DecisionModal({
               <button
                 type="button"
                 disabled={attUploading}
+                // Evita robar el foco al textarea de edicion (lo cerraria en blur)
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => decAttInputRef.current?.click()}
                 className={`w-full flex items-center justify-center gap-2 rounded-xl border border-dashed border-app px-4 py-3 text-[13px] font-medium text-muted hover:bg-surface2 disabled:opacity-60 ${
                   decisionAttachments.length > 0 ? 'mt-2' : ''
@@ -546,6 +553,7 @@ export function DecisionModal({
                 </p>
               )}
             </div>
+            )}
 
             {/* Soluciones */}
             <div>
@@ -604,24 +612,77 @@ export function DecisionModal({
                                   {editError}
                                 </p>
                               )}
+                              {/* Adjuntos de la solución: solo visibles mientras se edita */}
+                              {detail.attachments.some((a) => a.solution_id === s.id) && (
+                                <ul className="mt-2 space-y-2">
+                                  {detail.attachments
+                                    .filter((a) => a.solution_id === s.id)
+                                    .map((a) => (
+                                      <AttachmentRow
+                                        key={a.id}
+                                        att={a}
+                                        canDelete={canDeleteAttachment(a)}
+                                        onDelete={deleteAttachment}
+                                      />
+                                    ))}
+                                </ul>
+                              )}
+                              <button
+                                type="button"
+                                disabled={attUploading}
+                                // Evita robar el foco al textarea de edicion (lo cerraria en blur)
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={() => {
+                                  setSolAttTarget(s.id);
+                                  solAttInputRef.current?.click();
+                                }}
+                                className={`w-full flex items-center justify-center gap-2 rounded-xl border border-dashed border-app px-4 py-2.5 text-[13px] font-medium text-muted hover:bg-surface2 disabled:opacity-60 mt-2`}
+                              >
+                                <Paperclip className="w-4 h-4" aria-hidden="true" />
+                                {attUploading && solAttTarget === s.id
+                                  ? t('decisions.attachment.uploading')
+                                  : t('decisions.attachment.add')}
+                              </button>
+                              {solAttError?.solutionId === s.id && (
+                                <p
+                                  role="alert"
+                                  className="text-[12px] font-medium text-rose-600 dark:text-rose-400 mt-1"
+                                >
+                                  {solAttError.message}
+                                </p>
+                              )}
                             </div>
                           ) : (
                             <>
-                              <div className="flex items-center gap-2">
-                                <p
-                                  className={`font-medium ${
-                                    s.description
-                                      ? 'text-[17px] font-semibold uppercase'
-                                      : 'text-[15px]'
-                                  }`}
-                                >
-                                  {s.title}
-                                </p>
-                                {chosen && (
-                                  <span className="inline-flex items-center gap-1 rounded-full bg-brand text-brandfg px-2 py-0.5 text-[11px] font-semibold">
-                                    <Check className="w-3 h-3" aria-hidden="true" />
-                                    {t('decisions.modal.chosen')}
-                                  </span>
+                              {/* Fila superior: titulo + editar */}
+                              <div className="flex items-start gap-1.5">
+                                <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
+                                  <p
+                                    className={`font-medium break-words ${
+                                      s.description
+                                        ? 'text-[17px] font-semibold uppercase'
+                                        : 'text-[15px]'
+                                    }`}
+                                  >
+                                    {s.title}
+                                  </p>
+                                  {chosen && (
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-brand text-brandfg px-2 py-0.5 text-[11px] font-semibold">
+                                      <Check className="w-3 h-3" aria-hidden="true" />
+                                      {t('decisions.modal.chosen')}
+                                    </span>
+                                  )}
+                                </div>
+                                {(s.proposer_id === user?.id || user?.role === 'admin') && (
+                                  <button
+                                    type="button"
+                                    onClick={() => startEditSolution(s.id, s.title, s.description)}
+                                    className="w-8 h-8 rounded-lg text-faint hover:text-muted hover:bg-surface flex items-center justify-center shrink-0"
+                                    aria-label={t('decisions.modal.editSolution')}
+                                    title={t('decisions.modal.editSolution')}
+                                  >
+                                    <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
+                                  </button>
                                 )}
                               </div>
                               {s.description && (
@@ -632,21 +693,6 @@ export function DecisionModal({
                               <p className="text-[12px] text-faint mt-0.5">
                                 {t('decisions.by', { name: s.proposer_username })}
                               </p>
-                              {detail.attachments.some((a) => a.solution_id === s.id) && (
-                                <ul className="mt-2 space-y-1.5">
-                                  {detail.attachments
-                                    .filter((a) => a.solution_id === s.id)
-                                    .map((a) => (
-                                      <AttachmentRow
-                                        key={a.id}
-                                        att={a}
-                                        compact
-                                        canDelete={canDeleteAttachment(a)}
-                                        onDelete={deleteAttachment}
-                                      />
-                                    ))}
-                                </ul>
-                              )}
                               {solAttError?.solutionId === s.id && (
                                 <p
                                   role="alert"
@@ -655,68 +701,38 @@ export function DecisionModal({
                                   {solAttError.message}
                                 </p>
                               )}
-                            </>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          {editingSolutionId !== s.id && (
-                            <>
-                              {(s.proposer_id === user?.id || user?.role === 'admin') && (
-                                <>
+                              {/* Fila inferior: like + elegir */}
+                              <div className="mt-2.5 pt-2.5 border-t border-app/40 flex items-center gap-2 flex-wrap">
+                                {decision.status === 'open' ? (
                                   <button
                                     type="button"
-                                    disabled={attUploading}
-                                    onClick={() => {
-                                      setSolAttTarget(s.id);
-                                      solAttInputRef.current?.click();
-                                    }}
-                                    className="w-8 h-8 rounded-lg text-faint hover:text-muted hover:bg-surface flex items-center justify-center disabled:opacity-60"
-                                    aria-label={t('decisions.attachment.add')}
-                                    title={t('decisions.attachment.add')}
+                                    onClick={() => void handleVote(s.id, s.my_vote)}
+                                    className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[13px] font-semibold transition-colors ${
+                                      s.my_vote
+                                        ? 'bg-brand text-brandfg'
+                                        : 'bg-surface border border-app text-muted hover:bg-surface2'
+                                    }`}
+                                    aria-label={t('decisions.votes', { count: s.votes })}
                                   >
-                                    <Paperclip className="w-3.5 h-3.5" aria-hidden="true" />
+                                    <ThumbsUp className="w-3.5 h-3.5" aria-hidden="true" />
+                                    {s.votes}
                                   </button>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 text-[13px] font-semibold text-muted">
+                                    <ThumbsUp className="w-3.5 h-3.5" aria-hidden="true" />
+                                    {s.votes}
+                                  </span>
+                                )}
+                                {decision.status === 'open' && canDecide && (
                                   <button
                                     type="button"
-                                    onClick={() => startEditSolution(s.id, s.title, s.description)}
-                                    className="w-8 h-8 rounded-lg text-faint hover:text-muted hover:bg-surface flex items-center justify-center"
-                                    aria-label={t('decisions.modal.editSolution')}
-                                    title={t('decisions.modal.editSolution')}
+                                    onClick={() => setChooseTarget(s.id)}
+                                    className="px-3 py-1.5 rounded-full text-[13px] font-semibold border border-brand/60 text-brand hover:bg-brand-soft transition-colors"
                                   >
-                                    <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
+                                    {t('decisions.modal.choose')}
                                   </button>
-                                </>
-                              )}
-                              {decision.status === 'open' && (
-                                <button
-                                  type="button"
-                                  onClick={() => void handleVote(s.id, s.my_vote)}
-                                  className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[13px] font-semibold transition-colors ${
-                                    s.my_vote
-                                      ? 'bg-brand text-brandfg'
-                                      : 'bg-surface border border-app text-muted hover:bg-surface2'
-                                  }`}
-                                  aria-label={t('decisions.votes', { count: s.votes })}
-                                >
-                                  <ThumbsUp className="w-3.5 h-3.5" aria-hidden="true" />
-                                  {s.votes}
-                                </button>
-                              )}
-                              {decision.status !== 'open' && (
-                                <span className="inline-flex items-center gap-1 text-[13px] font-semibold text-muted">
-                                  <ThumbsUp className="w-3.5 h-3.5" aria-hidden="true" />
-                                  {s.votes}
-                                </span>
-                              )}
-                              {decision.status === 'open' && canDecide && (
-                                <button
-                                  type="button"
-                                  onClick={() => setChooseTarget(s.id)}
-                                  className="px-2.5 py-1.5 rounded-lg text-[12px] font-medium bg-surface border border-app text-muted hover:text-brand"
-                                >
-                                  {t('decisions.modal.choose')}
-                                </button>
-                              )}
+                                )}
+                              </div>
                             </>
                           )}
                         </div>
