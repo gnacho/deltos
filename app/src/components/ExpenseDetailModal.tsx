@@ -829,17 +829,22 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
                 <p className="text-[14px] text-faint py-8 text-center">{t('comments.empty')}</p>
               )}
 
-              <form onSubmit={handleAddComment} className="flex gap-3 items-center mt-6">
-                <Avatar name={user?.username ?? '?'} color={user?.color ?? 'slate'} size="lg" />
-                <div className="flex-1 flex items-center gap-2 rounded-xl border border-app bg-surface px-3.5 py-2">
-                  <input
-                    type="text"
-                    value={commentBody}
-                    maxLength={2000}
-                    onChange={(e) => setCommentBody(e.target.value)}
-                    placeholder={t('comments.placeholder')}
-                    className="flex-1 bg-transparent text-[14px] outline-none placeholder:text-faint"
-                  />
+              {/* Input y boton en dos filas: en movil la fila unica sobrepasa el ancho */}
+              <form onSubmit={handleAddComment} className="mt-6 space-y-2">
+                <div className="flex gap-3 items-center">
+                  <Avatar name={user?.username ?? '?'} color={user?.color ?? 'slate'} size="lg" />
+                  <div className="flex-1 flex items-center rounded-xl border border-app bg-surface px-3.5 py-2">
+                    <input
+                      type="text"
+                      value={commentBody}
+                      maxLength={2000}
+                      onChange={(e) => setCommentBody(e.target.value)}
+                      placeholder={t('comments.placeholder')}
+                      className="flex-1 bg-transparent text-[14px] outline-none placeholder:text-faint"
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end">
                   <button
                     type="submit"
                     disabled={commentSending || !commentBody.trim()}
