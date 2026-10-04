@@ -358,22 +358,25 @@ export default function InvitePage() {
               ) : (
                 <p className="text-[14px] text-faint py-4 text-center">{t('comments.empty')}</p>
               )}
-              <form onSubmit={handleAddComment} className="flex gap-2 items-end">
+              {/* Input y boton en dos filas: en movil la fila unica sobrepasa el ancho */}
+              <form onSubmit={handleAddComment} className="mt-4 space-y-2">
                 <input
                   type="text"
                   value={commentBody}
                   maxLength={2000}
                   onChange={(e) => setCommentBody(e.target.value)}
                   placeholder={t('comments.placeholder')}
-                  className="flex-1 bg-surface2 border border-app rounded-xl px-3 py-2 text-[14px] outline-none focus:border-brand placeholder:text-faint"
+                  className="w-full bg-surface2 border border-app rounded-xl px-3 py-2 text-[14px] outline-none focus:border-brand placeholder:text-faint"
                 />
-                <button
-                  type="submit"
-                  disabled={commentSending || !commentBody.trim()}
-                  className="w-10 h-10 rounded-xl bg-brand text-brandfg flex items-center justify-center hover:brightness-110 disabled:opacity-60 shrink-0"
-                >
-                  <Send className="w-4 h-4" aria-hidden="true" />
-                </button>
+                <div className="flex justify-end">
+                  <button
+                    type="submit"
+                    disabled={commentSending || !commentBody.trim()}
+                    className="w-10 h-10 rounded-xl bg-brand text-brandfg flex items-center justify-center hover:brightness-110 disabled:opacity-60 shrink-0"
+                  >
+                    <Send className="w-4 h-4" aria-hidden="true" />
+                  </button>
+                </div>
               </form>
             </div>
           )}
