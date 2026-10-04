@@ -88,6 +88,8 @@ function AttachmentRow({
       <a
         href={`/api/decisions/attachments/${encodeURIComponent(att.id)}`}
         download={att.filename}
+        // Evita robar el foco al textarea de edicion (lo cerraria en blur)
+        onMouseDown={(e) => e.preventDefault()}
         className="w-7 h-7 rounded-lg text-muted hover:bg-surface2 flex items-center justify-center shrink-0"
         aria-label={t('decisions.attachment.download', { name: att.filename })}
       >
@@ -97,6 +99,7 @@ function AttachmentRow({
         <button
           type="button"
           disabled={deleting}
+          onMouseDown={(e) => e.preventDefault()}
           onClick={() => {
             setDeleting(true);
             void Promise.resolve(onDelete(att)).finally(() => setDeleting(false));
@@ -131,6 +134,9 @@ export function DecisionModal({
   const [solutionText, setSolutionText] = useState('');
   const [proposing, setProposing] = useState(false);
   const [chooseTarget, setChooseTarget] = useState<string | null | undefined>(undefined);
+  // Cerrar sin solución: doble confirmación armada (patrón borrado de tarea)
+  const [closeArmed, setCloseArmed] = useState(false);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [commentBody, setCommentBody] = useState('');
   const [commentSending, setCommentSending] = useState(false);
@@ -176,7 +182,12 @@ export function DecisionModal({
     setEditError(null);
     setSolAttError(null);
     setAttError(null);
+    setCloseArmed(false);
   }, [decisionId]);
+
+  useEffect(() => () => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+  }, []);
 
   useEffect(() => {
     setDescEditing(false);
@@ -501,7 +512,9 @@ export function DecisionModal({
               )}
             </div>
 
-            {/* Adjuntos de la decisión: añade cualquier miembro; borra quien subió o admin */}
+            {/* Adjuntos de la decisión: solo visibles mientras se edita la descripción.
+                Añade cualquier miembro; borra quien subió o admin. */}
+            {descEditing && (
             <div>
               {decisionAttachments.length > 0 && (
                 <ul className="space-y-2">
@@ -527,6 +540,8 @@ export function DecisionModal({
               <button
                 type="button"
                 disabled={attUploading}
+                // Evita robar el foco al textarea de edicion (lo cerraria en blur)
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => decAttInputRef.current?.click()}
                 className={`w-full flex items-center justify-center gap-2 rounded-xl border border-dashed border-app px-4 py-3 text-[13px] font-medium text-muted hover:bg-surface2 disabled:opacity-60 ${
                   decisionAttachments.length > 0 ? 'mt-2' : ''
@@ -546,6 +561,7 @@ export function DecisionModal({
                 </p>
               )}
             </div>
+            )}
 
             {/* Soluciones */}
             <div>
@@ -604,48 +620,103 @@ export function DecisionModal({
                                   {editError}
                                 </p>
                               )}
-                            </div>
-                          ) : (
-                            <>
-                              <div className="flex items-center gap-2">
-                                <p
-                                  className={`font-medium ${
-                                    s.description
-                                      ? 'text-[17px] font-semibold uppercase'
-                                      : 'text-[15px]'
-                                  }`}
-                                >
-                                  {s.title}
-                                </p>
-                                {chosen && (
-                                  <span className="inline-flex items-center gap-1 rounded-full bg-brand text-brandfg px-2 py-0.5 text-[11px] font-semibold">
-                                    <Check className="w-3 h-3" aria-hidden="true" />
-                                    {t('decisions.modal.chosen')}
-                                  </span>
-                                )}
-                              </div>
-                              {s.description && (
-                                <p className="text-[13px] text-muted mt-0.5 break-words">
-                                  {s.description}
-                                </p>
-                              )}
-                              <p className="text-[12px] text-faint mt-0.5">
-                                {t('decisions.by', { name: s.proposer_username })}
-                              </p>
+                              {/* Adjuntos de la solución: solo visibles mientras se edita */}
                               {detail.attachments.some((a) => a.solution_id === s.id) && (
-                                <ul className="mt-2 space-y-1.5">
+                                <ul className="mt-2 space-y-2">
                                   {detail.attachments
                                     .filter((a) => a.solution_id === s.id)
                                     .map((a) => (
                                       <AttachmentRow
                                         key={a.id}
                                         att={a}
-                                        compact
                                         canDelete={canDeleteAttachment(a)}
                                         onDelete={deleteAttachment}
                                       />
                                     ))}
                                 </ul>
+                              )}
+                              <button
+                                type="button"
+                                disabled={attUploading}
+                                // Evita robar el foco al textarea de edicion (lo cerraria en blur)
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={() => {
+                                  setSolAttTarget(s.id);
+                                  solAttInputRef.current?.click();
+                                }}
+                                className={`w-full flex items-center justify-center gap-2 rounded-xl border border-dashed border-app px-4 py-2.5 text-[13px] font-medium text-muted hover:bg-surface2 disabled:opacity-60 mt-2`}
+                              >
+                                <Paperclip className="w-4 h-4" aria-hidden="true" />
+                                {attUploading && solAttTarget === s.id
+                                  ? t('decisions.attachment.uploading')
+                                  : t('decisions.attachment.add')}
+                              </button>
+                              {solAttError?.solutionId === s.id && (
+                                <p
+                                  role="alert"
+                                  className="text-[12px] font-medium text-rose-600 dark:text-rose-400 mt-1"
+                                >
+                                  {solAttError.message}
+                                </p>
+                              )}
+                            </div>
+                          ) : (
+                            <>
+                              {/* Fila superior: titulo + like + editar */}
+                              <div className="flex items-start gap-1.5">
+                                <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
+                                  <p
+                                    className={`font-medium break-words ${
+                                      s.description
+                                        ? 'text-[17px] font-semibold uppercase'
+                                        : 'text-[15px]'
+                                    }`}
+                                  >
+                                    {s.title}
+                                  </p>
+                                  {chosen && (
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-brand text-brandfg px-2 py-0.5 text-[11px] font-semibold">
+                                      <Check className="w-3 h-3" aria-hidden="true" />
+                                      {t('decisions.modal.chosen')}
+                                    </span>
+                                  )}
+                                </div>
+                                {decision.status === 'open' ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleVote(s.id, s.my_vote)}
+                                    className={`inline-flex items-center gap-1 shrink-0 rounded-full px-3 py-1.5 text-[13px] font-semibold transition-colors ${
+                                      s.my_vote
+                                        ? 'bg-brand text-brandfg'
+                                        : 'bg-surface border border-app text-muted hover:bg-surface2'
+                                    }`}
+                                    aria-label={t('decisions.votes', { count: s.votes })}
+                                  >
+                                    <ThumbsUp className="w-3.5 h-3.5" aria-hidden="true" />
+                                    {s.votes}
+                                  </button>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 h-8 shrink-0 px-1 text-[13px] font-semibold text-muted">
+                                    <ThumbsUp className="w-3.5 h-3.5" aria-hidden="true" />
+                                    {s.votes}
+                                  </span>
+                                )}
+                                {(s.proposer_id === user?.id || user?.role === 'admin') && (
+                                  <button
+                                    type="button"
+                                    onClick={() => startEditSolution(s.id, s.title, s.description)}
+                                    className="w-8 h-8 rounded-lg text-faint hover:text-muted hover:bg-surface flex items-center justify-center shrink-0"
+                                    aria-label={t('decisions.modal.editSolution')}
+                                    title={t('decisions.modal.editSolution')}
+                                  >
+                                    <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
+                                  </button>
+                                )}
+                              </div>
+                              {s.description && (
+                                <p className="text-[13px] text-muted mt-0.5 break-words">
+                                  {s.description}
+                                </p>
                               )}
                               {solAttError?.solutionId === s.id && (
                                 <p
@@ -655,68 +726,22 @@ export function DecisionModal({
                                   {solAttError.message}
                                 </p>
                               )}
-                            </>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          {editingSolutionId !== s.id && (
-                            <>
-                              {(s.proposer_id === user?.id || user?.role === 'admin') && (
-                                <>
-                                  <button
-                                    type="button"
-                                    disabled={attUploading}
-                                    onClick={() => {
-                                      setSolAttTarget(s.id);
-                                      solAttInputRef.current?.click();
-                                    }}
-                                    className="w-8 h-8 rounded-lg text-faint hover:text-muted hover:bg-surface flex items-center justify-center disabled:opacity-60"
-                                    aria-label={t('decisions.attachment.add')}
-                                    title={t('decisions.attachment.add')}
-                                  >
-                                    <Paperclip className="w-3.5 h-3.5" aria-hidden="true" />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => startEditSolution(s.id, s.title, s.description)}
-                                    className="w-8 h-8 rounded-lg text-faint hover:text-muted hover:bg-surface flex items-center justify-center"
-                                    aria-label={t('decisions.modal.editSolution')}
-                                    title={t('decisions.modal.editSolution')}
-                                  >
-                                    <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
-                                  </button>
-                                </>
-                              )}
-                              {decision.status === 'open' && (
-                                <button
-                                  type="button"
-                                  onClick={() => void handleVote(s.id, s.my_vote)}
-                                  className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[13px] font-semibold transition-colors ${
-                                    s.my_vote
-                                      ? 'bg-brand text-brandfg'
-                                      : 'bg-surface border border-app text-muted hover:bg-surface2'
-                                  }`}
-                                  aria-label={t('decisions.votes', { count: s.votes })}
-                                >
-                                  <ThumbsUp className="w-3.5 h-3.5" aria-hidden="true" />
-                                  {s.votes}
-                                </button>
-                              )}
-                              {decision.status !== 'open' && (
-                                <span className="inline-flex items-center gap-1 text-[13px] font-semibold text-muted">
-                                  <ThumbsUp className="w-3.5 h-3.5" aria-hidden="true" />
-                                  {s.votes}
+                              {/* Autor + Elegir flotando a la derecha: sin separador,
+                                  encaja en el hueco que deja el texto */}
+                              <div className="mt-0.5 flow-root">
+                                <span className="text-[12px] text-faint leading-6">
+                                  {t('decisions.by', { name: s.proposer_username })}
                                 </span>
-                              )}
-                              {decision.status === 'open' && canDecide && (
-                                <button
-                                  type="button"
-                                  onClick={() => setChooseTarget(s.id)}
-                                  className="px-2.5 py-1.5 rounded-lg text-[12px] font-medium bg-surface border border-app text-muted hover:text-brand"
-                                >
-                                  {t('decisions.modal.choose')}
-                                </button>
-                              )}
+                                {decision.status === 'open' && canDecide && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setChooseTarget(s.id)}
+                                    className="float-right px-3 py-1 rounded-full text-[12px] font-semibold border border-brand/60 text-brand hover:bg-brand-soft transition-colors"
+                                  >
+                                    {t('decisions.modal.choose')}
+                                  </button>
+                                )}
+                              </div>
                             </>
                           )}
                         </div>
@@ -729,7 +754,7 @@ export function DecisionModal({
 
               {/* Proponer solución */}
               {decision.status === 'open' && (
-                <form onSubmit={handlePropose} className="mt-3 space-y-2">
+                <form id="propose-solution" onSubmit={handlePropose} className="mt-3">
                   <textarea
                     value={solutionText}
                     maxLength={5000}
@@ -738,16 +763,65 @@ export function DecisionModal({
                     placeholder={t('decisions.modal.proposePlaceholder')}
                     className="w-full px-3 py-2 rounded-lg bg-surface2 border border-app text-sm outline-none focus:border-brand resize-none"
                   />
+                </form>
+              )}
+              {/* Fila de acciones: proponer + acciones del creador, todas juntas */}
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                {decision.status === 'open' && (
                   <button
                     type="submit"
+                    form="propose-solution"
                     disabled={proposing || !solutionText.split('\n')[0]?.trim()}
                     className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-brand text-brandfg text-[13px] font-semibold hover:brightness-110 disabled:opacity-60"
                   >
                     <Plus className="w-4 h-4" aria-hidden="true" />
                     {t('decisions.modal.propose')}
                   </button>
-                </form>
-              )}
+                )}
+                {canDecide &&
+                  (decision.status === 'decided' ? (
+                    <button
+                      type="button"
+                      onClick={() => void handleReopen()}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-medium bg-surface border border-app text-muted hover:bg-surface2"
+                    >
+                      <RotateCcw className="w-4 h-4" aria-hidden="true" />
+                      {t('decisions.modal.reopen')}
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (closeArmed) {
+                            if (closeTimer.current) clearTimeout(closeTimer.current);
+                            setCloseArmed(false);
+                            setChooseTarget(null);
+                          } else {
+                            setCloseArmed(true);
+                            closeTimer.current = setTimeout(() => setCloseArmed(false), 4000);
+                          }
+                        }}
+                        className={
+                          closeArmed
+                            ? 'inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-semibold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-500/10 border border-rose-300 dark:border-rose-500/40'
+                            : 'inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-medium bg-surface border border-app text-muted hover:bg-surface2'
+                        }
+                      >
+                        {closeArmed
+                          ? t('decisions.modal.closeArm')
+                          : t('decisions.modal.closeWithoutSolution')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleDelete()}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10"
+                      >
+                        {t('common.delete')}
+                      </button>
+                    </>
+                  ))}
+              </div>
               {error && (
                 <p
                   role="alert"
@@ -769,46 +843,18 @@ export function DecisionModal({
               />
             </div>
 
-            {/* Acciones del creador */}
-            {canDecide && (
-              <div className="border-t border-app pt-4 flex flex-wrap items-center gap-2">
-                {decision.status === 'decided' ? (
-                  <button
-                    type="button"
-                    onClick={() => void handleReopen()}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-medium bg-surface border border-app text-muted hover:bg-surface2"
-                  >
-                    <RotateCcw className="w-4 h-4" aria-hidden="true" />
-                    {t('decisions.modal.reopen')}
-                  </button>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => setChooseTarget(null)}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-medium bg-surface border border-app text-muted hover:bg-surface2"
-                    >
-                      {t('decisions.modal.closeWithoutSolution')}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void handleDelete()}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10"
-                    >
-                      {t('common.delete')}
-                    </button>
-                  </>
-                )}
-              </div>
-            )}
-
             {/* Comentarios */}
             <div className="border-t border-app pt-4">
-              <p className="text-[12px] font-semibold tracking-wide uppercase text-faint mb-3">
-                {t('decisions.modal.comments')}
-              </p>
-              {comments.length > 0 ? (
-                <ul className="space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[12px] font-semibold tracking-wide uppercase text-faint">
+                  {t('decisions.modal.comments')}
+                </p>
+                {comments.length === 0 && (
+                  <p className="text-[13px] text-faint">{t('comments.empty')}</p>
+                )}
+              </div>
+              {comments.length > 0 && (
+                <ul className="space-y-4 mt-4">
                   {comments.map((c) => (
                     <li key={c.id} className="flex gap-3">
                       <Avatar name={c.username ?? '?'} color={c.user_color} size="lg" />
@@ -824,21 +870,24 @@ export function DecisionModal({
                     </li>
                   ))}
                 </ul>
-              ) : (
-                <p className="text-[14px] text-faint py-4 text-center">{t('comments.empty')}</p>
               )}
 
-              <form onSubmit={handleAddComment} className="flex gap-3 items-center mt-4">
-                <Avatar name={user?.username ?? '?'} color={user?.color ?? 'slate'} size="lg" />
-                <div className="flex-1 flex items-center gap-2 rounded-xl border border-app bg-surface px-3.5 py-2">
-                  <input
-                    type="text"
-                    value={commentBody}
-                    maxLength={5000}
-                    onChange={(e) => setCommentBody(e.target.value)}
-                    placeholder={t('comments.placeholder')}
-                    className="flex-1 bg-transparent text-[14px] outline-none placeholder:text-faint"
-                  />
+              {/* Input y boton en dos filas: en movil la fila unica sobrepasa el ancho */}
+              <form onSubmit={handleAddComment} className="mt-4 space-y-2">
+                <div className="flex gap-3 items-center">
+                  <Avatar name={user?.username ?? '?'} color={user?.color ?? 'slate'} size="lg" />
+                  <div className="flex-1 flex items-center rounded-xl border border-app bg-surface px-3.5 py-2">
+                    <input
+                      type="text"
+                      value={commentBody}
+                      maxLength={5000}
+                      onChange={(e) => setCommentBody(e.target.value)}
+                      placeholder={t('comments.placeholder')}
+                      className="flex-1 bg-transparent text-[14px] outline-none placeholder:text-faint"
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end">
                   <button
                     type="submit"
                     disabled={commentSending || !commentBody.trim()}
@@ -872,10 +921,18 @@ export function DecisionModal({
           <div
             role="dialog"
             aria-modal="true"
-            aria-label={t('decisions.modal.choose')}
+            aria-label={
+              chooseTarget === null
+                ? t('decisions.modal.closeWithoutSolution')
+                : t('decisions.modal.choose')
+            }
             className="relative w-[90%] max-w-sm rounded-2xl bg-surface border border-app shadow-2xl p-5"
           >
-            <p className="text-[15px] font-medium">{t('decisions.modal.chooseConfirm')}</p>
+            <p className="text-[15px] font-medium">
+              {chooseTarget === null
+                ? t('decisions.modal.closeConfirm')
+                : t('decisions.modal.chooseConfirm')}
+            </p>
             <div className="mt-4 flex justify-end gap-2">
               <button
                 type="button"
