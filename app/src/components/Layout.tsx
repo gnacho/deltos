@@ -68,7 +68,6 @@ const BOTTOM_NAV_ORDER = [
   '/decisions',
   '/summary',
   '/routines',
-  '/settings',
 ];
 
 function isActivePath(pathname: string, to: string): boolean {
@@ -115,40 +114,6 @@ function ThemeTogglePill() {
         );
       })}
     </div>
-  );
-}
-
-function ThemeToggleButton({ mobile }: { mobile?: boolean }) {
-  const { t } = useTranslation();
-  const { dark, toggle } = useTheme();
-  const label = dark ? t('settings.themeToLight') : t('settings.themeToDark');
-  const icon = dark ? (
-    <Sun className="w-[18px] h-[18px]" aria-hidden="true" />
-  ) : (
-    <Moon className="w-[18px] h-[18px]" aria-hidden="true" />
-  );
-  if (mobile) {
-    return (
-      <button
-        type="button"
-        onClick={toggle}
-        className="w-9 h-9 rounded-lg text-muted hover:bg-surface2 flex items-center justify-center shrink-0 border border-app"
-        aria-label={label}
-      >
-        {icon}
-      </button>
-    );
-  }
-  return (
-    <button
-      type="button"
-      onClick={toggle}
-      className="w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm text-muted hover:bg-surface2"
-      aria-label={label}
-    >
-      {icon}
-      <span>{dark ? t('settings.themeLightShort') : t('settings.themeDarkShort')}</span>
-    </button>
   );
 }
 
@@ -936,7 +901,19 @@ export default function Layout() {
         >
           <Search className="w-5 h-5" aria-hidden="true" />
         </button>
-        <ThemeToggleButton mobile />
+        {/* #285: Ajustes en la cabecera móvil (donde estaba el toggle de tema,
+            que vive en Ajustes > Apariencia). */}
+        <NavLink
+          to="/settings"
+          aria-label={t('nav.settings')}
+          className={({ isActive }) =>
+            `flex h-9 w-9 shrink-0 items-center justify-center rounded-lg hover:bg-surface2 ${
+              isActive ? 'text-brand' : 'text-muted'
+            }`
+          }
+        >
+          <Settings className="w-5 h-5" aria-hidden="true" />
+        </NavLink>
       </header>
 
       {/* ============ CONTENIDO ============ */}
@@ -958,7 +935,7 @@ export default function Layout() {
         className="bottom-nav md:hidden fixed bottom-0 inset-x-0 z-40 bg-surface border-t border-app [view-transition-name:deltos-nav]"
         aria-label={t('nav.main')}
       >
-        <div className="h-16 grid grid-cols-7">
+        <div className="h-16 grid grid-cols-6">
           <NavLink
             to="/"
             end
@@ -1015,15 +992,6 @@ export default function Layout() {
           >
             <Repeat className="w-5 h-5" aria-hidden="true" />
             <span className="text-[11px] font-medium">{t('nav.routines')}</span>
-          </NavLink>
-          <NavLink
-            to="/settings"
-            className={({ isActive }) => bnCls(isActive)}
-            aria-label={t('nav.settings')}
-            onClick={handleMobileNav('/settings')}
-          >
-            <Settings className="w-5 h-5" aria-hidden="true" />
-            <span className="text-[11px] font-medium">{t('nav.settings')}</span>
           </NavLink>
         </div>
       </nav>
