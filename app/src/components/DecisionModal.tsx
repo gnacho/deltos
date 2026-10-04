@@ -654,7 +654,7 @@ export function DecisionModal({
                             </div>
                           ) : (
                             <>
-                              {/* Fila superior: titulo + editar */}
+                              {/* Fila superior: titulo + like + editar */}
                               <div className="flex items-start gap-1.5">
                                 <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
                                   <p
@@ -673,6 +673,26 @@ export function DecisionModal({
                                     </span>
                                   )}
                                 </div>
+                                {decision.status === 'open' ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleVote(s.id, s.my_vote)}
+                                    className={`inline-flex items-center gap-1 shrink-0 rounded-full px-3 py-1.5 text-[13px] font-semibold transition-colors ${
+                                      s.my_vote
+                                        ? 'bg-brand text-brandfg'
+                                        : 'bg-surface border border-app text-muted hover:bg-surface2'
+                                    }`}
+                                    aria-label={t('decisions.votes', { count: s.votes })}
+                                  >
+                                    <ThumbsUp className="w-3.5 h-3.5" aria-hidden="true" />
+                                    {s.votes}
+                                  </button>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 h-8 shrink-0 px-1 text-[13px] font-semibold text-muted">
+                                    <ThumbsUp className="w-3.5 h-3.5" aria-hidden="true" />
+                                    {s.votes}
+                                  </span>
+                                )}
                                 {(s.proposer_id === user?.id || user?.role === 'admin') && (
                                   <button
                                     type="button"
@@ -690,9 +710,6 @@ export function DecisionModal({
                                   {s.description}
                                 </p>
                               )}
-                              <p className="text-[12px] text-faint mt-0.5">
-                                {t('decisions.by', { name: s.proposer_username })}
-                              </p>
                               {solAttError?.solutionId === s.id && (
                                 <p
                                   role="alert"
@@ -701,33 +718,17 @@ export function DecisionModal({
                                   {solAttError.message}
                                 </p>
                               )}
-                              {/* Fila inferior: like + elegir */}
-                              <div className="mt-2.5 pt-2.5 border-t border-app/40 flex items-center gap-2 flex-wrap">
-                                {decision.status === 'open' ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => void handleVote(s.id, s.my_vote)}
-                                    className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-[13px] font-semibold transition-colors ${
-                                      s.my_vote
-                                        ? 'bg-brand text-brandfg'
-                                        : 'bg-surface border border-app text-muted hover:bg-surface2'
-                                    }`}
-                                    aria-label={t('decisions.votes', { count: s.votes })}
-                                  >
-                                    <ThumbsUp className="w-3.5 h-3.5" aria-hidden="true" />
-                                    {s.votes}
-                                  </button>
-                                ) : (
-                                  <span className="inline-flex items-center gap-1 text-[13px] font-semibold text-muted">
-                                    <ThumbsUp className="w-3.5 h-3.5" aria-hidden="true" />
-                                    {s.votes}
-                                  </span>
-                                )}
+                              {/* Autor + Elegir flotando a la derecha: sin separador,
+                                  encaja en el hueco que deja el texto */}
+                              <div className="mt-0.5 flow-root">
+                                <span className="text-[12px] text-faint leading-6">
+                                  {t('decisions.by', { name: s.proposer_username })}
+                                </span>
                                 {decision.status === 'open' && canDecide && (
                                   <button
                                     type="button"
                                     onClick={() => setChooseTarget(s.id)}
-                                    className="px-3 py-1.5 rounded-full text-[13px] font-semibold border border-brand/60 text-brand hover:bg-brand-soft transition-colors"
+                                    className="float-right px-3 py-1 rounded-full text-[12px] font-semibold border border-brand/60 text-brand hover:bg-brand-soft transition-colors"
                                   >
                                     {t('decisions.modal.choose')}
                                   </button>
