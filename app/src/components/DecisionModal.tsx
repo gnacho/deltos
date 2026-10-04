@@ -134,6 +134,9 @@ export function DecisionModal({
   const [solutionText, setSolutionText] = useState('');
   const [proposing, setProposing] = useState(false);
   const [chooseTarget, setChooseTarget] = useState<string | null | undefined>(undefined);
+  // Cerrar sin solución: doble confirmación armada (patrón borrado de tarea)
+  const [closeArmed, setCloseArmed] = useState(false);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [commentBody, setCommentBody] = useState('');
   const [commentSending, setCommentSending] = useState(false);
@@ -179,7 +182,12 @@ export function DecisionModal({
     setEditError(null);
     setSolAttError(null);
     setAttError(null);
+    setCloseArmed(false);
   }, [decisionId]);
+
+  useEffect(() => () => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+  }, []);
 
   useEffect(() => {
     setDescEditing(false);
@@ -784,10 +792,25 @@ export function DecisionModal({
                     <>
                       <button
                         type="button"
-                        onClick={() => setChooseTarget(null)}
-                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-medium bg-surface border border-app text-muted hover:bg-surface2"
+                        onClick={() => {
+                          if (closeArmed) {
+                            if (closeTimer.current) clearTimeout(closeTimer.current);
+                            setCloseArmed(false);
+                            setChooseTarget(null);
+                          } else {
+                            setCloseArmed(true);
+                            closeTimer.current = setTimeout(() => setCloseArmed(false), 4000);
+                          }
+                        }}
+                        className={
+                          closeArmed
+                            ? 'inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-semibold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-500/10 border border-rose-300 dark:border-rose-500/40'
+                            : 'inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[13px] font-medium bg-surface border border-app text-muted hover:bg-surface2'
+                        }
                       >
-                        {t('decisions.modal.closeWithoutSolution')}
+                        {closeArmed
+                          ? t('decisions.modal.closeArm')
+                          : t('decisions.modal.closeWithoutSolution')}
                       </button>
                       <button
                         type="button"
@@ -898,10 +921,18 @@ export function DecisionModal({
           <div
             role="dialog"
             aria-modal="true"
-            aria-label={t('decisions.modal.choose')}
+            aria-label={
+              chooseTarget === null
+                ? t('decisions.modal.closeWithoutSolution')
+                : t('decisions.modal.choose')
+            }
             className="relative w-[90%] max-w-sm rounded-2xl bg-surface border border-app shadow-2xl p-5"
           >
-            <p className="text-[15px] font-medium">{t('decisions.modal.chooseConfirm')}</p>
+            <p className="text-[15px] font-medium">
+              {chooseTarget === null
+                ? t('decisions.modal.closeConfirm')
+                : t('decisions.modal.chooseConfirm')}
+            </p>
             <div className="mt-4 flex justify-end gap-2">
               <button
                 type="button"
