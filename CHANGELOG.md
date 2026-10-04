@@ -5,6 +5,17 @@ All notable changes to Deltos are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.47] - 2026-10-04
+
+### Changed
+
+- **Consistent comment forms everywhere (#286).** The expense detail modal and
+  the invite page now use the same stacked comment form already shipped for
+  decisions and tasks: the input sits on its own row with the submit button
+  below it, so nothing overflows on narrow screens. The expense detail keeps
+  the avatar next to the input and right-aligns the submit button; the invite
+  page right-aligns its send icon button.
+
 ## [2.6.46] - 2026-10-04
 
 ### Changed
