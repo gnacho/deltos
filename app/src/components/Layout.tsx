@@ -1,4 +1,4 @@
-import { useMemo, useEffect, useState } from 'react';
+import { useMemo, useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { NavLink, Link, Outlet, useLocation, useNavigate, useParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
@@ -496,12 +496,22 @@ export default function Layout() {
     }`;
 
   const bnCls = (active: boolean) =>
-    `flex flex-col items-center justify-center gap-1 transition-colors duration-150 rounded-lg ${
+    `flex min-w-[68px] flex-1 flex-col items-center justify-center gap-1 transition-colors duration-150 rounded-lg ${
       active ? 'text-brand' : 'text-faint hover:bg-hover hover:text-text-primary'
     }`;
 
   const isProjectsSection = location.pathname.startsWith('/projects') || boardView === 'project';
   const lgMargin = collapsed ? 'lg:pl-16' : 'lg:pl-[232px]';
+
+  /* Bottom-nav deslizable: centra el item activo en la fila scrolleable. */
+  const bottomNavRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = bottomNavRef.current;
+    const activeEl = el?.querySelector('[data-active="true"]');
+    if (el && activeEl) {
+      activeEl.scrollIntoView({ inline: 'center', block: 'nearest' });
+    }
+  }, [location.pathname]);
 
   const boardSelect = boardView !== null && (
     <>
@@ -935,10 +945,17 @@ export default function Layout() {
         className="bottom-nav md:hidden fixed bottom-0 inset-x-0 z-40 bg-surface border-t border-app [view-transition-name:deltos-nav]"
         aria-label={t('nav.main')}
       >
-        <div className="h-16 grid grid-cols-6">
+        {/* Fila deslizable: muestra TODAS las secciones y centra la activa
+            (igual que keynest #284); el grid fijo apretaba las etiquetas y
+            dejaba una columna vacía cuando los gastos están desactivados. */}
+        <div
+          ref={bottomNavRef}
+          className="h-16 flex overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
           <NavLink
             to="/"
             end
+            data-active={location.pathname === '/' ? 'true' : undefined}
             className={({ isActive }) => bnCls(isActive)}
             aria-label={t('nav.todo')}
             onClick={handleMobileNav('/')}
@@ -948,6 +965,7 @@ export default function Layout() {
           </NavLink>
           <NavLink
             to="/projects"
+            data-active={isProjectsSection ? 'true' : undefined}
             className={() => bnCls(isProjectsSection)}
             aria-label={t('nav.projects')}
             onClick={handleMobileNav('/projects')}
@@ -958,6 +976,7 @@ export default function Layout() {
           {showExpenses && (
             <NavLink
               to="/expenses"
+              data-active={isActivePath(location.pathname, '/expenses') ? 'true' : undefined}
               className={({ isActive }) => bnCls(isActive)}
               aria-label={t('nav.expenses')}
               onClick={handleMobileNav('/expenses')}
@@ -968,6 +987,7 @@ export default function Layout() {
           )}
           <NavLink
             to="/decisions"
+            data-active={isActivePath(location.pathname, '/decisions') ? 'true' : undefined}
             className={({ isActive }) => bnCls(isActive)}
             aria-label={t('nav.decisions')}
             onClick={handleMobileNav('/decisions')}
@@ -977,6 +997,7 @@ export default function Layout() {
           </NavLink>
           <NavLink
             to="/summary"
+            data-active={isActivePath(location.pathname, '/summary') ? 'true' : undefined}
             className={({ isActive }) => bnCls(isActive)}
             aria-label={t('nav.summary')}
             onClick={handleMobileNav('/summary')}
@@ -986,6 +1007,7 @@ export default function Layout() {
           </NavLink>
           <NavLink
             to="/routines"
+            data-active={isActivePath(location.pathname, '/routines') ? 'true' : undefined}
             className={({ isActive }) => bnCls(isActive)}
             aria-label={t('nav.routines')}
             onClick={handleMobileNav('/routines')}
