@@ -5,6 +5,15 @@ All notable changes to Deltos are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.48] - 2026-10-07
+
+### Changed
+
+- **Scrollable mobile bottom nav (#290).** The mobile bottom nav is now a
+  horizontally scrollable row with every section as a direct tab,
+  auto-centering the active one. The fixed 6-column grid used to squeeze
+  labels and left an empty column when expenses were disabled.
+
 ## [2.6.47] - 2026-10-04
 
 ### Changed
