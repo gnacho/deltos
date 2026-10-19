@@ -18,6 +18,91 @@ import {
   grantVotePoints,
   revertVotePoints,
 } from './routes-gamification.js'
+import type { Context, Hono } from 'hono'
+import type { AppEnv, SessionUser } from './types.js'
+import type { Hub } from './sse.js'
+import { currentUser } from './auth.js'
+
+/** Fila de decision_solutions con el JOIN de users y los votos. */
+interface DecisionSolutionRow {
+  id: string
+  decision_id: string
+  title: string
+  description: string | null
+  proposer_id: string
+  proposer_username: string | null
+  proposer_color: string | null
+  votes: number
+  my_vote: number
+  created_at: number
+  updated_at: number
+  [key: string]: unknown
+}
+
+/** Fila de decision_comments con el usuario resuelto. */
+interface DecisionCommentRow {
+  id: string
+  decision_id: string
+  body: string
+  created_at: number
+  username: string | null
+  user_color: string | null
+  [key: string]: unknown
+}
+
+/** Fila de decision_activity_events (data llega como JSON string). */
+interface DecisionEventRow {
+  id: string
+  decision_id: string
+  user_id: string | null
+  type: string
+  data: string | null
+  created_at: number
+  username: string | null
+  [key: string]: unknown
+}
+
+/** Fila de decision_attachments con el usuario resuelto. */
+interface DecisionAttachmentRow {
+  id: string
+  decision_id: string
+  solution_id: string | null
+  filename: string
+  size: number
+  mime: string
+  created_at: number
+  uploaded_by: string | null
+  uploaded_by_username: string | null
+  uploaded_by_color: string | null
+  [key: string]: unknown
+}
+import type Database from 'better-sqlite3'
+
+/** Fila de decisions tal como la devuelve la BD (columnas del esquema). */
+interface DecisionRow {
+  id: string
+  project_id: string
+  title: string
+  description: string | null
+  status: string
+  chosen_solution_id: string | null
+  created_by: string
+  created_at: number
+  updated_at: number
+  decided_at: number | null
+  deleted_at: number | null
+  [key: string]: unknown
+}
+
+/** Fila enriquecida con los contadores del listado (JOIN + subconsultas). */
+interface DecisionListRow extends DecisionRow {
+  chosen_solution_title?: string | null
+  created_by_username?: string | null
+  created_by_color?: string | null
+  solutions_count?: number
+  votes_count?: number
+  comments_count?: number
+}
 
 const log = logger.child({ component: 'decisions' })
 
@@ -77,19 +162,19 @@ const MAX_ATTACHMENTS_PER_DECISION = 50
 
 // --- Membresía y permisos ---------------------------------------------------
 
-function isMember(db, userId, projectId) {
+function isMember(db: Database.Database, userId: string, projectId: string): boolean {
   return !!db
     .prepare('SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ?')
     .get(projectId, userId)
 }
 
-function getDecision(db, id) {
-  return db.prepare('SELECT * FROM decisions WHERE id = ? AND deleted_at IS NULL').get(id)
+function getDecision(db: Database.Database, id: string): DecisionRow | undefined {
+  return db.prepare('SELECT * FROM decisions WHERE id = ? AND deleted_at IS NULL').get(id) as DecisionRow | undefined
 }
 
 // Carga la decisión y verifica membresía. No-miembro -> 403 (spec §6 exige 403
 // en todas las rutas). Inexistente/borrada -> 404.
-function loadDecision(db, user, id) {
+function loadDecision(db: Database.Database, user: SessionUser, id: string): DecisionRow {
   const decision = getDecision(db, id)
   if (!decision) httpError(404, ERROR_CODES.DECISION_NOT_FOUND)
   if (!isMember(db, user.id, decision.project_id)) httpError(403, ERROR_CODES.PROJECT_NOT_MEMBER)
@@ -97,15 +182,21 @@ function loadDecision(db, user, id) {
 }
 
 // Solo el creador de la decisión (o admin) puede elegir/reabrir/borrar.
-function canDecide(db, user, decision) {
+function canDecide(db: Database.Database, user: SessionUser, decision: DecisionRow): boolean {
   return user.role === 'admin' || decision.created_by === user.id
 }
 
-function requireCanDecide(db, user, decision) {
+function requireCanDecide(db: Database.Database, user: SessionUser, decision: DecisionRow): void {
   if (!canDecide(db, user, decision)) httpError(403, ERROR_CODES.PROJECT_NOT_OWNER)
 }
 
-function addDecisionEvent(db, decisionId, userId, type, data = {}) {
+function addDecisionEvent(
+  db: Database.Database,
+  decisionId: string,
+  userId: string,
+  type: string,
+  data: Record<string, unknown> = {}
+): void {
   db.prepare(
     'INSERT INTO decision_activity_events (id, decision_id, user_id, type, data, created_at) VALUES (?, ?, ?, ?, ?, ?)'
   ).run(crypto.randomUUID(), decisionId, userId, type, JSON.stringify(data), Date.now())
@@ -113,7 +204,7 @@ function addDecisionEvent(db, decisionId, userId, type, data = {}) {
 
 // --- Hydratación ------------------------------------------------------------
 
-function shapeListRow(row) {
+function shapeListRow(row: DecisionListRow) {
   return {
     id: row.id,
     project_id: row.project_id,
@@ -131,7 +222,12 @@ function shapeListRow(row) {
   }
 }
 
-function listDecisions(db, userId, projectId, status) {
+function listDecisions(
+  db: Database.Database,
+  userId: string,
+  projectId: string | null | undefined,
+  status: string | null | undefined
+) {
   const where = []
   const params = []
   where.push('d.deleted_at IS NULL')
@@ -158,11 +254,11 @@ function listDecisions(db, userId, projectId, status) {
        WHERE ${where.join(' AND ')}
        ORDER BY (d.status = 'open') DESC, d.created_at DESC`
     )
-    .all(...params)
+    .all(...params) as DecisionListRow[]
   return rows.map(shapeListRow)
 }
 
-function hydrateDetail(db, user, id) {
+function hydrateDetail(db: Database.Database, user: SessionUser, id: string) {
   const decision = getDecision(db, id)
   if (!decision) return null
   const solutions = db
@@ -175,8 +271,8 @@ function hydrateDetail(db, user, id) {
        WHERE s.decision_id = ?
        ORDER BY votes DESC, s.created_at ASC`
     )
-    .all(user.id, id)
-    .map((s) => ({
+    .all(user.id, id) as DecisionSolutionRow[]
+  const shapedSolutions = solutions.map((s) => ({
       id: s.id,
       decision_id: s.decision_id,
       title: s.title,
@@ -195,15 +291,15 @@ function hydrateDetail(db, user, id) {
        FROM decision_comments c LEFT JOIN users u ON u.id = c.user_id
        WHERE c.decision_id = ? ORDER BY c.created_at`
     )
-    .all(id)
+    .all(id) as DecisionCommentRow[]
   const activity = db
     .prepare(
       `SELECT e.*, u.username
        FROM decision_activity_events e LEFT JOIN users u ON u.id = e.user_id
        WHERE e.decision_id = ? ORDER BY e.created_at`
     )
-    .all(id)
-    .map((e) => ({ ...e, data: JSON.parse(e.data || '{}') }))
+    .all(id) as Array<DecisionEventRow>
+  const shapedActivity = activity.map((e) => ({ ...e, data: JSON.parse(e.data || '{}') }))
   // Adjuntos en array plano (todos los de la decisión): solution_id distingue
   // los de cada solución (NULL = adjuntos de la descripción).
   const attachments = db
@@ -213,13 +309,13 @@ function hydrateDetail(db, user, id) {
        FROM decision_attachments a LEFT JOIN users u ON u.id = a.uploaded_by
        WHERE a.decision_id = ? ORDER BY a.created_at`
     )
-    .all(id)
+    .all(id) as DecisionAttachmentRow[]
   const row = db
     .prepare(
       `SELECT d.*, u.username AS created_by_username, u.color AS created_by_color
        FROM decisions d JOIN users u ON u.id = d.created_by WHERE d.id = ?`
     )
-    .get(id)
+    .get(id) as DecisionListRow
   return {
     decision: {
       id: row.id,
@@ -235,29 +331,32 @@ function hydrateDetail(db, user, id) {
       updated_at: row.updated_at,
       decided_at: row.decided_at ?? null,
     },
-    solutions,
+    solutions: shapedSolutions,
     comments,
-    activity,
+    activity: shapedActivity,
     attachments,
   }
 }
 
 // --- Rutas ------------------------------------------------------------------
 
-export function registerDecisionRoutes(app, { hub, uploadsDir }) {
+export function registerDecisionRoutes(
+  app: Hono<AppEnv>,
+  { hub, uploadsDir }: { hub: Hub; uploadsDir: string }
+): void {
   // --- Listar decisiones ---
-  app.get('/api/decisions', zValidator('query', listQuerySchema, validationHook), (c) => {
+  app.get('/api/decisions', zValidator('query', listQuerySchema, validationHook), (c: Context<AppEnv>) => {
     const db = c.get('db')
-    const user = c.get('user')
-    const { project_id: projectId, status } = c.req.valid('query')
+    const user = currentUser(c)
+    const { project_id: projectId, status } = c.req.valid('query' as never) as z.infer<typeof listQuerySchema>
     return c.json({ decisions: listDecisions(db, user.id, projectId, status) })
   })
 
   // --- Crear decisión ---
-  app.post('/api/decisions', zValidator('json', createSchema, validationHook), (c) => {
+  app.post('/api/decisions', zValidator('json', createSchema, validationHook), (c: Context<AppEnv>) => {
     const db = c.get('db')
-    const user = c.get('user')
-    const data = c.req.valid('json')
+    const user = currentUser(c)
+    const data = c.req.valid('json' as never) as z.infer<typeof createSchema>
     if (!db.prepare('SELECT id FROM projects WHERE id = ?').get(data.project_id)) {
       httpError(404, ERROR_CODES.PROJECT_NOT_FOUND)
     }
@@ -277,10 +376,10 @@ export function registerDecisionRoutes(app, { hub, uploadsDir }) {
   })
 
   // --- Detalle completo ---
-  app.get('/api/decisions/:id', zValidator('param', idParamSchema, validationHook), (c) => {
+  app.get('/api/decisions/:id', zValidator('param', idParamSchema, validationHook), (c: Context<AppEnv>) => {
     const db = c.get('db')
-    const user = c.get('user')
-    const id = c.req.valid('param').id
+    const user = currentUser(c)
+    const id = (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id
     loadDecision(db, user, id)
     const detail = hydrateDetail(db, user, id)
     if (!detail) httpError(404, ERROR_CODES.DECISION_NOT_FOUND)
@@ -292,12 +391,12 @@ export function registerDecisionRoutes(app, { hub, uploadsDir }) {
     '/api/decisions/:id',
     zValidator('param', idParamSchema, validationHook),
     zValidator('json', patchSchema, validationHook),
-    (c) => {
+    (c: Context<AppEnv>) => {
       const db = c.get('db')
-      const user = c.get('user')
-      const id = c.req.valid('param').id
+      const user = currentUser(c)
+      const id = (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id
       const current = loadDecision(db, user, id)
-      const data = c.req.valid('json')
+      const data = c.req.valid('json' as never) as z.infer<typeof patchSchema>
       const now = Date.now()
       db.transaction(() => {
         if (data.title !== undefined && data.title !== current.title) {
@@ -311,15 +410,15 @@ export function registerDecisionRoutes(app, { hub, uploadsDir }) {
         db.prepare('UPDATE decisions SET updated_at = ? WHERE id = ?').run(now, id)
       })()
       hub.broadcast('decisions')
-      return c.json({ decision: hydrateDetail(db, user, id).decision })
+      return c.json({ decision: hydrateDetail(db, user, id)?.decision })
     }
   )
 
   // --- Soft delete (solo creador/admin) ---
-  app.delete('/api/decisions/:id', zValidator('param', idParamSchema, validationHook), (c) => {
+  app.delete('/api/decisions/:id', zValidator('param', idParamSchema, validationHook), (c: Context<AppEnv>) => {
     const db = c.get('db')
-    const user = c.get('user')
-    const id = c.req.valid('param').id
+    const user = currentUser(c)
+    const id = (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id
     const current = loadDecision(db, user, id)
     requireCanDecide(db, user, current)
     db.transaction(() => {
@@ -335,13 +434,13 @@ export function registerDecisionRoutes(app, { hub, uploadsDir }) {
     '/api/decisions/:id/solutions',
     zValidator('param', idParamSchema, validationHook),
     zValidator('json', solutionCreateSchema, validationHook),
-    (c) => {
+    (c: Context<AppEnv>) => {
       const db = c.get('db')
-      const user = c.get('user')
-      const id = c.req.valid('param').id
+      const user = currentUser(c)
+      const id = (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id
       const current = loadDecision(db, user, id)
       if (current.status !== 'open') httpError(409, ERROR_CODES.DECISION_NOT_OPEN)
-      const data = c.req.valid('json')
+      const data = c.req.valid('json' as never) as z.infer<typeof solutionCreateSchema>
       const solutionId = crypto.randomUUID()
       const now = Date.now()
       db.transaction(() => {
@@ -363,19 +462,19 @@ export function registerDecisionRoutes(app, { hub, uploadsDir }) {
     '/api/decisions/:id/solutions/:solutionId',
     zValidator('param', solutionParamSchema, validationHook),
     zValidator('json', solutionPatchSchema, validationHook),
-    (c) => {
+    (c: Context<AppEnv>) => {
       const db = c.get('db')
-      const user = c.get('user')
-      const { id, solutionId } = c.req.valid('param')
+      const user = currentUser(c)
+      const { id, solutionId } = c.req.valid('param' as never) as z.infer<typeof solutionParamSchema>
       loadDecision(db, user, id)
       const solution = db
         .prepare('SELECT * FROM decision_solutions WHERE id = ? AND decision_id = ?')
-        .get(solutionId, id)
+        .get(solutionId, id) as DecisionSolutionRow | undefined
       if (!solution) httpError(404, ERROR_CODES.SOLUTION_NOT_FOUND)
       if (user.role !== 'admin' && solution.proposer_id !== user.id) {
         httpError(403, ERROR_CODES.PROJECT_NOT_OWNER)
       }
-      const data = c.req.valid('json')
+      const data = c.req.valid('json' as never) as z.infer<typeof solutionPatchSchema>
       const now = Date.now()
       db.transaction(() => {
         db.prepare('UPDATE decision_solutions SET title = ?, description = ?, updated_at = ? WHERE id = ?')
@@ -388,14 +487,14 @@ export function registerDecisionRoutes(app, { hub, uploadsDir }) {
   )
 
   // --- Borrar solución (autor o admin). Si era la elegida -> reabre. ---
-  app.delete('/api/decisions/:id/solutions/:solutionId', zValidator('param', solutionParamSchema, validationHook), (c) => {
+  app.delete('/api/decisions/:id/solutions/:solutionId', zValidator('param', solutionParamSchema, validationHook), (c: Context<AppEnv>) => {
     const db = c.get('db')
-    const user = c.get('user')
-    const { id, solutionId } = c.req.valid('param')
+    const user = currentUser(c)
+    const { id, solutionId } = c.req.valid('param' as never) as z.infer<typeof solutionParamSchema>
     const current = loadDecision(db, user, id)
     const solution = db
       .prepare('SELECT * FROM decision_solutions WHERE id = ? AND decision_id = ?')
-      .get(solutionId, id)
+      .get(solutionId, id) as DecisionSolutionRow | undefined
     if (!solution) httpError(404, ERROR_CODES.SOLUTION_NOT_FOUND)
     if (user.role !== 'admin' && solution.proposer_id !== user.id) {
       httpError(403, ERROR_CODES.PROJECT_NOT_OWNER)
@@ -424,13 +523,13 @@ export function registerDecisionRoutes(app, { hub, uploadsDir }) {
     '/api/decisions/:id/vote',
     zValidator('param', idParamSchema, validationHook),
     zValidator('json', voteSchema, validationHook),
-    (c) => {
+    (c: Context<AppEnv>) => {
       const db = c.get('db')
-      const user = c.get('user')
-      const id = c.req.valid('param').id
+      const user = currentUser(c)
+      const id = (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id
       const current = loadDecision(db, user, id)
       if (current.status !== 'open') httpError(409, ERROR_CODES.DECISION_NOT_OPEN)
-      const { solution_id: solutionId } = c.req.valid('json')
+      const { solution_id: solutionId } = c.req.valid('json' as never) as z.infer<typeof voteSchema>
       if (!db.prepare('SELECT id FROM decision_solutions WHERE id = ? AND decision_id = ?').get(solutionId, id)) {
         httpError(404, ERROR_CODES.SOLUTION_NOT_FOUND)
       }
@@ -454,10 +553,10 @@ export function registerDecisionRoutes(app, { hub, uploadsDir }) {
   )
 
   // --- Retirar voto ---
-  app.delete('/api/decisions/:id/vote', zValidator('param', idParamSchema, validationHook), (c) => {
+  app.delete('/api/decisions/:id/vote', zValidator('param', idParamSchema, validationHook), (c: Context<AppEnv>) => {
     const db = c.get('db')
-    const user = c.get('user')
-    const id = c.req.valid('param').id
+    const user = currentUser(c)
+    const id = (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id
     loadDecision(db, user, id)
     let reverted = 0
     db.transaction(() => {
@@ -477,13 +576,13 @@ export function registerDecisionRoutes(app, { hub, uploadsDir }) {
     '/api/decisions/:id/choose',
     zValidator('param', idParamSchema, validationHook),
     zValidator('json', chooseSchema, validationHook),
-    (c) => {
+    (c: Context<AppEnv>) => {
       const db = c.get('db')
-      const user = c.get('user')
-      const id = c.req.valid('param').id
+      const user = currentUser(c)
+      const id = (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id
       const current = loadDecision(db, user, id)
       requireCanDecide(db, user, current)
-      const { solution_id: solutionId } = c.req.valid('json')
+      const { solution_id: solutionId } = c.req.valid('json' as never) as z.infer<typeof chooseSchema>
       const now = Date.now()
       let gamGranted = 0
       let gamReverted = 0
@@ -510,15 +609,15 @@ export function registerDecisionRoutes(app, { hub, uploadsDir }) {
       })()
       if (gamGranted > 0 || gamReverted > 0) hub.broadcast('gamification')
       hub.broadcast('decisions')
-      return c.json({ decision: hydrateDetail(db, user, id).decision })
+      return c.json({ decision: hydrateDetail(db, user, id)?.decision })
     }
   )
 
   // --- Reabrir (solo creador/admin) ---
-  app.post('/api/decisions/:id/reopen', zValidator('param', idParamSchema, validationHook), (c) => {
+  app.post('/api/decisions/:id/reopen', zValidator('param', idParamSchema, validationHook), (c: Context<AppEnv>) => {
     const db = c.get('db')
-    const user = c.get('user')
-    const id = c.req.valid('param').id
+    const user = currentUser(c)
+    const id = (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id
     const current = loadDecision(db, user, id)
     requireCanDecide(db, user, current)
     let reverted = 0
@@ -532,14 +631,14 @@ export function registerDecisionRoutes(app, { hub, uploadsDir }) {
     })()
     if (reverted > 0) hub.broadcast('gamification')
     hub.broadcast('decisions')
-    return c.json({ decision: hydrateDetail(db, user, id).decision })
+    return c.json({ decision: hydrateDetail(db, user, id)?.decision })
   })
 
   // --- Comentarios ---
-  app.get('/api/decisions/:id/comments', zValidator('param', idParamSchema, validationHook), (c) => {
+  app.get('/api/decisions/:id/comments', zValidator('param', idParamSchema, validationHook), (c: Context<AppEnv>) => {
     const db = c.get('db')
-    const user = c.get('user')
-    const id = c.req.valid('param').id
+    const user = currentUser(c)
+    const id = (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id
     loadDecision(db, user, id)
     const comments = db
       .prepare(
@@ -555,12 +654,12 @@ export function registerDecisionRoutes(app, { hub, uploadsDir }) {
     '/api/decisions/:id/comments',
     zValidator('param', idParamSchema, validationHook),
     zValidator('json', commentSchema, validationHook),
-    (c) => {
+    (c: Context<AppEnv>) => {
       const db = c.get('db')
-      const user = c.get('user')
-      const id = c.req.valid('param').id
+      const user = currentUser(c)
+      const id = (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id
       loadDecision(db, user, id)
-      const data = c.req.valid('json')
+      const data = c.req.valid('json' as never) as z.infer<typeof commentSchema>
       const commentId = crypto.randomUUID()
       const now = Date.now()
       db.transaction(() => {
@@ -581,15 +680,15 @@ export function registerDecisionRoutes(app, { hub, uploadsDir }) {
   app.post(
     '/api/decisions/:id/attachments',
     zValidator('param', idParamSchema, validationHook),
-    async (c) => {
+    async (c: Context<AppEnv>) => {
       const db = c.get('db')
-      const user = c.get('user')
-      const id = c.req.valid('param').id
+      const user = currentUser(c)
+      const id = (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id
       loadDecision(db, user, id)
       // Multipart: no va por zValidator('json'); se validan presencia y tamaño.
       const body = await c.req.parseBody().catch(() => null)
       const file = body?.file
-      if (!file || typeof file.arrayBuffer !== 'function') {
+      if (!file || typeof file === 'string' || typeof file.arrayBuffer !== 'function') {
         httpError(400, ERROR_CODES.UPLOAD_FILE_REQUIRED)
       }
       if (file.size > c.get('maxUploadBytes')) {
@@ -604,15 +703,15 @@ export function registerDecisionRoutes(app, { hub, uploadsDir }) {
       if (solutionId) {
         const solution = db
           .prepare('SELECT * FROM decision_solutions WHERE id = ? AND decision_id = ?')
-          .get(solutionId, id)
+          .get(solutionId, id) as DecisionSolutionRow | undefined
         if (!solution) httpError(404, ERROR_CODES.SOLUTION_NOT_FOUND)
         if (user.role !== 'admin' && solution.proposer_id !== user.id) {
           httpError(403, ERROR_CODES.PROJECT_NOT_OWNER)
         }
       }
-      const currentCount = db
+      const currentCount = (db
         .prepare('SELECT COUNT(*) AS n FROM decision_attachments WHERE decision_id = ?')
-        .get(id).n
+        .get(id) as { n: number }).n
       if (currentCount >= MAX_ATTACHMENTS_PER_DECISION) {
         httpError(409, ERROR_CODES.ATTACHMENTS_LIMIT_EXCEEDED)
       }
@@ -660,15 +759,17 @@ export function registerDecisionRoutes(app, { hub, uploadsDir }) {
 
   // Descarga: solo miembros del proyecto de la decisión (404 para no revelar
   // existencia, mismo criterio que adjuntos de tarea).
-  app.get('/api/decisions/attachments/:aid', zValidator('param', aidParamSchema, validationHook), (c) => {
+  app.get('/api/decisions/attachments/:aid', zValidator('param', aidParamSchema, validationHook), (c: Context<AppEnv>) => {
     const db = c.get('db')
-    const user = c.get('user')
+    const user = currentUser(c)
     const att = db
       .prepare(
         `SELECT a.*, d.project_id FROM decision_attachments a
          JOIN decisions d ON d.id = a.decision_id WHERE a.id = ?`
       )
-      .get(c.req.valid('param').aid)
+      .get((c.req.valid('param' as never) as z.infer<typeof aidParamSchema>).aid) as
+      | (DecisionAttachmentRow & { stored_name: string; project_id: string; uploaded_by: string | null })
+      | undefined
     if (!att || !isMember(db, user.id, att.project_id)) {
       httpError(404, ERROR_CODES.ATTACHMENT_NOT_FOUND)
     }
@@ -683,15 +784,17 @@ export function registerDecisionRoutes(app, { hub, uploadsDir }) {
   })
 
   // Borrado: quien lo subió o admin.
-  app.delete('/api/decisions/attachments/:aid', zValidator('param', aidParamSchema, validationHook), (c) => {
+  app.delete('/api/decisions/attachments/:aid', zValidator('param', aidParamSchema, validationHook), (c: Context<AppEnv>) => {
     const db = c.get('db')
-    const user = c.get('user')
+    const user = currentUser(c)
     const att = db
       .prepare(
         `SELECT a.*, d.project_id FROM decision_attachments a
          JOIN decisions d ON d.id = a.decision_id WHERE a.id = ?`
       )
-      .get(c.req.valid('param').aid)
+      .get((c.req.valid('param' as never) as z.infer<typeof aidParamSchema>).aid) as
+      | (DecisionAttachmentRow & { stored_name: string; project_id: string; uploaded_by: string | null })
+      | undefined
     if (!att) httpError(404, ERROR_CODES.ATTACHMENT_NOT_FOUND)
     if (!isMember(db, user.id, att.project_id)) httpError(404, ERROR_CODES.ATTACHMENT_NOT_FOUND)
     if (user.role !== 'admin' && att.uploaded_by !== user.id) {

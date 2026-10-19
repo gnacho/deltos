@@ -27,6 +27,7 @@ export type SseEntity =
   | 'settings'
   | 'decisions'
   | 'expenses'
+  | 'gamification'
 
 // Dominio singular para el nombre del evento (entity plural del dominio).
 const DOMAIN: Partial<Record<SseEntity, string>> = {
