@@ -9,6 +9,75 @@ import { ERROR_CODES } from './error-codes.js'
 import { parseExpenseText } from './nlp.js'
 import { notifyUsers } from './push.js'
 import { logger } from './logger.js'
+import type { Context, Hono, MiddlewareHandler, Next } from 'hono'
+import type { AppEnv } from './types.js'
+import type { Hub } from './sse.js'
+import type Database from 'better-sqlite3'
+import { currentUser } from './auth.js'
+
+/** Fila de expenses (columnas del esquema que usa este módulo). */
+interface ExpenseRow {
+  id: string
+  title: string
+  description: string | null
+  amount_cents: number
+  step: string
+  position: number
+  priority: string | null
+  due_date: string | null
+  spent_at: number | null
+  payer_id: string | null
+  payment_method: string | null
+  notes: string | null
+  created_by: string
+  created_at: number
+  updated_at: number
+  archived_at: number | null
+  deleted_at: number | null
+  [key: string]: unknown
+}
+
+/** Fila de expense_attachments. */
+interface ExpenseAttachmentRow {
+  id: string
+  filename: string
+  size: number
+  mime: string
+  created_at: number
+  uploaded_by: string | null
+  [key: string]: unknown
+}
+
+/** Fila de expense_comments con el usuario resuelto. */
+interface ExpenseCommentRow {
+  id: string
+  body: string
+  created_at: number
+  username: string | null
+  user_color: string | null
+  [key: string]: unknown
+}
+
+/** Fila de expense_activity_events (data llega como JSON string). */
+interface ExpenseEventRow {
+  id: string
+  expense_id: string
+  user_id: string | null
+  type: string
+  data: string | null
+  created_at: number
+  username: string | null
+  [key: string]: unknown
+}
+
+/** Fila de expense_shares. */
+interface ExpenseShareRow {
+  expense_id: string
+  user_id: string
+  share_cents: number
+  paid: number
+  [key: string]: unknown
+}
 
 const log = logger.child({ component: 'expenses' })
 
@@ -65,6 +134,9 @@ const updateSchema = z.object({
 
 const myShareSchema = z.object({ paid: z.boolean() })
 
+/** Parte de un gasto tal como la valida y guarda este módulo. */
+type ShareInput = z.infer<typeof shareSchema>
+
 const moveSchema = z.object({
   step: z.enum(STEPS),
   position: z.number().int().min(0),
@@ -74,7 +146,12 @@ const commentSchema = z.object({ body: z.string().min(1).max(5000) })
 
 /* Las partes deben sumar el importe, sin usuarios repetidos y todos existentes.
    La parte del pagador (si aparece) nace pagada: él puso el dinero. */
-function validateShares(db, shares, amountCents, payerId) {
+function validateShares(
+  db: Database.Database,
+  shares: ShareInput[],
+  amountCents: number,
+  payerId: string | null | undefined
+): void {
   const seen = new Set()
   let sum = 0
   for (const sh of shares) {
@@ -89,7 +166,12 @@ function validateShares(db, shares, amountCents, payerId) {
   void payerId
 }
 
-function writeShares(db, expenseId, shares, payerId) {
+function writeShares(
+  db: Database.Database,
+  expenseId: string,
+  shares: ShareInput[],
+  payerId: string | null | undefined
+): void {
   db.prepare('DELETE FROM expense_shares WHERE expense_id = ?').run(expenseId)
   const ins = db.prepare(
     'INSERT INTO expense_shares (expense_id, user_id, share_cents, paid) VALUES (?, ?, ?, ?)'
@@ -104,13 +186,18 @@ function writeShares(db, expenseId, shares, payerId) {
    pendientes · hecho (Pagado) = todas las partes e invitaciones pagadas.
    El move manual puede forzar cualquier columna; esto solo aplica al
    crear/editar/pagar partes o invitaciones. */
-export function resolveStep(db, expenseId, payerId, requestedStep) {
+export function resolveStep(
+  db: Database.Database,
+  expenseId: string,
+  payerId: string | null,
+  requestedStep: string
+): string {
   const shares = db.prepare(
     'SELECT COUNT(*) AS n, SUM(CASE WHEN user_id != ? AND paid = 0 THEN 1 ELSE 0 END) AS pending FROM expense_shares WHERE expense_id = ?'
-  ).get(payerId, expenseId)
+  ).get(payerId, expenseId) as { n: number | null; pending: number | null }
   const invites = db.prepare(
     'SELECT COUNT(*) AS n, SUM(CASE WHEN paid = 0 THEN 1 ELSE 0 END) AS pending FROM expense_invites WHERE expense_id = ?'
-  ).get(expenseId)
+  ).get(expenseId) as { n: number | null; pending: number | null }
   const declared = (shares.n ?? 0) + (invites.n ?? 0)
   if (declared === 0) return requestedStep /* sin reparto declarado: no se toca */
   const pending = (shares.pending ?? 0) + (invites.pending ?? 0)
@@ -118,24 +205,30 @@ export function resolveStep(db, expenseId, payerId, requestedStep) {
   return requestedStep === 'nuevo' || requestedStep === 'hecho' ? 'en-curso' : requestedStep
 }
 
-function pluginEnabled(prod) {
+function pluginEnabled(prod: Database.Database): boolean {
   return kvGet(prod, 'plugin_expenses_enabled', '0') === '1'
 }
 
-function addExpenseEvent(db, expenseId, userId, type, data = {}) {
+function addExpenseEvent(
+  db: Database.Database,
+  expenseId: string | null,
+  userId: string,
+  type: string,
+  data: Record<string, unknown> = {}
+): void {
   db.prepare(
     'INSERT INTO expense_activity_events (id, expense_id, user_id, type, data, created_at) VALUES (?, ?, ?, ?, ?, ?)'
   ).run(crypto.randomUUID(), expenseId, userId, type, JSON.stringify(data), Date.now())
 }
 
-function removeAttachmentFiles(db, uploadsDir, expenseId) {
-  const rows = db.prepare('SELECT stored_name FROM expense_attachments WHERE expense_id = ?').all(expenseId)
+function removeAttachmentFiles(db: Database.Database, uploadsDir: string, expenseId: string): void {
+  const rows = db.prepare('SELECT stored_name FROM expense_attachments WHERE expense_id = ?').all(expenseId) as Array<{ stored_name: string }>
   for (const r of rows) {
     try { fs.unlinkSync(path.join(uploadsDir, path.basename(r.stored_name))) } catch {}
   }
 }
 
-function shapeRow(row, shares) {
+function shapeRow(row: ExpenseRow, shares: unknown[]) {
   return {
     id: row.id, title: row.title, amount_cents: row.amount_cents,
     label_id: row.label_id, label_name: row.label_name, label_color: row.label_color,
@@ -167,17 +260,24 @@ const EXPENSE_SELECT = `
   LEFT JOIN projects p ON p.id = e.project_id
   LEFT JOIN labels l ON l.id = e.label_id`
 
-function sharesFor(db, ids) {
+function sharesFor(db: Database.Database, ids: string[]): Map<string, unknown[]> {
   if (ids.length === 0) return new Map()
   const rows = db.prepare(
     `SELECT s.*, u.username, u.color AS user_color
      FROM expense_shares s JOIN users u ON u.id = s.user_id
      WHERE s.expense_id IN (${ids.map(() => '?').join(',')})
      ORDER BY s.share_cents DESC`
-  ).all(...ids)
-  const map = new Map()
+  ).all(...ids) as Array<{
+    expense_id: string
+    user_id: string
+    username: string
+    user_color: string | null
+    share_cents: number
+    paid: number
+  }>
+  const map = new Map<string, unknown[]>()
   for (const r of rows) {
-    const list = map.get(r.expense_id) ?? []
+    const list = (map.get(r.expense_id) ?? []) as Array<Record<string, unknown>>
     list.push({
       user_id: r.user_id, username: r.username, user_color: r.user_color,
       share_cents: r.share_cents, paid: !!r.paid,
@@ -187,56 +287,64 @@ function sharesFor(db, ids) {
   return map
 }
 
-function hydrateExpense(db, id) {
-  const row = db.prepare(`${EXPENSE_SELECT} WHERE e.id = ?`).get(id)
+function hydrateExpense(db: Database.Database, id: string) {
+  const row = db.prepare(`${EXPENSE_SELECT} WHERE e.id = ?`).get(id) as ExpenseRow | undefined
   if (!row) return null
   return shapeRow(row, sharesFor(db, [id]).get(id) ?? [])
 }
 
-function listExpenses(db) {
+function listExpenses(db: Database.Database) {
   const rows = db.prepare(
     `${EXPENSE_SELECT} WHERE e.deleted_at IS NULL ORDER BY e.step, e.position`
-  ).all()
+  ).all() as ExpenseRow[]
   const shares = sharesFor(db, rows.map((r) => r.id))
   return rows.map((row) => shapeRow(row, shares.get(row.id) ?? []))
 }
 
-function expenseDetail(db, id) {
+function expenseDetail(db: Database.Database, id: string) {
   const expense = hydrateExpense(db, id)
   if (!expense || expense.deleted_at) return null
   const attachments = db.prepare(
     'SELECT id, filename, size, mime, created_at, uploaded_by FROM expense_attachments WHERE expense_id = ? ORDER BY created_at'
-  ).all(id).map((a) => ({
-    ...a, uploaded_by_username: db.prepare('SELECT username FROM users WHERE id = ?').get(a.uploaded_by)?.username || null,
+  ).all(id) as ExpenseAttachmentRow[]
+  const shapedAttachments = attachments.map((a) => ({
+    ...a,
+    uploaded_by_username:
+      (db.prepare('SELECT username FROM users WHERE id = ?').get(a.uploaded_by) as { username: string } | undefined)
+        ?.username || null,
   }))
   const comments = db.prepare(
     `SELECT c.*, u.username, u.color AS user_color
      FROM expense_comments c LEFT JOIN users u ON u.id = c.user_id
      WHERE c.expense_id = ? ORDER BY c.created_at`
-  ).all(id)
+  ).all(id) as ExpenseCommentRow[]
   const activity = db.prepare(
     `SELECT e.*, u.username
      FROM expense_activity_events e LEFT JOIN users u ON u.id = e.user_id
      WHERE e.expense_id = ? ORDER BY e.created_at`
-  ).all(id).map((e) => ({ ...e, data: JSON.parse(e.data || '{}') }))
-  return { expense, attachments, comments, activity }
+  ).all(id) as ExpenseEventRow[]
+  const shapedActivity = activity.map((e) => ({ ...e, data: JSON.parse(e.data || '{}') }))
+  return { expense, attachments: shapedAttachments, comments, activity: shapedActivity }
 }
 
-function getExpense(db, id) {
-  return db.prepare('SELECT * FROM expenses WHERE id = ? AND deleted_at IS NULL').get(id)
+function getExpense(db: Database.Database, id: string): ExpenseRow | undefined {
+  return db.prepare('SELECT * FROM expenses WHERE id = ? AND deleted_at IS NULL').get(id) as ExpenseRow | undefined
 }
 
 // Marca las banderas de archivado al cambiar de etapa (todos los caminos:
 // move, update, settle, my-share): entrar en 'hecho' → done_at; salir → NULL;
 // cualquier cambio de etapa reactiva el gasto (archived_at = NULL).
-function applyStepFlags(db, id, newStep) {
+function applyStepFlags(db: Database.Database, id: string, newStep: string): void {
   db.prepare(
     `UPDATE expenses SET done_at = CASE WHEN ? = 'hecho' THEN ? ELSE NULL END, archived_at = NULL WHERE id = ?`
   ).run(newStep, Date.now(), id)
 }
 
-export function registerExpenseRoutes(app, { prod, hub, uploadsDir }) {
-  app.use('/api/expenses/*', async (c, next) => {
+export function registerExpenseRoutes(
+  app: Hono<AppEnv>,
+  { prod, hub, uploadsDir }: { prod: Database.Database; hub: Hub; uploadsDir: string }
+): void {
+  app.use('/api/expenses/*', async (c: Context<AppEnv>, next: Next) => {
     if (!pluginEnabled(prod)) httpError(404, ERROR_CODES.NOT_FOUND)
     await next()
   })
@@ -245,12 +353,14 @@ export function registerExpenseRoutes(app, { prod, hub, uploadsDir }) {
   // Marca como pagados todos los requerimientos pendientes entre el usuario de
   // la sesión y other_user_id (en ambos sentidos): la liquidación real ocurre
   // fuera de la app por el neto; aquí se cierran las deudas subyacentes.
-  app.post('/api/expenses/settle', zValidator('json', z.object({ other_user_id: z.string().min(1).max(100) }), validationHook), (c) => {
+  app.post('/api/expenses/settle', zValidator('json', z.object({ other_user_id: z.string().min(1).max(100) }), validationHook), (c: Context<AppEnv>) => {
     const db = c.get('db')
-    const user = c.get('user')
-    const { other_user_id: otherId } = c.req.valid('json')
+    const user = currentUser(c)
+    const { other_user_id: otherId } = c.req.valid('json' as never) as { other_user_id: string }
     if (otherId === user.id) httpError(422, ERROR_CODES.VALIDATION_FAILED)
-    const target = db.prepare('SELECT id, username FROM users WHERE id = ?').get(otherId)
+    const target = db.prepare('SELECT id, username FROM users WHERE id = ?').get(otherId) as
+      | { id: string; username: string }
+      | undefined
     if (!target) httpError(422, ERROR_CODES.ASSIGNEE_NOT_MEMBER)
 
     /* Partes pendientes entre los dos, en ambos sentidos (deudor ↔ pagador) */
@@ -259,7 +369,14 @@ export function registerExpenseRoutes(app, { prod, hub, uploadsDir }) {
        FROM expense_shares s JOIN expenses e ON e.id = s.expense_id
        WHERE e.deleted_at IS NULL AND s.paid = 0
          AND ((s.user_id = ? AND e.payer_id = ?) OR (s.user_id = ? AND e.payer_id = ?))`
-    ).all(user.id, otherId, otherId, user.id)
+    ).all(user.id, otherId, otherId, user.id) as Array<{
+      expense_id: string
+      user_id: string
+      share_cents: number
+      step: string
+      payer_id: string | null
+      title: string
+    }>
     if (pending.length === 0) return c.json({ settled: 0 })
 
     const now = Date.now()
@@ -272,7 +389,10 @@ export function registerExpenseRoutes(app, { prod, hub, uploadsDir }) {
       }
       const ids = [...new Set(pending.map((sh) => sh.expense_id))]
       for (const eid of ids) {
-        const e = db.prepare('SELECT step, payer_id FROM expenses WHERE id = ?').get(eid)
+        const e = db.prepare('SELECT step, payer_id FROM expenses WHERE id = ?').get(eid) as {
+          step: string
+          payer_id: string | null
+        }
         const newStep = resolveStep(db, eid, e.payer_id, e.step)
         db.prepare('UPDATE expenses SET step = ?, updated_at = ? WHERE id = ?').run(newStep, now, eid)
         if (newStep !== e.step) {
@@ -289,7 +409,7 @@ export function registerExpenseRoutes(app, { prod, hub, uploadsDir }) {
 
     hub.broadcast('expenses')
 
-    const actor = db.prepare('SELECT username FROM users WHERE id = ?').get(user.id)
+    const actor = db.prepare('SELECT username FROM users WHERE id = ?').get(user.id) as { username: string }
     const titulo = pending.length === 1 ? pending[0].title : `${pending.length}\u00d7`
     notifyUsers(db, [otherId], 'pago_completado', {
       usuario: actor.username, titulo,
@@ -300,13 +420,13 @@ export function registerExpenseRoutes(app, { prod, hub, uploadsDir }) {
   })
 
   // --- Listar gastos ---
-  app.get('/api/expenses', (c) => {
+  app.get('/api/expenses', (c: Context<AppEnv>) => {
     return c.json({ expenses: listExpenses(c.get('db')) })
   })
 
   // --- Detalle completo (attachments + comments + activity) ---
-  app.get('/api/expenses/:id/detail', zValidator('param', idParamSchema, validationHook), (c) => {
-    const detail = expenseDetail(c.get('db'), c.req.valid('param').id)
+  app.get('/api/expenses/:id/detail', zValidator('param', idParamSchema, validationHook), (c: Context<AppEnv>) => {
+    const detail = expenseDetail(c.get('db'), (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id)
     if (!detail) httpError(404, ERROR_CODES.EXPENSE_NOT_FOUND)
     return c.json(detail)
   })
@@ -317,17 +437,17 @@ export function registerExpenseRoutes(app, { prod, hub, uploadsDir }) {
     text: z.string().min(1).max(200),
     lang: z.enum(['es', 'en']).default('es'),
   })
-  app.post('/api/expenses/parse', zValidator('json', parseSchema, validationHook), (c) => {
-    const { text, lang } = c.req.valid('json')
+  app.post('/api/expenses/parse', zValidator('json', parseSchema, validationHook), (c: Context<AppEnv>) => {
+    const { text, lang } = c.req.valid('json' as never) as z.infer<typeof parseSchema>
     const result = parseExpenseText(text, lang)
     if (!result) return c.json({ parsed: false })
     return c.json({ parsed: true, ...result })
   })
 
-  app.post('/api/expenses', zValidator('json', createSchema, validationHook), async (c) => {
+  app.post('/api/expenses', zValidator('json', createSchema, validationHook), async (c: Context<AppEnv>) => {
     const db = c.get('db')
-    const user = c.get('user')
-    const data = c.req.valid('json')
+    const user = currentUser(c)
+    const data = c.req.valid('json' as never) as z.infer<typeof createSchema>
     const now = Date.now()
 
     const payerId = data.payer_id ?? user.id
@@ -340,8 +460,8 @@ export function registerExpenseRoutes(app, { prod, hub, uploadsDir }) {
     validateShares(db, data.shares, data.amount_cents, payerId)
 
     const id = crypto.randomUUID()
-    const maxPos = db.prepare('SELECT COALESCE(MAX(position), -1) AS mx FROM expenses WHERE step = ? AND deleted_at IS NULL AND archived_at IS NULL').get(data.step).mx
-    const position = maxPos + 1
+    const maxPos = (db.prepare('SELECT COALESCE(MAX(position), -1) AS mx FROM expenses WHERE step = ? AND deleted_at IS NULL AND archived_at IS NULL').get(data.step) as { mx: number | null }).mx
+    const position = (maxPos ?? 0) + 1
 
     db.transaction(() => {
       db.prepare(
@@ -368,7 +488,7 @@ export function registerExpenseRoutes(app, { prod, hub, uploadsDir }) {
     /* Push a cada deudor (todas las partes menos la del pagador) */
     const debtors = data.shares.filter((sh) => sh.user_id !== payerId && sh.user_id !== user.id)
     if (debtors.length > 0) {
-      const creador = db.prepare('SELECT username FROM users WHERE id = ?').get(user.id)
+      const creador = db.prepare('SELECT username FROM users WHERE id = ?').get(user.id) as { username: string }
       notifyUsers(db, debtors.map((sh) => sh.user_id), 'pago_requerido', {
         usuario: creador.username, titulo: data.title, importe: data.amount_cents,
       }, { demo: c.get('demo'), url: '/expenses' }).catch((err) =>
@@ -380,8 +500,8 @@ export function registerExpenseRoutes(app, { prod, hub, uploadsDir }) {
   })
 
   // --- Obtener un gasto ---
-  app.get('/api/expenses/:id', zValidator('param', idParamSchema, validationHook), (c) => {
-    const expense = hydrateExpense(c.get('db'), c.req.valid('param').id)
+  app.get('/api/expenses/:id', zValidator('param', idParamSchema, validationHook), (c: Context<AppEnv>) => {
+    const expense = hydrateExpense(c.get('db'), (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id)
     if (!expense || expense.deleted_at) httpError(404, ERROR_CODES.EXPENSE_NOT_FOUND)
     return c.json({ expense })
   })
@@ -389,11 +509,11 @@ export function registerExpenseRoutes(app, { prod, hub, uploadsDir }) {
   // --- Actualizar gasto ---
   // Permisos: creador o pagador editan el gasto; cada participante marca SOLO
   // su parte vía /my-share. hecho se deriva de las partes (resolveStep).
-  app.put('/api/expenses/:id', zValidator('param', idParamSchema, validationHook), zValidator('json', updateSchema, validationHook), async (c) => {
+  app.put('/api/expenses/:id', zValidator('param', idParamSchema, validationHook), zValidator('json', updateSchema, validationHook), async (c: Context<AppEnv>) => {
     const db = c.get('db')
-    const user = c.get('user')
-    const data = c.req.valid('json')
-    const id = c.req.valid('param').id
+    const user = currentUser(c)
+    const data = c.req.valid('json' as never) as z.infer<typeof updateSchema>
+    const id = (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id
     const now = Date.now()
 
     const current = getExpense(db, id)
@@ -413,7 +533,7 @@ export function registerExpenseRoutes(app, { prod, hub, uploadsDir }) {
     if (data.shares !== undefined) validateShares(db, data.shares, amount, payerId)
     else if (data.amount_cents !== undefined && data.amount_cents !== current.amount_cents) {
       /* cambiar el importe sin re-declarar las partes rompería la suma */
-      const n = db.prepare('SELECT COUNT(*) AS n FROM expense_shares WHERE expense_id = ?').get(id).n
+      const n = (db.prepare('SELECT COUNT(*) AS n FROM expense_shares WHERE expense_id = ?').get(id) as { n: number }).n
       if (n > 0) httpError(422, ERROR_CODES.VALIDATION_FAILED)
     }
 
@@ -450,15 +570,17 @@ export function registerExpenseRoutes(app, { prod, hub, uploadsDir }) {
   })
 
   // --- Marcar/desmarcar MI parte como pagada ---
-  app.put('/api/expenses/:id/my-share', zValidator('param', idParamSchema, validationHook), zValidator('json', myShareSchema, validationHook), async (c) => {
+  app.put('/api/expenses/:id/my-share', zValidator('param', idParamSchema, validationHook), zValidator('json', myShareSchema, validationHook), async (c: Context<AppEnv>) => {
     const db = c.get('db')
-    const user = c.get('user')
-    const id = c.req.valid('param').id
-    const { paid } = c.req.valid('json')
+    const user = currentUser(c)
+    const id = (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id
+    const { paid } = c.req.valid('json' as never) as z.infer<typeof myShareSchema>
 
     const current = getExpense(db, id)
     if (!current) httpError(404, ERROR_CODES.EXPENSE_NOT_FOUND)
-    const share = db.prepare('SELECT * FROM expense_shares WHERE expense_id = ? AND user_id = ?').get(id, user.id)
+    const share = db.prepare('SELECT * FROM expense_shares WHERE expense_id = ? AND user_id = ?').get(id, user.id) as
+      | ExpenseShareRow
+      | undefined
     if (!share) httpError(403, ERROR_CODES.PROJECT_NOT_MEMBER)
 
     db.transaction(() => {
@@ -474,8 +596,8 @@ export function registerExpenseRoutes(app, { prod, hub, uploadsDir }) {
     hub.broadcast('expenses')
 
     if (paid && current.payer_id !== user.id) {
-      const actor = db.prepare('SELECT username FROM users WHERE id = ?').get(user.id)
-      notifyUsers(db, [current.payer_id], 'pago_completado', {
+      const actor = db.prepare('SELECT username FROM users WHERE id = ?').get(user.id) as { username: string }
+      notifyUsers(db, [current.payer_id as string], 'pago_completado', {
         usuario: actor.username, titulo: current.title,
       }, { demo: c.get('demo'), url: '/expenses' }).catch((err) =>
         log.error('push_notify_failed', { tipo: 'pago_completado', error: err }))
@@ -485,15 +607,19 @@ export function registerExpenseRoutes(app, { prod, hub, uploadsDir }) {
   })
 
   // --- Mover gasto ---
-  app.put('/api/expenses/:id/move', zValidator('param', idParamSchema, validationHook), zValidator('json', moveSchema, validationHook), (c) => {
+  app.put('/api/expenses/:id/move', zValidator('param', idParamSchema, validationHook), zValidator('json', moveSchema, validationHook), (c: Context<AppEnv>) => {
     const db = c.get('db')
-    const { step, position } = c.req.valid('json')
-    const id = c.req.valid('param').id
-    const current = db.prepare('SELECT * FROM expenses WHERE id = ? AND deleted_at IS NULL').get(id)
+    const { step, position } = c.req.valid('json' as never) as z.infer<typeof moveSchema>
+    const id = (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id
+    const current = db.prepare('SELECT * FROM expenses WHERE id = ? AND deleted_at IS NULL').get(id) as
+      | ExpenseRow
+      | undefined
     if (!current) httpError(404, ERROR_CODES.EXPENSE_NOT_FOUND)
 
-    const maxPos = db.prepare('SELECT COALESCE(MAX(position), -1) AS mx FROM expenses WHERE step = ? AND deleted_at IS NULL AND archived_at IS NULL').get(step).mx
-    const clamped = Math.min(position, maxPos + 1)
+    const { mx: maxPos } = db
+      .prepare('SELECT COALESCE(MAX(position), -1) AS mx FROM expenses WHERE step = ? AND deleted_at IS NULL AND archived_at IS NULL')
+      .get(step) as { mx: number | null }
+    const clamped = Math.min(position, (maxPos ?? -1) + 1)
 
     db.transaction(() => {
       // Archivado: posición congelada (compactada al archivar); solo abre
@@ -506,7 +632,7 @@ export function registerExpenseRoutes(app, { prod, hub, uploadsDir }) {
       }
       db.prepare('UPDATE expenses SET step = ?, position = ?, updated_at = ? WHERE id = ?').run(step, clamped, Date.now(), id)
       applyStepFlags(db, id, step)
-      addExpenseEvent(db, id, c.get('user').id, 'moved', { from: current.step, to: step })
+      addExpenseEvent(db, id, currentUser(c).id, 'moved', { from: current.step, to: step })
     })()
 
     hub.broadcast('expenses')
@@ -515,12 +641,13 @@ export function registerExpenseRoutes(app, { prod, hub, uploadsDir }) {
 
   // --- Archivar gasto (manual): solo paso 'hecho' (Pagado). Espejo de tareas:
   // desaparece del tablero y se recupera con "mostrar archivadas".
-  app.post('/api/expenses/:id/archive', zValidator('param', idParamSchema, validationHook), (c) => {
+  app.post('/api/expenses/:id/archive', zValidator('param', idParamSchema, validationHook), (c: Context<AppEnv>) => {
     const db = c.get('db')
-    const id = c.req.valid('param').id
+    const id = (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id
     const current = getExpense(db, id)
     if (!current) httpError(404, ERROR_CODES.EXPENSE_NOT_FOUND)
-    if (current.created_by !== c.get('user').id && current.payer_id !== c.get('user').id) {
+    const me = currentUser(c)
+    if (current.created_by !== me.id && current.payer_id !== me.id) {
       httpError(403, ERROR_CODES.PROJECT_NOT_MEMBER)
     }
     if (current.step !== 'hecho') httpError(422, ERROR_CODES.EXPENSE_NOT_DONE)
@@ -535,18 +662,19 @@ export function registerExpenseRoutes(app, { prod, hub, uploadsDir }) {
   })
 
   // --- Desarchivar gasto: al final de 'hecho' con ventana fresca de 3 días.
-  app.post('/api/expenses/:id/unarchive', zValidator('param', idParamSchema, validationHook), (c) => {
+  app.post('/api/expenses/:id/unarchive', zValidator('param', idParamSchema, validationHook), (c: Context<AppEnv>) => {
     const db = c.get('db')
-    const id = c.req.valid('param').id
+    const id = (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id
     const current = getExpense(db, id)
     if (!current) httpError(404, ERROR_CODES.EXPENSE_NOT_FOUND)
-    if (current.created_by !== c.get('user').id && current.payer_id !== c.get('user').id) {
+    const me = currentUser(c)
+    if (current.created_by !== me.id && current.payer_id !== me.id) {
       httpError(403, ERROR_CODES.PROJECT_NOT_MEMBER)
     }
     if (!current.archived_at) return c.json({ expense: hydrateExpense(db, id) })
     const now = Date.now()
     db.transaction(() => {
-      const pos = db.prepare('SELECT COALESCE(MAX(position) + 1, 0) AS p FROM expenses WHERE step = ? AND deleted_at IS NULL AND archived_at IS NULL').get('hecho').p
+      const pos = (db.prepare('SELECT COALESCE(MAX(position) + 1, 0) AS p FROM expenses WHERE step = ? AND deleted_at IS NULL AND archived_at IS NULL').get('hecho') as { p: number }).p
       db.prepare(
         'UPDATE expenses SET archived_at = NULL, done_at = ?, step = ?, position = ? WHERE id = ?'
       ).run(now, 'hecho', pos, id)
@@ -556,11 +684,13 @@ export function registerExpenseRoutes(app, { prod, hub, uploadsDir }) {
   })
 
   // --- Soft-delete ---
-  app.delete('/api/expenses/:id', zValidator('param', idParamSchema, validationHook), (c) => {
+  app.delete('/api/expenses/:id', zValidator('param', idParamSchema, validationHook), (c: Context<AppEnv>) => {
     const db = c.get('db')
-    const user = c.get('user')
-    const id = c.req.valid('param').id
-    const current = db.prepare('SELECT * FROM expenses WHERE id = ? AND deleted_at IS NULL').get(id)
+    const user = currentUser(c)
+    const id = (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id
+    const current = db.prepare('SELECT * FROM expenses WHERE id = ? AND deleted_at IS NULL').get(id) as
+      | ExpenseRow
+      | undefined
     if (!current) httpError(404, ERROR_CODES.EXPENSE_NOT_FOUND)
     if (current.created_by !== user.id) httpError(403, ERROR_CODES.PROJECT_NOT_MEMBER)
 
@@ -577,26 +707,27 @@ export function registerExpenseRoutes(app, { prod, hub, uploadsDir }) {
   })
 
   // --- Comentarios ---
-  app.get('/api/expenses/:id/comments', zValidator('param', idParamSchema, validationHook), (c) => {
+  app.get('/api/expenses/:id/comments', zValidator('param', idParamSchema, validationHook), (c: Context<AppEnv>) => {
     const db = c.get('db')
-    const id = c.req.valid('param').id
+    const id = (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id
     if (!getExpense(db, id)) httpError(404, ERROR_CODES.EXPENSE_NOT_FOUND)
     const comments = db.prepare(
       `SELECT c.*, u.username, u.color AS user_color
        FROM expense_comments c LEFT JOIN users u ON u.id = c.user_id
        WHERE c.expense_id = ? ORDER BY c.created_at`
-    ).all(id).map((c) => ({ ...c, username: c.username || c.author_name || '?' }))
-    return c.json({ comments })
+    ).all(id) as ExpenseCommentRow[]
+    const shaped = comments.map((row) => ({ ...row, username: row.username || row.author_name || '?' }))
+    return c.json({ comments: shaped })
   })
 
-  app.post('/api/expenses/:id/comments', zValidator('param', idParamSchema, validationHook), zValidator('json', commentSchema, validationHook), async (c) => {
+  app.post('/api/expenses/:id/comments', zValidator('param', idParamSchema, validationHook), zValidator('json', commentSchema, validationHook), async (c: Context<AppEnv>) => {
     const db = c.get('db')
-    const user = c.get('user')
-    const id = c.req.valid('param').id
+    const user = currentUser(c)
+    const id = (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id
     const expense = getExpense(db, id)
     if (!expense) httpError(404, ERROR_CODES.EXPENSE_NOT_FOUND)
 
-    const data = c.req.valid('json')
+    const data = c.req.valid('json' as never) as z.infer<typeof commentSchema>
     const commentId = crypto.randomUUID()
     const now = Date.now()
     db.prepare('INSERT INTO expense_comments (id, expense_id, user_id, body, created_at) VALUES (?, ?, ?, ?, ?)').run(commentId, id, user.id, data.body, now)
@@ -604,10 +735,10 @@ export function registerExpenseRoutes(app, { prod, hub, uploadsDir }) {
     hub.broadcast('expenses')
 
     // Notificar a interesados (creador, pagador y participantes)
-    const shareIds = db.prepare('SELECT user_id FROM expense_shares WHERE expense_id = ?').all(id).map((r) => r.user_id)
-    const ids = [expense.created_by, expense.payer_id, ...shareIds].filter((uid) => uid && uid !== user.id)
+    const shareIds = (db.prepare('SELECT user_id FROM expense_shares WHERE expense_id = ?').all(id) as Array<{ user_id: string }>).map((r) => r.user_id)
+    const ids = [expense.created_by, expense.payer_id, ...shareIds].filter((uid): uid is string => Boolean(uid) && uid !== user.id)
     if (ids.length > 0) {
-      const actor = db.prepare('SELECT username FROM users WHERE id = ?').get(user.id)
+      const actor = db.prepare('SELECT username FROM users WHERE id = ?').get(user.id) as { username: string }
       notifyUsers(db, [...new Set(ids)], 'comentario', {
         usuario: actor.username, titulo: expense.title,
       }, { demo: c.get('demo'), url: '/expenses' }).catch(() => {})
@@ -618,16 +749,18 @@ export function registerExpenseRoutes(app, { prod, hub, uploadsDir }) {
   })
 
   // --- Adjuntos ---
-  app.post('/api/expenses/:id/attachments', zValidator('param', idParamSchema, validationHook), async (c) => {
+  app.post('/api/expenses/:id/attachments', zValidator('param', idParamSchema, validationHook), async (c: Context<AppEnv>) => {
     const db = c.get('db')
-    const user = c.get('user')
-    const id = c.req.valid('param').id
+    const user = currentUser(c)
+    const id = (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id
     const expense = getExpense(db, id)
     if (!expense) httpError(404, ERROR_CODES.EXPENSE_NOT_FOUND)
 
     const body = await c.req.parseBody().catch(() => null)
     const file = body?.file
-    if (!file || typeof file.arrayBuffer !== 'function') httpError(400, ERROR_CODES.UPLOAD_FILE_REQUIRED)
+    if (!file || typeof file === 'string' || typeof file.arrayBuffer !== 'function') {
+      httpError(400, ERROR_CODES.UPLOAD_FILE_REQUIRED)
+    }
     if (file.size > c.get('maxUploadBytes')) httpError(413, ERROR_CODES.UPLOAD_TOO_LARGE)
     const mime = String(file.type || 'application/octet-stream').slice(0, 100)
     if (!ALLOWED_MIME_TYPES.has(mime)) httpError(415, ERROR_CODES.UPLOAD_INVALID_MIME)
@@ -652,11 +785,11 @@ export function registerExpenseRoutes(app, { prod, hub, uploadsDir }) {
     return c.json({ ok: true, id: attId, filename }, 201)
   })
 
-  app.get('/api/expenses/:id/attachments/:attId', zValidator('param', idParamSchema.extend({ attId: z.string().min(1).max(100) }), validationHook), (c) => {
+  app.get('/api/expenses/:id/attachments/:attId', zValidator('param', idParamSchema.extend({ attId: z.string().min(1).max(100) }), validationHook), (c: Context<AppEnv>) => {
     const db = c.get('db')
-    const params = c.req.valid('param')
+    const params = c.req.valid('param' as never) as z.infer<typeof idParamSchema> & { attId?: string }
     if (!getExpense(db, params.id)) httpError(404, ERROR_CODES.EXPENSE_NOT_FOUND)
-    const att = db.prepare('SELECT * FROM expense_attachments WHERE id = ? AND expense_id = ?').get(params.attId, params.id)
+    const att = db.prepare('SELECT * FROM expense_attachments WHERE id = ? AND expense_id = ?').get(params.attId, params.id) as ExpenseAttachmentRow & { stored_name: string } | undefined
     if (!att) httpError(404, ERROR_CODES.ATTACHMENT_NOT_FOUND)
     const filePath = path.join(uploadsDir, path.basename(att.stored_name))
     if (!fs.existsSync(filePath)) httpError(404, ERROR_CODES.ATTACHMENT_FILE_MISSING)
@@ -666,11 +799,11 @@ export function registerExpenseRoutes(app, { prod, hub, uploadsDir }) {
     return c.body(fs.readFileSync(filePath))
   })
 
-  app.delete('/api/expenses/:id/attachments/:attId', zValidator('param', idParamSchema.extend({ attId: z.string().min(1).max(100) }), validationHook), (c) => {
+  app.delete('/api/expenses/:id/attachments/:attId', zValidator('param', idParamSchema.extend({ attId: z.string().min(1).max(100) }), validationHook), (c: Context<AppEnv>) => {
     const db = c.get('db')
-    const params = c.req.valid('param')
+    const params = c.req.valid('param' as never) as z.infer<typeof idParamSchema> & { attId?: string }
     if (!getExpense(db, params.id)) httpError(404, ERROR_CODES.EXPENSE_NOT_FOUND)
-    const att = db.prepare('SELECT * FROM expense_attachments WHERE id = ? AND expense_id = ?').get(params.attId, params.id)
+    const att = db.prepare('SELECT * FROM expense_attachments WHERE id = ? AND expense_id = ?').get(params.attId, params.id) as ExpenseAttachmentRow & { stored_name: string } | undefined
     if (!att) httpError(404, ERROR_CODES.ATTACHMENT_NOT_FOUND)
     const filePath = path.join(uploadsDir, path.basename(att.stored_name))
     try { fs.unlinkSync(filePath) } catch {}
