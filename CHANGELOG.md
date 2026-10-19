@@ -5,6 +5,21 @@ All notable changes to Deltos are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.52] - 2026-10-19
+
+### Changed
+
+- **Navigation order.** Resumen (what changed) and Hoy (what is due) now come
+  before the full task board, and Decisiones sits above Gastos. The new order is
+  Resumen, Hoy, Tareas, Periódicas, Decisiones, Gastos, Papelera, applied to the
+  expanded sidebar, the collapsed icon rail and the mobile bottom nav. The
+  bottom nav has no Hoy entry and keeps Proyectos next to Tareas.
+
+### Internal
+
+- **CI checks the landing build.** A new job installs, typechecks and builds
+  `landing/` so the served JavaScript cannot drift from the TypeScript sources.
+
 ## [2.6.50] - 2026-10-19
 
 ### Changed
