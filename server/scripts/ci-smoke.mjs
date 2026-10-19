@@ -22,12 +22,24 @@ const fail = (m) => {
 }
 const ok = (m) => console.log(`ok: ${m}`)
 
+// El smoke corre el código COMPILADO (dist/), igual que producción, así que
+// compila antes de arrancar nada.
+const tsc = spawn(process.execPath, ['node_modules/typescript/bin/tsc', '-p', 'tsconfig.build.json'], {
+  cwd: serverDir,
+  stdio: 'inherit',
+})
+const tscCode = await new Promise((r) => tsc.on('exit', r))
+if (tscCode !== 0) {
+  console.error(`FAIL: la compilación de TypeScript salió con ${tscCode}`)
+  process.exit(1)
+}
+
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'deltos-smoke-'))
 const staticDir = path.join(dataDir, 'dist')
 fs.mkdirSync(staticDir, { recursive: true })
 fs.writeFileSync(path.join(staticDir, 'index.html'), '<!doctype html><title>smoke</title>')
 
-const server = spawn(process.execPath, ['src/index.js'], {
+const server = spawn(process.execPath, ['dist/index.js'], {
   cwd: serverDir,
   env: {
     ...process.env,
@@ -126,7 +138,7 @@ if (login.status !== 200) {
 await stopServer()
 
 // --- 2. Backup por el CLI (la ruta del timer) ---
-const backup = spawn(process.execPath, ['src/backup-cli.js', dataDir], {
+const backup = spawn(process.execPath, ['dist/backup-cli.js', dataDir], {
   cwd: serverDir,
   stdio: 'inherit',
 })
