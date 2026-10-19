@@ -26,6 +26,7 @@ export type SseEntity =
   | 'attachments'
   | 'settings'
   | 'decisions'
+  | 'expenses'
 
 // Dominio singular para el nombre del evento (entity plural del dominio).
 const DOMAIN: Partial<Record<SseEntity, string>> = {
@@ -37,6 +38,7 @@ const DOMAIN: Partial<Record<SseEntity, string>> = {
   attachments: 'attachment',
   settings: 'settings',
   decisions: 'decision',
+  expenses: 'expense',
 }
 
 export function eventName(entity: SseEntity): string {

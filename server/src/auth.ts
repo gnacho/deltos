@@ -199,6 +199,14 @@ export function requireAuth(ctx: AuthContext): MiddlewareHandler<AppEnv> {
   }
 }
 
+// Usuario de la sesión actual. requireAuth ya garantizó que existe en /api/*,
+// así que esto solo estrecha el tipo (null → SessionUser) sin ramas extra.
+export function currentUser(c: Context<AppEnv>): SessionUser {
+  const user = c.get('user')
+  if (!user) httpError(401, ERROR_CODES.AUTH_REQUIRED)
+  return user
+}
+
 // Lanza 403 AUTH_FORBIDDEN si el usuario de la sesión no es admin.
 // (Antes devolvía una Response; ahora el envelope lo construye app.onError.)
 export function requireAdmin(c: Context<AppEnv>): void {

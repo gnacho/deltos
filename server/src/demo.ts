@@ -1,10 +1,11 @@
-// demo.js — seed determinista de la BD demo (app_demo.db), dataset del mockup.
+// demo.ts — seed determinista de la BD demo (app_demo.db), dataset del mockup.
 // Producción arranca VACÍA: este seed SOLO se aplica a la BD demo, nunca a la real.
 // Las fechas son relativas a HOY (misma filosofía que los mocks), así el tablero
 // demo siempre muestra vencidas / hoy / futuras / sin fecha.
 import fs from 'node:fs'
 import path from 'node:path'
 import bcrypt from 'bcryptjs'
+import type Database from 'better-sqlite3'
 import { logger } from './logger.js'
 import { allocateShortId } from './db.js'
 
@@ -13,7 +14,7 @@ const log = logger.child({ component: 'demo' })
 const DAY = 24 * 60 * 60 * 1000
 const HOUR = 60 * 60 * 1000
 
-function dueStr(offsetDays) {
+function dueStr(offsetDays: number): string {
   const d = new Date(Date.now() + offsetDays * DAY)
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')
@@ -22,7 +23,7 @@ function dueStr(offsetDays) {
 }
 
 // Contenido ficticio de los adjuntos sembrados (archivos reales en uploads/).
-const SEED_FILES = {
+const SEED_FILES: Record<string, { mime: string; content: string }> = {
   'presupuesto-empresa-a.pdf': {
     mime: 'application/pdf',
     content: '%PDF-1.4\n% Deltos (demo) — archivo ficticio\n% Presupuesto empresa A: reforma de baño.\n',
@@ -46,8 +47,8 @@ const SEED_FILES = {
 }
 
 // Seed idempotente: solo si la BD demo está vacía (sin usuarios).
-export function seedDemo(db, uploadsDir) {
-  const count = db.prepare('SELECT COUNT(*) AS n FROM users').get().n
+export function seedDemo(db: Database.Database, uploadsDir: string): boolean {
+  const count = (db.prepare('SELECT COUNT(*) AS n FROM users').get() as { n: number }).n
   if (count > 0) return false
 
   const now = Date.now()
@@ -70,7 +71,14 @@ export function seedDemo(db, uploadsDir) {
     const insMember = db.prepare(
       'INSERT INTO project_members (project_id, user_id, role, added_at) VALUES (?, ?, ?, ?)'
     )
-    const seedProject = (id, name, emoji, color, pos, owner) => {
+    const seedProject = (
+      id: string,
+      name: string,
+      emoji: string,
+      color: string,
+      pos: number,
+      owner: string
+    ): void => {
       insProject.run(id, name, emoji, color, pos, owner, now - 30 * DAY)
       // owner
       insMember.run(id, owner, 'owner', now - 30 * DAY)
@@ -112,7 +120,7 @@ export function seedDemo(db, uploadsDir) {
     ]
 
     // Posición global por columna (orden de la lista anterior)
-    const colPos = { nuevo: 0, encurso: 0, hecho: 0 }
+    const colPos: Record<string, number> = { nuevo: 0, encurso: 0, hecho: 0 }
     const insTask = db.prepare(
       `INSERT INTO tasks (id, project_id, title, description, "column", position, priority, due_date, assignee_id, created_by, created_at, updated_at, short_id)
        VALUES (?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?)`
@@ -140,11 +148,13 @@ export function seedDemo(db, uploadsDir) {
     )
     fs.mkdirSync(uploadsDir, { recursive: true })
     let seq = 0
-    const ev = (taskId, userId, type, data, at) =>
+    const ev = (taskId: string, userId: string, type: string, data: unknown, at: number): void => {
       insEvent.run(`seed-ev-${++seq}`, taskId, userId, type, JSON.stringify(data), at)
-    const cm = (taskId, userId, body, at) =>
+    }
+    const cm = (taskId: string, userId: string, body: string, at: number): void => {
       insComment.run(`seed-cm-${++seq}`, taskId, userId, body, at)
-    const at2 = (taskId, userId, filename, at) => {
+    }
+    const at2 = (taskId: string, userId: string, filename: string, at: number): void => {
       const meta = SEED_FILES[filename]
       const stored = `seed-${filename}`
       fs.writeFileSync(path.join(uploadsDir, stored), meta.content, 'utf8')

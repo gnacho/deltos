@@ -5,6 +5,33 @@ import { logger } from './logger.js';
 import { httpError } from './errors.js';
 import { ERROR_CODES } from './error-codes.js';
 import { resolveStep } from './routes-expenses.js';
+import type { Context, Hono } from 'hono';
+import type Database from 'better-sqlite3';
+import type { AppEnv } from './types.js';
+import { currentUser } from './auth.js';
+
+/** Fila de expense_comments con el username resuelto (LEFT JOIN users). */
+interface ExpenseCommentRow {
+  id: string;
+  body: string;
+  created_at: number;
+  username: string | null;
+  user_color: string | null;
+  author_name: string | null;
+  [key: string]: unknown;
+}
+
+/** Fila de expense_invites. */
+interface InviteRow {
+  id: string;
+  expense_id: string;
+  invite_name: string;
+  share_cents: number;
+  paid: number;
+  notes: string | null;
+  payment_method?: string | null;
+  [key: string]: unknown;
+}
 
 const log = logger.child({ component: 'invite' });
 
@@ -15,17 +42,17 @@ const createSchema = z.object({
   notes: z.string().max(500).optional().default(''),
 });
 
-function generateToken() {
+function generateToken(): string {
   return crypto.randomUUID();
 }
 
-function hashToken(token) {
+function hashToken(token: string): string {
   return crypto.createHash('sha256').update(token).digest('hex');
 }
 
-export function registerInviteRoutes(app, { prod }) {
+export function registerInviteRoutes(app: Hono<AppEnv>, { prod }: { prod: Database.Database }): void {
   // GET /api/expenses/:id/invites — listar invitaciones de un gasto
-  app.get('/api/expenses/:id/invites', (c) => {
+  app.get('/api/expenses/:id/invites', (c: Context<AppEnv>) => {
     const user = c.get('user');
     if (!user) httpError(401, ERROR_CODES.AUTH_REQUIRED);
     const expenseId = c.req.param('id');
@@ -36,10 +63,11 @@ export function registerInviteRoutes(app, { prod }) {
   });
 
   // POST /api/invite/create — generar link de invitación (autenticado)
-  app.post('/api/invite/create', zValidator('json', createSchema), (c) => {
-    const user = c.get('user');
-    if (!user) httpError(401, ERROR_CODES.AUTH_REQUIRED);
-    const { invite_name, share_cents, expense_id: expenseId, notes } = c.req.valid('json');
+  app.post('/api/invite/create', zValidator('json', createSchema), (c: Context<AppEnv>) => {
+    const user = currentUser(c);
+    const { invite_name, share_cents, expense_id: expenseId, notes } = c.req.valid('json' as never) as z.infer<
+      typeof createSchema
+    >;
 
     const expense = prod.prepare(
       'SELECT id, created_by, amount_cents FROM expenses WHERE id = ? AND deleted_at IS NULL'
@@ -57,7 +85,10 @@ export function registerInviteRoutes(app, { prod }) {
 
     /* Auto-transición (#113): un reparto con invitaciones pendientes es
        "Repartido" (en-curso); si todo está pagado, "Pagado" (hecho). */
-    const cur = prod.prepare('SELECT step, payer_id FROM expenses WHERE id = ?').get(expenseId);
+    const cur = prod.prepare('SELECT step, payer_id FROM expenses WHERE id = ?').get(expenseId) as {
+      step: string;
+      payer_id: string | null;
+    };
     const newStep = resolveStep(prod, expenseId, cur.payer_id, cur.step);
     if (newStep !== cur.step) {
       prod.prepare('UPDATE expenses SET step = ?, updated_at = ? WHERE id = ?').run(newStep, now, expenseId);
@@ -80,17 +111,19 @@ export function registerInviteRoutes(app, { prod }) {
   });
 
   // GET /api/invite/:token — ver gasto y parte (público, sin auth)
-  app.get('/api/invite/:token', (c) => {
+  app.get('/api/invite/:token', (c: Context<AppEnv>) => {
     const rawToken = c.req.param('token');
     if (!rawToken || rawToken.length > 200) httpError(404, ERROR_CODES.EXPENSE_NOT_FOUND);
 
     const tokenHash = hashToken(rawToken);
-    const invite = prod.prepare('SELECT * FROM expense_invites WHERE token_hash = ?').get(tokenHash);
+    const invite = prod.prepare('SELECT * FROM expense_invites WHERE token_hash = ?').get(tokenHash) as
+      | InviteRow
+      | undefined;
     if (!invite) httpError(404, ERROR_CODES.EXPENSE_NOT_FOUND);
 
     const expense = prod.prepare(
       'SELECT e.id, e.title, e.amount_cents, e.payment_method, e.step, e.payer_id, e.notes, u.username AS created_by_username FROM expenses e JOIN users u ON u.id = e.created_by WHERE e.id = ? AND e.deleted_at IS NULL'
-    ).get(invite.expense_id);
+    ).get(invite.expense_id) as { notes: string | null; [key: string]: unknown } | undefined;
     if (!expense) httpError(404, ERROR_CODES.EXPENSE_NOT_FOUND);
 
     return c.json({
@@ -117,12 +150,17 @@ export function registerInviteRoutes(app, { prod }) {
          ORDER BY ae.created_at DESC
          LIMIT 50`
       ).all(invite.expense_id),
-      comments: prod.prepare(
-        `SELECT c.id, c.body, c.created_at, u.username, u.color AS user_color, c.author_name
-         FROM expense_comments c LEFT JOIN users u ON u.id = c.user_id
-         WHERE c.expense_id = ?
-         ORDER BY c.created_at`
-      ).all(invite.expense_id).map((c) => ({ ...c, username: c.username || c.author_name || '?' })),
+      comments: (prod
+        .prepare(
+          `SELECT c.id, c.body, c.created_at, u.username, u.color AS user_color, c.author_name
+           FROM expense_comments c LEFT JOIN users u ON u.id = c.user_id
+           WHERE c.expense_id = ?
+           ORDER BY c.created_at`
+        )
+        .all(invite.expense_id) as ExpenseCommentRow[]).map((row) => ({
+        ...row,
+        username: row.username || row.author_name || '?',
+      })),
     });
   });
 
@@ -131,19 +169,21 @@ const paySchema = z.object({
 });
 
 // PUT /api/invite/:token/pay — marcar como pagado (público, sin auth)
-app.put('/api/invite/:token/pay', zValidator('json', paySchema), (c) => {
+app.put('/api/invite/:token/pay', zValidator('json', paySchema), (c: Context<AppEnv>) => {
   const rawToken = c.req.param('token');
   if (!rawToken || rawToken.length > 200) httpError(404, ERROR_CODES.EXPENSE_NOT_FOUND);
 
   const tokenHash = hashToken(rawToken);
-  const invite = prod.prepare('SELECT * FROM expense_invites WHERE token_hash = ?').get(tokenHash);
+  const invite = prod.prepare('SELECT * FROM expense_invites WHERE token_hash = ?').get(tokenHash) as
+    | InviteRow
+    | undefined;
   if (!invite) httpError(404, ERROR_CODES.EXPENSE_NOT_FOUND);
 
   if (invite.paid) {
     return c.json({ ok: true, already_paid: true });
   }
 
-  const { payment_method } = c.req.valid('json');
+  const { payment_method } = c.req.valid('json' as never) as z.infer<typeof paySchema>;
 
   prod.prepare(
     'UPDATE expense_invites SET paid = 1, payment_method = ? WHERE id = ?'
@@ -151,7 +191,10 @@ app.put('/api/invite/:token/pay', zValidator('json', paySchema), (c) => {
 
   // Auto-transición (#113): si todas las partes + invitaciones están pagadas → Pagado;
   // si quedan pendientes y está en Nuevo → Repartido.
-  const exp = prod.prepare('SELECT step, payer_id FROM expenses WHERE id = ?').get(invite.expense_id);
+  const exp = prod.prepare('SELECT step, payer_id FROM expenses WHERE id = ?').get(invite.expense_id) as {
+    step: string;
+    payer_id: string | null;
+  };
   const newStep = resolveStep(prod, invite.expense_id, exp.payer_id, exp.step);
   if (newStep !== exp.step) {
     prod.prepare('UPDATE expenses SET step = ?, updated_at = ? WHERE id = ?').run(newStep, Date.now(), invite.expense_id);
@@ -164,15 +207,17 @@ app.put('/api/invite/:token/pay', zValidator('json', paySchema), (c) => {
 
 // POST /api/invite/:token/comments — añadir comentario como invitado (público)
 const inviteCommentSchema = z.object({ body: z.string().min(1).max(5000) });
-app.post('/api/invite/:token/comments', zValidator('json', inviteCommentSchema), (c) => {
+app.post('/api/invite/:token/comments', zValidator('json', inviteCommentSchema), (c: Context<AppEnv>) => {
   const rawToken = c.req.param('token');
   if (!rawToken || rawToken.length > 200) httpError(404, ERROR_CODES.EXPENSE_NOT_FOUND);
 
   const tokenHash = hashToken(rawToken);
-  const invite = prod.prepare('SELECT * FROM expense_invites WHERE token_hash = ?').get(tokenHash);
+  const invite = prod.prepare('SELECT * FROM expense_invites WHERE token_hash = ?').get(tokenHash) as
+    | InviteRow
+    | undefined;
   if (!invite) httpError(404, ERROR_CODES.EXPENSE_NOT_FOUND);
 
-  const { body } = c.req.valid('json');
+  const { body } = c.req.valid('json' as never) as z.infer<typeof inviteCommentSchema>;
   const id = crypto.randomUUID();
   const now = Date.now();
 
@@ -186,18 +231,17 @@ app.post('/api/invite/:token/comments', zValidator('json', inviteCommentSchema),
 });
 
 // DELETE /api/invite/:id — revocar invitación (autenticado)
-app.delete('/api/invite/:id', (c) => {
-  const user = c.get('user');
-  if (!user) httpError(401, ERROR_CODES.AUTH_REQUIRED);
+app.delete('/api/invite/:id', (c: Context<AppEnv>) => {
+  const user = currentUser(c);
   const inviteId = c.req.param('id');
   const invite = prod.prepare(
     'SELECT i.id, i.expense_id FROM expense_invites i JOIN expenses e ON e.id = i.expense_id WHERE i.id = ?'
-  ).get(inviteId);
+  ).get(inviteId) as { id: string; expense_id: string } | undefined;
   if (!invite) httpError(404, ERROR_CODES.EXPENSE_NOT_FOUND);
 
   const expense = prod.prepare(
     'SELECT created_by, payer_id, step FROM expenses WHERE id = ? AND deleted_at IS NULL'
-  ).get(invite.expense_id);
+  ).get(invite.expense_id) as { created_by: string; payer_id: string | null; step: string } | undefined;
   if (!expense) httpError(404, ERROR_CODES.EXPENSE_NOT_FOUND);
 
   prod.prepare('DELETE FROM expense_invites WHERE id = ?').run(inviteId);
@@ -207,7 +251,7 @@ app.delete('/api/invite/:id', (c) => {
   const remaining = prod.prepare(
     `SELECT (SELECT COUNT(*) FROM expense_shares WHERE expense_id = ?)
           + (SELECT COUNT(*) FROM expense_invites WHERE expense_id = ?) AS n`
-  ).get(invite.expense_id, invite.expense_id);
+  ).get(invite.expense_id, invite.expense_id) as { n: number };
   const newStep =
     (remaining?.n ?? 0) === 0
       ? 'nuevo'

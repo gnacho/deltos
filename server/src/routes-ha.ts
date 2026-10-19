@@ -1,4 +1,4 @@
-// routes-ha.js — integración con Home Assistant (dominio todo vía REST).
+// routes-ha.ts — integración con Home Assistant (dominio todo vía REST).
 // HA no tiene dominio `todo` nativo por REST: se consume como sensor REST
 // (lista de tareas pendientes) + rest_command (crear/completar), ambos con un
 // Bearer token de larga duración.
@@ -14,17 +14,66 @@ import { httpError, validationHook } from './errors.js'
 import { ERROR_CODES } from './error-codes.js'
 import { logger } from './logger.js'
 import { normalizeRecurrence, serializeRecurrence, computeNextDue, todayLocal } from './recurrence.js'
+import { currentUser } from './auth.js'
+import type { Context, Hono, MiddlewareHandler, Next } from 'hono'
+import type Database from 'better-sqlite3'
+import type { AppEnv } from './types.js'
 
 const log = logger.child({ component: 'ha' })
+
+/** Fila de la lista de tareas que se expone a Home Assistant. */
+interface HaTaskRow {
+  id: string
+  title: string
+  column: string
+  priority: string | null
+  due_date: string | null
+  project_name: string | null
+  assignee: string | null
+}
+
+/** Fila de tasks que consume este módulo (el resto de columnas no se usa). */
+interface TaskRow {
+  id: string
+  project_id: string
+  title: string
+  description: string | null
+  column: string
+  position: number
+  priority: string | null
+  due_date: string | null
+  assignee_id: string | null
+  created_by: string
+  recurrence: string | null
+  recurrence_group_id: string | null
+  archived_at: number | null
+  deleted_at: number | null
+}
+
+/** Usuario actor (el configurado en HA o el admin más antiguo). */
+interface HaActor {
+  id: string
+  username: string
+  [key: string]: unknown
+}
+
+const TOKEN_SCHEMA = z.object({ username: z.string().min(1).max(50).optional() })
+
+const CREATE_SCHEMA = z.object({
+  title: z.string().min(1).max(200),
+  project_id: z.string().max(64).nullish(),
+  due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'usa YYYY-MM-DD').nullish(),
+  priority: z.enum(['alta', 'media', 'baja']).nullish(),
+})
 
 const HA_TOKEN_KEY = 'ha_token_hash'
 const HA_USERNAME_KEY = 'ha_username'
 
-function sha256(s) {
+function sha256(s: string): string {
   return crypto.createHash('sha256').update(s).digest('hex')
 }
 
-function isMember(db, userId, projectId) {
+function isMember(db: Database.Database, userId: string, projectId: string): boolean {
   return !!db
     .prepare('SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ?')
     .get(projectId, userId)
@@ -32,8 +81,8 @@ function isMember(db, userId, projectId) {
 
 // Middleware: exige Authorization: Bearer <token> con hash en kv.
 // Comparación en tiempo constante del hash SHA-256 (issue #171).
-export function requireHaToken(prod) {
-  return async (c, next) => {
+export function requireHaToken(prod: Database.Database): MiddlewareHandler<AppEnv> {
+  return async (c: Context<AppEnv>, next: Next) => {
     const header = c.req.header('authorization') || ''
     const token = header.startsWith('Bearer ') ? header.slice(7).trim() : ''
     const expected = kvGet(prod, HA_TOKEN_KEY)
@@ -52,14 +101,14 @@ export function requireHaToken(prod) {
   }
 }
 
-export function registerHaRoutes(app, ctx) {
+export function registerHaRoutes(app: Hono<AppEnv>, ctx: { prod: Database.Database }): void {
   const { prod } = ctx
   const db = prod
 
   // --- Gestión del token (solo admin, sesión normal) ---
 
   // GET /api/ha/status: si hay token y a qué usuario apunta la lista.
-  app.get('/api/ha/status', (c) => {
+  app.get('/api/ha/status', (c: Context<AppEnv>) => {
     const hash = kvGet(db, HA_TOKEN_KEY)
     return c.json({
       enabled: !!hash,
@@ -68,11 +117,10 @@ export function registerHaRoutes(app, ctx) {
   })
 
   // POST /api/ha/token: genera un token nuevo (revoca el anterior).
-  const tokenSchema = z.object({ username: z.string().min(1).max(50).optional() })
-  app.post('/api/ha/token', zValidator('json', tokenSchema, validationHook), (c) => {
-    const user = c.get('user')
+  app.post('/api/ha/token', zValidator('json', TOKEN_SCHEMA, validationHook), (c: Context<AppEnv>) => {
+    const user = currentUser(c)
     if (user.role !== 'admin') httpError(403, ERROR_CODES.AUTH_FORBIDDEN)
-    const username = c.req.valid('json').username || null
+    const username = (c.req.valid('json' as never) as z.infer<typeof TOKEN_SCHEMA>).username || null
     if (username) {
       const u = db.prepare('SELECT id FROM users WHERE username = ?').get(username)
       if (!u) httpError(404, ERROR_CODES.USER_NOT_FOUND)
@@ -87,8 +135,8 @@ export function registerHaRoutes(app, ctx) {
   })
 
   // DELETE /api/ha/token: revoca (borra el hash).
-  app.delete('/api/ha/token', (c) => {
-    if (c.get('user').role !== 'admin') httpError(403, ERROR_CODES.AUTH_FORBIDDEN)
+  app.delete('/api/ha/token', (c: Context<AppEnv>) => {
+    if (currentUser(c).role !== 'admin') httpError(403, ERROR_CODES.AUTH_FORBIDDEN)
     kvSet(db, HA_TOKEN_KEY, '')
     kvSet(db, HA_USERNAME_KEY, '')
     return c.body(null, 204)
@@ -98,7 +146,7 @@ export function registerHaRoutes(app, ctx) {
 
   // GET /api/ha/tasks: lista de tareas pendientes del usuario configurado
   // (o de todos si no hay usuario). Formato compatible con sensor REST.
-  app.get('/api/ha/tasks', requireHaToken(db), (c) => {
+  app.get('/api/ha/tasks', requireHaToken(db), (c: Context<AppEnv>) => {
     const username = kvGet(db, HA_USERNAME_KEY)
     const base = `
       SELECT t.id, t.title, t."column", t.priority, t.due_date,
@@ -107,13 +155,13 @@ export function registerHaRoutes(app, ctx) {
       LEFT JOIN projects p ON p.id = t.project_id
       LEFT JOIN users u ON u.id = t.assignee_id
       WHERE t.deleted_at IS NULL AND t."column" != 'hecho'`
-    const rows = username
+    const rows = (username
       ? db
           .prepare(
             `${base} AND (t.assignee_id IS NULL OR t.assignee_id IN (SELECT id FROM users WHERE username = ?)) ORDER BY t.position`
           )
           .all(username)
-      : db.prepare(`${base} ORDER BY t."column", t.position`).all()
+      : db.prepare(`${base} ORDER BY t."column", t.position`).all()) as HaTaskRow[]
     return c.json({
       username: username || null,
       count: rows.length,
@@ -131,18 +179,14 @@ export function registerHaRoutes(app, ctx) {
   })
 
   // POST /api/ha/tasks: crea una tarea (todo.create).
-  const createSchema = z.object({
-    title: z.string().min(1).max(200),
-    project_id: z.string().max(64).nullish(),
-    due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'usa YYYY-MM-DD').nullish(),
-    priority: z.enum(['alta', 'media', 'baja']).nullish(),
-  })
-  app.post('/api/ha/tasks', requireHaToken(db), zValidator('json', createSchema, validationHook), (c) => {
-    const data = c.req.valid('json')
+  app.post('/api/ha/tasks', requireHaToken(db), zValidator('json', CREATE_SCHEMA, validationHook), (c: Context<AppEnv>) => {
+    const data = c.req.valid('json' as never) as z.infer<typeof CREATE_SCHEMA>
     const username = kvGet(db, HA_USERNAME_KEY)
-    const actor = username
+    const actor = (username
       ? db.prepare('SELECT * FROM users WHERE username = ?').get(username)
-      : db.prepare('SELECT * FROM users WHERE role = ? ORDER BY created_at LIMIT 1').get('admin')
+      : db.prepare('SELECT * FROM users WHERE role = ? ORDER BY created_at LIMIT 1').get('admin')) as
+      | HaActor
+      | undefined
     if (!actor) httpError(500, ERROR_CODES.INTERNAL_ERROR)
     let projectId = data.project_id
     if (!projectId) {
@@ -151,7 +195,7 @@ export function registerHaRoutes(app, ctx) {
           `SELECT p.id FROM project_members pm JOIN projects p ON p.id = pm.project_id
            WHERE pm.user_id = ? ORDER BY p.position LIMIT 1`
         )
-        .get(actor.id)
+        .get(actor.id) as { id: string } | undefined
       projectId = first?.id
     }
     if (!projectId || !db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId)) {
@@ -164,9 +208,9 @@ export function registerHaRoutes(app, ctx) {
     }
     const id = crypto.randomUUID()
     const now = Date.now()
-    const pos = db
+    const pos = (db
       .prepare('SELECT COALESCE(MAX(position) + 1, 0) AS p FROM tasks WHERE "column" = ?')
-      .get('nuevo').p
+      .get('nuevo') as { p: number }).p
     const create = db.transaction(() => {
       const shortId = allocateShortId(db, projectId)
       db.prepare(
@@ -183,13 +227,17 @@ export function registerHaRoutes(app, ctx) {
   })
 
   // PATCH /api/ha/tasks/:id/complete: marca una tarea como hecha (todo.update).
-  app.patch('/api/ha/tasks/:id/complete', requireHaToken(db), (c) => {
-    const task = db.prepare('SELECT * FROM tasks WHERE id = ? AND deleted_at IS NULL').get(c.req.param('id'))
+  app.patch('/api/ha/tasks/:id/complete', requireHaToken(db), (c: Context<AppEnv>) => {
+    const task = db.prepare('SELECT * FROM tasks WHERE id = ? AND deleted_at IS NULL').get(c.req.param('id')) as
+      | TaskRow
+      | undefined
     if (!task) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
     const username = kvGet(db, HA_USERNAME_KEY)
-    const actor = username
+    const actor = (username
       ? db.prepare('SELECT * FROM users WHERE username = ?').get(username)
-      : db.prepare('SELECT * FROM users WHERE role = ? ORDER BY created_at LIMIT 1').get('admin')
+      : db.prepare('SELECT * FROM users WHERE role = ? ORDER BY created_at LIMIT 1').get('admin')) as
+      | HaActor
+      | undefined
     if (!actor) httpError(500, ERROR_CODES.INTERNAL_ERROR)
     // Membresía: solo se completan tareas de proyectos del usuario configurado
     // (o del admin por defecto). 404 para no revelar la existencia (issue #170).
@@ -198,11 +246,11 @@ export function registerHaRoutes(app, ctx) {
     }
     const now = Date.now()
     const update = db.transaction(() => {
-      const targetCount = db
+      const targetCount = (db
         .prepare(
           'SELECT COUNT(*) AS n FROM tasks WHERE "column" = ? AND id != ? AND archived_at IS NULL AND deleted_at IS NULL'
         )
-        .get('hecho', task.id).n
+        .get('hecho', task.id) as { n: number }).n
       // Archivada: posición congelada, no se compacta el origen.
       if (!task.archived_at) {
         db.prepare(
@@ -218,16 +266,16 @@ export function registerHaRoutes(app, ctx) {
     })
     update()
     // Recurrencia: crear la siguiente instancia igual que el move normal.
-    let nextTask = null
+    let nextTask: { id: string; title: string } | null = null
     if (task.recurrence) {
-      const rec = normalizeRecurrence(JSON.parse(task.recurrence))
+      const rec = normalizeRecurrence(JSON.parse(task.recurrence as string))
       if (rec) {
         const nextDue = computeNextDue(db, task, todayLocal())
         if (nextDue) {
           const nid = crypto.randomUUID()
-          const npos = db
+          const npos = (db
             .prepare('SELECT COALESCE(MAX(position) + 1, 0) AS p FROM tasks WHERE "column" = ?')
-            .get('nuevo').p
+            .get('nuevo') as { p: number }).p
           const groupId = task.recurrence_group_id || task.id
           db.transaction(() => {
             const shortId = allocateShortId(db, task.project_id)
@@ -251,6 +299,6 @@ export function registerHaRoutes(app, ctx) {
   })
 }
 
-function noopLog(c, msg, extra = {}) {
+function noopLog(_c: Context<AppEnv>, msg: string, extra: Record<string, unknown> = {}): void {
   log.info(msg, extra)
 }

@@ -1,9 +1,10 @@
-// index.js — entrypoint: valida .env (zod, falla rápido), abre las BD
+// index.ts — entrypoint: valida .env (zod, falla rápido), abre las BD
 // (producción + demo separadas), bootstrap admin, seed demo, arranca Hono,
 // checkpoint WAL horario y graceful shutdown.
 import path from 'node:path'
 import fs from 'node:fs'
 import { serve } from '@hono/node-server'
+import type Database from 'better-sqlite3'
 import { loadConfig } from './config.js'
 import { openDb, hourlyMaintenance, kvSet, kvGet, archiveStaleDoneTasks, archiveStaleDoneExpenses, ensureInbox } from './db.js'
 import * as auth from './auth.js'
@@ -21,8 +22,9 @@ let config
 try {
   config = loadConfig()
 } catch (err) {
+  const issues = (err as { issues?: Array<{ path: PropertyKey[]; message: string }> }).issues
   log.error('config_invalid', {
-    issues: (err.issues || []).map((i) => ({ path: i.path.join('.'), message: i.message })),
+    issues: (issues || []).map((i) => ({ path: i.path.join('.'), message: i.message })),
   })
   process.exit(1)
 }
@@ -49,7 +51,10 @@ ensureInbox(prod)
 ensureInbox(demo)
 
 // Auto-archivo de tareas/gastos hechos con más de 3 días (arranque + horario)
-for (const [db, label] of [[prod, 'prod'], [demo, 'demo']]) {
+for (const [db, label] of [
+  [prod, 'prod'],
+  [demo, 'demo'],
+] as Array<[Database.Database, string]>) {
   try {
     archiveStaleDoneTasks(db)
     archiveStaleDoneExpenses(db)
@@ -119,7 +124,7 @@ maintenance.unref()
 const digestTimer = scheduleDigestVencimiento(prod, false)
 
 // Graceful shutdown: notifica a clientes SSE, cierra server y BD
-function shutdown(signal) {
+function shutdown(signal: string): void {
   log.info('server_shutdown', { signal })
   clearInterval(maintenance)
   clearTimeout(digestTimer)

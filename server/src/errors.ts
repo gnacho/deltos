@@ -65,8 +65,8 @@ function isDomainCause(value: unknown): value is DomainCause {
 // Hook para zValidator: en vez del 400 por defecto, lanzar el ZodError para
 // que onError responda 422 con el envelope y los issues crudos (path + code)
 // en details, para que el frontend re-traduzca campo a campo.
-export function validationHook(result: { success: boolean; error?: ZodError }): void {
-  if (!result.success) throw result.error
+export function validationHook(result: { success: boolean }): void {
+  if (!result.success) throw (result as unknown as { error: ZodError }).error
 }
 
 // onError: el ÚNICO lugar que construye respuestas de error.

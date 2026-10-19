@@ -1,6 +1,6 @@
-// routes-push.js — endpoints de suscripción Web Push.
+// routes-push.ts — endpoints de suscripción Web Push.
 // Auth: cookie HttpOnly SameSite=Lax + CSRF token en cabecera x-csrf-token
-// (ver middleware CSRF en app.js). El endpoint push es una capability URL
+// (ver middleware CSRF en app.ts). El endpoint push es una capability URL
 // SECRETA: nunca se loguea.
 // Convenciones api-stack: zValidator + envelope de errores vía httpError().
 import crypto from 'node:crypto'
@@ -9,6 +9,9 @@ import { zValidator } from '@hono/zod-validator'
 import { isPushConfigured, pushPublicKey } from './push.js'
 import { httpError, validationHook } from './errors.js'
 import { ERROR_CODES } from './error-codes.js'
+import type { Hono } from 'hono'
+import type { AppEnv } from './types.js'
+import { currentUser as requireUser } from './auth.js'
 
 const subscribeSchema = z.object({
   endpoint: z.string().url().max(1000),
@@ -22,7 +25,15 @@ const subscribeSchema = z.object({
 // Tipos de notificación configurables por el usuario (toggle en Ajustes).
 // notifyUsers (push.js) trata la AUSENCIA de fila como 'enabled'; una fila con
 // enabled=0 la desactiva. Deben ir sincronizados con el catálogo de push.js.
-export const TIPOS_PUSH = ['asignacion', 'comentario', 'tarea_movida', 'mencion', 'vencimiento', 'pago_requerido', 'pago_completado']
+export const TIPOS_PUSH = [
+  'asignacion',
+  'comentario',
+  'tarea_movida',
+  'mencion',
+  'vencimiento',
+  'pago_requerido',
+  'pago_completado',
+] as const
 
 const prefSchema = z.object({
   tipo: z.enum(TIPOS_PUSH),
@@ -33,7 +44,7 @@ const unsubscribeSchema = z.object({
   endpoint: z.string().url().max(1000),
 })
 
-export function registerPushRoutes(app) {
+export function registerPushRoutes(app: Hono<AppEnv>): void {
   // Clave pública VAPID para applicationServerKey. No es secreta, pero solo
   // se sirve con sesión. En demo y sin claves configuradas la UI lo detecta.
   app.get('/api/push/vapid-public-key', (c) => {
@@ -48,7 +59,7 @@ export function registerPushRoutes(app) {
     if (c.get('demo')) httpError(501, ERROR_CODES.PUSH_DEMO_UNAVAILABLE)
     if (!isPushConfigured()) httpError(503, ERROR_CODES.PUSH_NOT_CONFIGURED)
     const db = c.get('db')
-    const user = c.get('user')
+    const user = requireUser(c)
     const data = c.req.valid('json')
     const now = Date.now()
     db.prepare(
@@ -79,19 +90,19 @@ export function registerPushRoutes(app) {
     const db = c.get('db')
     const data = c.req.valid('json')
     db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ? AND user_id = ?')
-      .run(data.endpoint, c.get('user').id)
+      .run(data.endpoint, requireUser(c).id)
     return c.body(null, 204)
   })
 
   // Preferencias por tipo (toggles en Ajustes). Ausencia = activado.
   app.get('/api/push/preferences', (c) => {
     const db = c.get('db')
-    const user = c.get('user')
+    const user = requireUser(c)
     const rows = db
       .prepare('SELECT tipo, enabled FROM notification_preferences WHERE user_id = ?')
-      .all(user.id)
+      .all(user.id) as Array<{ tipo: string; enabled: number }>
     const off = new Set(rows.filter((r) => !r.enabled).map((r) => r.tipo))
-    const prefs = {}
+    const prefs: Record<string, boolean> = {}
     for (const tipo of TIPOS_PUSH) prefs[tipo] = !off.has(tipo)
     return c.json({ prefs })
   })
@@ -99,7 +110,7 @@ export function registerPushRoutes(app) {
   app.put('/api/push/preferences', zValidator('json', prefSchema, validationHook), (c) => {
     if (c.get('demo')) httpError(403, ERROR_CODES.DEMO_READ_ONLY)
     const db = c.get('db')
-    const user = c.get('user')
+    const user = requireUser(c)
     const { tipo, enabled } = c.req.valid('json')
     db.prepare(
       `INSERT INTO notification_preferences (user_id, tipo, enabled, min_severity, updated_at)

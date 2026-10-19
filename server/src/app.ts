@@ -1,4 +1,4 @@
-// app.js — fábrica de la app Hono: wide event, headers de seguridad, auth,
+// app.ts — fábrica de la app Hono: wide event, headers de seguridad, auth,
 // rutas, SSE, estáticos y SPA fallback. Exportada para tests (sin listen).
 // Convenciones API (CONVENTIONS.md, skill api-stack): zValidator en cada ruta,
 // envelope de errores único vía app.onError, 201+Location, 204 en DELETE.
@@ -27,8 +27,12 @@ import { ERROR_CODES } from './error-codes.js'
 import { mutationRateLimit } from './rate-limit.js'
 import { idempotencyMiddleware } from './idempotency.js'
 import { updateStatus, updateProgress } from './update.js'
+import type { AppEnv } from './types.js'
+import type { Context } from 'hono'
+import type { Hub } from './sse.js'
+import type Database from 'better-sqlite3'
 
-const pkg = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
+const pkg = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string }
 
 const registerSchema = z.object({
   username: z.string().min(1).max(50),
@@ -59,10 +63,27 @@ const passwordSchema = z.object({
   next: z.string().min(10, 'la nueva contraseña debe tener al menos 10 caracteres').max(100),
 })
 
-// ctx: { prod, demo, secret, config: { cookieSecure, maxSseClients, maxUploadBytes, staticDir }, hub, uploadsDir }
-export function createApp(ctx) {
+/** Lo que createApp necesita de la configuración (ya validada). */
+export interface AppConfig {
+  cookieSecure: boolean
+  maxSseClients: number
+  maxUploadBytes: number
+  staticDir: string
+}
+
+export interface CreateAppContext {
+  prod: Database.Database
+  demo: Database.Database
+  secret: string
+  hub: Hub
+  uploadsDir: string
+  dataDir: string
+  config: AppConfig
+}
+
+export function createApp(ctx: CreateAppContext) {
   const { prod, demo, secret, config, hub } = ctx
-  const app = new Hono()
+  const app = new Hono<AppEnv>()
 
   // --- Wide event: lo más arriba posible. UN evento JSON por request al
   // final (skill log-ops). Excluye /health, /api/events (SSE) y estáticos OK.
@@ -136,6 +157,14 @@ export function createApp(ctx) {
 
   const cookieOpts = { secure: config.cookieSecure }
 
+  // Ruta autenticada: requireAuth ya garantizó la sesión, así que aquí el
+  // usuario existe. Un helper estrecha el tipo sin repetir comprobaciones.
+  function currentUser(c: Context<AppEnv>) {
+    const user = c.get('user')
+    if (!user) httpError(401, ERROR_CODES.AUTH_REQUIRED)
+    return user
+  }
+
   // --- Autenticación ---
   // Alta de usuarios: solo admin (registro público eliminado, regla base común)
   app.post('/api/auth/register', zValidator('json', registerSchema, validationHook), async (c) => {
@@ -155,7 +184,7 @@ export function createApp(ctx) {
     if (auth.loginRateLimited(prod, c)) {
       httpError(429, ERROR_CODES.AUTH_RATE_LIMITED)
     }
-    const data = c.req.valid('json')
+    const data = c.req.valid('json' as never) as z.infer<typeof loginSchema>
     const user = await auth.verifyLogin(prod, data.username, data.password)
     if (!user) {
       auth.registerLoginFail(prod, c)
@@ -163,7 +192,7 @@ export function createApp(ctx) {
     }
     auth.loginOk(prod, c)
     // Rotación de sesión tras login exitoso (previene session fixation)
-    const previous = auth.resolveSession({ prod, demo, secret }, c.req.header('cookie'))
+    const previous = auth.resolveSession({ prod, demo, secret }, c.req.header('cookie'), c.req.header('user-agent'))
     if (previous) auth.destroySession(previous.db, previous.sessionId)
     const { id: sessionId, csrfToken } = auth.createSession(prod, user.id, c.req.header('user-agent'))
     c.header('Set-Cookie', auth.cookieFor(secret, sessionId, cookieOpts))
@@ -177,9 +206,9 @@ export function createApp(ctx) {
     }
     const user = demo
       .prepare('SELECT id, username, email, phone, color, language, role, created_at FROM users WHERE username = ?')
-      .get('demo')
+      .get('demo') as { id: string; username: string; [key: string]: unknown } | undefined
     if (!user) httpError(503, ERROR_CODES.DEMO_UNAVAILABLE)
-    const previous = auth.resolveSession({ prod, demo, secret }, c.req.header('cookie'))
+    const previous = auth.resolveSession({ prod, demo, secret }, c.req.header('cookie'), c.req.header('user-agent'))
     if (previous) auth.destroySession(previous.db, previous.sessionId)
     const { id: sessionId, csrfToken } = auth.createSession(demo, user.id, c.req.header('user-agent'))
     c.header('Set-Cookie', auth.cookieFor(secret, sessionId, cookieOpts))
@@ -187,7 +216,7 @@ export function createApp(ctx) {
   })
 
   app.post('/api/auth/logout', (c) => {
-    const session = auth.resolveSession({ prod, demo, secret }, c.req.header('cookie'))
+    const session = auth.resolveSession({ prod, demo, secret }, c.req.header('cookie'), c.req.header('user-agent'))
     if (session) auth.destroySession(session.db, session.sessionId)
     c.header('Set-Cookie', auth.clearCookie(cookieOpts))
     return c.json({ ok: true })
@@ -195,14 +224,14 @@ export function createApp(ctx) {
 
   // GET /api/auth/me — devuelve user + {demo:true} + csrfToken de la sesión
   app.get('/api/auth/me', (c) => {
-    const session = auth.resolveSession({ prod, demo, secret }, c.req.header('cookie'))
+    const session = auth.resolveSession({ prod, demo, secret }, c.req.header('cookie'), c.req.header('user-agent'))
     return c.json({ user: c.get('user'), demo: c.get('demo'), csrfToken: session?.csrfToken ?? null })
   })
 
   app.put('/api/auth/profile', zValidator('json', profileSchema, validationHook), (c) => {
     const data = c.req.valid('json')
     if (data.display_name === '') data.display_name = null
-    const updated = auth.updateUser(c.get('db'), c.get('user').id, data)
+    const updated = auth.updateUser(c.get('db'), currentUser(c).id, data)
     if (!updated) httpError(400, ERROR_CODES.BAD_REQUEST)
     hub.broadcast('users')
     return c.json({ ok: true, user: updated })
@@ -212,10 +241,10 @@ export function createApp(ctx) {
   // sesiones del usuario (la actual sobrevive para no desconectar al propio).
   app.put('/api/auth/password', zValidator('json', passwordSchema, validationHook), async (c) => {
     const data = c.req.valid('json')
-    const result = await auth.changePassword(c.get('db'), c.get('user').id, data.current, data.next)
+    const result = await auth.changePassword(c.get('db'), currentUser(c).id, data.current, data.next)
     if (result === 'wrong-current') httpError(400, ERROR_CODES.AUTH_WRONG_CURRENT_PASSWORD)
     if (result !== 'ok') httpError(500, ERROR_CODES.INTERNAL_ERROR)
-    auth.destroyOtherSessions(c.get('db'), c.get('user').id, c.get('sessionId'))
+    auth.destroyOtherSessions(c.get('db'), currentUser(c).id, c.get('sessionId'))
     return c.json({ ok: true })
   })
 
@@ -239,7 +268,7 @@ export function createApp(ctx) {
         stream.write(': ping\n\n').catch(() => {})
       }, 20000)
       // Mantiene el stream abierto hasta que el cliente desconecta
-      await new Promise((resolve) => {
+      await new Promise<void>((resolve) => {
         stream.onAbort(() => {
           clearInterval(heartbeat)
           hub.remove(stream)
@@ -278,7 +307,7 @@ export function createApp(ctx) {
 
   app.post('/api/update/apply', async (c) => {
     auth.requireAdmin(c)
-    const user = c.get('user')
+    const user = currentUser(c)
     prod.prepare(
       'INSERT INTO admin_audit (id, actor_id, action, target_type, data, created_at) VALUES (?, ?, ?, ?, ?, ?)'
     ).run(crypto.randomUUID(), user.id, 'update.apply', 'system', '{}', Date.now())
