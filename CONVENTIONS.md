@@ -2,9 +2,9 @@
 
 Operational summary of the ADOPTED conventions (user skills `api-stack` and
 `log-ops`). It is the contract for the frontend (phase 2) and for whoever
-operates the service. In case of doubt, the code rules: `server/src/error-codes.js`,
-`server/src/errors.js`, `server/src/logger.js`, `server/src/wide-event.js`,
-`server/src/pagination.js`, `server/src/sse.js`.
+operates the service. In case of doubt, the code rules: `server/src/error-codes.ts`,
+`server/src/errors.ts`, `server/src/logger.ts`, `server/src/wide-event.ts`,
+`server/src/pagination.ts`, `server/src/sse.ts`.
 
 ## 1. API
 
@@ -19,13 +19,13 @@ operates the service. In case of doubt, the code rules: `server/src/error-codes.
 - `message`: Spanish, fallback only for logs and clients without i18n.
 - `details`: optional. On 422 it carries the raw zod `{ issues: [...] }`
   (`path` + `code`) to retranslate field by field.
-- Single construction in `app.onError` (`server/src/errors.js`): HTTPException
+- Single construction in `app.onError` (`server/src/errors.ts`): HTTPException
   (with domain `cause.code`) / ZodError → 422 / `SQLITE_CONSTRAINT_UNIQUE`
   → 409 / else → 500. **The 500 never leaks stack or internals to the client**
   (it does to the log, at `error` level).
 - Every response carries the `x-request-id` header (correlation with logs).
 
-### Code catalogue (`server/src/error-codes.js`)
+### Code catalogue (`server/src/error-codes.ts`)
 
 | Code | HTTP | Usage |
 |---|---|---|
@@ -129,7 +129,7 @@ Missing or mismatched token → **403 `CSRF_INVALID`**.
 
 - **NDJSON to stdout → journald rotates, nobody else rotates.** No own files or
   in-app rotation. Full operations in `docs/logging.md`.
-- Own dependency-free logger (`server/src/logger.js`): levels
+- Own dependency-free logger (`server/src/logger.ts`): levels
   `debug`/`info`/`warn`/`error`, minimum via `LOG_LEVEL` (default `info`;
   `debug` only with a temporary systemd override).
 - **Static messages + key-value attributes**: `msg` is the event name

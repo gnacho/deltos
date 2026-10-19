@@ -48,6 +48,10 @@ jobs:
         working-directory: app
         run: npm ci --no-audit --no-fund && npm run build
 
+      - name: Compila TypeScript del server (src -> dist)
+        working-directory: server
+        run: npm run build
+
       - name: node_modules de producción (sin dev, compila prebuilds del arch)
         working-directory: server
         run: rm -rf node_modules && npm ci --omit=dev --no-audit --no-fund
@@ -60,7 +64,7 @@ jobs:
           [ "${{ github.ref_type }}" = "tag" ] || VERSION="0.0.0-SNAPSHOT-${GITHUB_SHA::7}"
           mkdir -p stage/server stage/deploy
           cp -r app/dist stage/dist
-          cp -r server/src server/package.json stage/server/
+          cp -r server/dist server/package.json stage/server/
           cp -r server/node_modules stage/server/node_modules
           cp -r deploy/* stage/deploy/
           cp install.sh stage/install.sh

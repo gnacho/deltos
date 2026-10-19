@@ -4,7 +4,7 @@
 #   /opt/deltos/current -> releases/v<ver>   (rollback por symlink)
 # NUNCA toca datos: el SQLite vive en $STATE_DIR (/var/lib/deltos), fuera de
 # releases/. El marker /opt/deltos/.release-id es la fuente de verdad de la
-# versión instalada (server/src/update.js la lee para /api/update/status).
+# versión instalada (server/src/update.ts la lee para /api/update/status).
 set -eu
 
 APP=deltos
@@ -111,15 +111,16 @@ else
   rm -rf "$OPT_DIR/app/dist"
   mkdir -p "$OPT_DIR/app/dist"
   cp -a "$TMP_DIR/pkg/dist/." "$OPT_DIR/app/dist/"
-  # server: reemplazar src, node_modules y package.json; dejar .env intacto.
-  rm -rf "$OPT_DIR/server/src"
-  cp -a "$TMP_DIR/pkg/server/src" "$OPT_DIR/server/src"
+  # server: reemplazar el código compilado (dist), node_modules y
+  # package.json; dejar .env y la config local intactos.
+  rm -rf "$OPT_DIR/server/dist"
+  cp -a "$TMP_DIR/pkg/server/dist" "$OPT_DIR/server/dist"
   if [ -d "$TMP_DIR/pkg/server/node_modules" ]; then
     rm -rf "$OPT_DIR/server/node_modules"
     cp -a "$TMP_DIR/pkg/server/node_modules" "$OPT_DIR/server/node_modules"
   fi
   cp "$TMP_DIR/pkg/server/package.json" "$OPT_DIR/server/package.json"
-  chown -R "$APP:$APP" "$OPT_DIR/app/dist" "$OPT_DIR/server/src" \
+  chown -R "$APP:$APP" "$OPT_DIR/app/dist" "$OPT_DIR/server/dist" \
     "$OPT_DIR/server/node_modules" "$OPT_DIR/server/package.json" 2>/dev/null || true
 fi
 # Datos NUNCA se tocan: SQLite y uploads viven en $STATE_DIR (fuera de server/).
