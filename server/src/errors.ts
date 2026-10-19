@@ -1,5 +1,5 @@
 // ============================================================================
-// errors.js — manejo global de errores (skill api-stack).
+// errors.ts — manejo global de errores (skill api-stack).
 // TODO 4xx/5xx sale con el envelope único:
 //     { error: { code, message, details? } }
 // Las rutas NO construyen respuestas de error a mano: lanzan httpError()
@@ -13,17 +13,29 @@
 import { HTTPException } from 'hono/http-exception'
 import { ZodError } from 'zod'
 import { SqliteError } from 'better-sqlite3'
-import { ERROR_CODES, ERROR_MESSAGES_ES } from './error-codes.js'
+import type { Context } from 'hono'
+import type { ContentfulStatusCode } from 'hono/utils/http-status'
+import { ERROR_CODES, ERROR_MESSAGES_ES, type ErrorCode } from './error-codes.js'
 import { logger } from './logger.js'
+
+// El cause de una HTTPException de dominio: { code, details? }.
+interface DomainCause {
+  code: ErrorCode
+  details?: unknown
+}
+
+export interface ErrorEnvelope {
+  error: { code: ErrorCode; message: string; details?: unknown }
+}
 
 // Lanza un error de dominio: la ruta dice QUÉ falló (code), onError decide
 // el mensaje. details es opcional (p. ej. issues de zod).
-export function httpError(status, code, details) {
+export function httpError(status: ContentfulStatusCode, code: ErrorCode, details?: unknown): never {
   throw new HTTPException(status, { cause: { code, ...(details !== undefined ? { details } : {}) } })
 }
 
 // Código por defecto cuando una HTTPException no trae cause.code de dominio.
-function defaultCodeFor(status) {
+function defaultCodeFor(status: number): ErrorCode {
   switch (status) {
     case 400: return ERROR_CODES.BAD_REQUEST
     case 401: return ERROR_CODES.AUTH_REQUIRED
@@ -36,32 +48,34 @@ function defaultCodeFor(status) {
   }
 }
 
-function messageFor(code) {
+function messageFor(code: ErrorCode): string {
   return ERROR_MESSAGES_ES[code] ?? ERROR_MESSAGES_ES[ERROR_CODES.INTERNAL_ERROR]
 }
 
-function envelope(code, details) {
+function envelope(code: ErrorCode, details?: unknown): ErrorEnvelope {
   return details === undefined
     ? { error: { code, message: messageFor(code) } }
     : { error: { code, message: messageFor(code), details } }
 }
 
+function isDomainCause(value: unknown): value is DomainCause {
+  return typeof value === 'object' && value !== null && typeof (value as DomainCause).code === 'string'
+}
+
 // Hook para zValidator: en vez del 400 por defecto, lanzar el ZodError para
 // que onError responda 422 con el envelope y los issues crudos (path + code)
 // en details, para que el frontend re-traduzca campo a campo.
-export function validationHook(result) {
+export function validationHook(result: { success: boolean; error?: ZodError }): void {
   if (!result.success) throw result.error
 }
 
 // onError: el ÚNICO lugar que construye respuestas de error.
-export function onError(err, c) {
+export function onError(err: Error, c: Context) {
   // 1) Errores de dominio lanzados por las rutas con httpError().
   if (err instanceof HTTPException) {
     const cause = err.cause
-    const code = cause && typeof cause === 'object' && typeof cause.code === 'string'
-      ? cause.code
-      : defaultCodeFor(err.status)
-    const details = cause && typeof cause === 'object' ? cause.details : undefined
+    const code = isDomainCause(cause) ? cause.code : defaultCodeFor(err.status)
+    const details = isDomainCause(cause) ? cause.details : undefined
     return c.json(envelope(code, details), err.status)
   }
 

@@ -75,7 +75,9 @@ export const ERROR_CODES = {
 
 // Fallback en español por código (la fuente de verdad para el usuario es el
 // `code`: el frontend lo traduce en la fase 2).
-export const ERROR_MESSAGES_ES = {
+export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES]
+
+export const ERROR_MESSAGES_ES: Record<ErrorCode, string> = {
   [ERROR_CODES.BAD_REQUEST]: 'La petición es incorrecta',
   [ERROR_CODES.VALIDATION_FAILED]: 'Los datos enviados no son válidos',
   [ERROR_CODES.INVALID_CURSOR]: 'El cursor de paginación es inválido',

@@ -1,9 +1,16 @@
-// db.js — better-sqlite3: esquema, apertura, migraciones y checkpoint WAL.
+// db.ts — better-sqlite3: esquema, apertura, migraciones y checkpoint WAL.
 // SQL directo, sin ORM. Todo síncrono.
 import Database from 'better-sqlite3'
 import fs from 'node:fs'
 import path from 'node:path'
 import { logger } from './logger.js'
+
+/** Fila de `PRAGMA table_info(x)`: solo se usan name y notnull. */
+interface PragmaColumn {
+  name: string
+  notnull: number
+  [key: string]: unknown
+}
 
 const log = logger.child({ component: 'db' })
 
@@ -431,7 +438,7 @@ CREATE TABLE IF NOT EXISTS gam_redemptions (
 CREATE INDEX IF NOT EXISTS idx_gam_redemptions_user ON gam_redemptions(user_id, created_at);
 `
 
-export function openDb(file) {
+export function openDb(file: string): Database.Database {
   fs.mkdirSync(path.dirname(file), { recursive: true })
   const db = new Database(file)
   db.pragma('journal_mode = WAL')
@@ -442,7 +449,7 @@ export function openDb(file) {
     "SELECT name FROM sqlite_master WHERE type='table' AND name='expenses'"
   ).get()
   if (expensesExists) {
-    const expenseCols = db.prepare('PRAGMA table_info(expenses)').all().map((c) => c.name)
+    const expenseCols = (db.prepare('PRAGMA table_info(expenses)').all() as PragmaColumn[]).map((c) => c.name)
     if (expenseCols.includes('requested_user_id')) {
       db.exec('DROP TABLE IF EXISTS expense_shares')
       db.exec('DROP TABLE IF EXISTS expense_activity_events')
@@ -460,8 +467,8 @@ export function openDb(file) {
 
 // CREATE TABLE IF NOT EXISTS no actualiza tablas existentes al añadir columnas:
 // las migraciones verifican y añaden columnas al arrancar.
-export function migrateSchema(db) {
-  const userCols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name)
+export function migrateSchema(db: Database.Database): void {
+  const userCols = (db.prepare('PRAGMA table_info(users)').all() as PragmaColumn[]).map((c) => c.name)
   if (!userCols.includes('display_name')) {
     db.exec('ALTER TABLE users ADD COLUMN display_name TEXT')
     log.info('schema_migrated', { table: 'users', column: 'display_name' })
@@ -478,12 +485,12 @@ export function migrateSchema(db) {
     db.exec('ALTER TABLE users ADD COLUMN anti_slip_threshold INTEGER NOT NULL DEFAULT 3')
     log.info('schema_migrated', { table: 'users', column: 'anti_slip_threshold' })
   }
-  const sessionCols = db.prepare('PRAGMA table_info(sessions)').all().map((c) => c.name)
+  const sessionCols = (db.prepare('PRAGMA table_info(sessions)').all() as PragmaColumn[]).map((c) => c.name)
   if (!sessionCols.includes('csrf_token')) {
     db.exec('ALTER TABLE sessions ADD COLUMN csrf_token TEXT')
     log.info('schema_migrated', { table: 'sessions', column: 'csrf_token' })
   }
-  const taskCols = db.prepare('PRAGMA table_info(tasks)').all().map((c) => c.name)
+  const taskCols = (db.prepare('PRAGMA table_info(tasks)').all() as PragmaColumn[]).map((c) => c.name)
   if (!taskCols.includes('deleted_at')) {
     db.exec('ALTER TABLE tasks ADD COLUMN deleted_at INTEGER')
     log.info('schema_migrated', { table: 'tasks', column: 'deleted_at' })
@@ -514,7 +521,7 @@ export function migrateSchema(db) {
   // como miembros de TODOS los proyectos existentes (una sola vez, cuando
   // project_members está vacía y hay proyectos). El owner_id queda NULL
   // (legado): los miembros pueden gestionar esos proyectos.
-  const projectCols = db.prepare('PRAGMA table_info(projects)').all().map((c) => c.name)
+  const projectCols = (db.prepare('PRAGMA table_info(projects)').all() as PragmaColumn[]).map((c) => c.name)
   if (!projectCols.includes('owner_id')) {
     db.exec('ALTER TABLE projects ADD COLUMN owner_id TEXT REFERENCES users(id) ON DELETE SET NULL')
     log.info('schema_migrated', { table: 'projects', column: 'owner_id' })
@@ -536,7 +543,7 @@ export function migrateSchema(db) {
   }
   // v2: activity_events.type gana el valor 'project' (cambiar proyecto desde el detalle).
   // SQLite no permite ALTER de CHECK → reconstrucción por tabla temporal.
-  const evSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='activity_events'").get()
+  const evSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='activity_events'").get() as { sql: string } | undefined
   if (evSql && !evSql.sql.includes("'project'")) {
     db.exec(`
       ALTER TABLE activity_events RENAME TO activity_events_old;
@@ -563,7 +570,7 @@ export function migrateSchema(db) {
   // tabla: si ya incluye 'attachment' (instalaciones nuevas), no se toca.
   const decEvSql = db
     .prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='decision_activity_events'")
-    .get()
+    .get() as { sql: string } | undefined
   if (decEvSql && !decEvSql.sql.includes("'attachment'")) {
     db.transaction(() => {
       db.exec(`
@@ -595,7 +602,7 @@ export function migrateSchema(db) {
   // decision_id y task_id nullable) no se tocan. Primero garantiza
   // reverted_at (el ALTER original vivía al final de backfillShortIds): el
   // INSERT SELECT del rebuild necesita la columna.
-  const gamLedgerColsInfo = db.prepare('PRAGMA table_info(gam_points_ledger)').all()
+  const gamLedgerColsInfo = db.prepare('PRAGMA table_info(gam_points_ledger)').all() as PragmaColumn[]
   if (!gamLedgerColsInfo.map((c) => c.name).includes('reverted_at')) {
     db.exec('ALTER TABLE gam_points_ledger ADD COLUMN reverted_at INTEGER')
     log.info('schema_migrated', { table: 'gam_points_ledger', column: 'reverted_at' })
@@ -636,12 +643,12 @@ export function migrateSchema(db) {
   db.exec('CREATE INDEX IF NOT EXISTS idx_gam_ledger_task ON gam_points_ledger(task_id, created_at)')
   db.exec('CREATE INDEX IF NOT EXISTS idx_gam_ledger_decision ON gam_points_ledger(decision_id, created_at)')
   db.exec('CREATE INDEX IF NOT EXISTS idx_gam_ledger_reverted ON gam_points_ledger(task_id, reverted_at)')
-  const gamLedgerIndexes = db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='gam_points_ledger'").all().map((r) => r.name)
+  const gamLedgerIndexes = (db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='gam_points_ledger'").all() as Array<{ name: string }>).map((r) => r.name)
   if (!gamLedgerIndexes.includes('idx_gam_ledger_reverted')) {
     db.exec('CREATE INDEX IF NOT EXISTS idx_gam_ledger_reverted ON gam_points_ledger(task_id, reverted_at)')
     log.info('schema_migrated', { table: 'gam_points_ledger', index: 'idx_gam_ledger_reverted' })
   }
-  let expenseCols = db.prepare('PRAGMA table_info(expenses)').all().map((c) => c.name)
+  let expenseCols = (db.prepare('PRAGMA table_info(expenses)').all() as PragmaColumn[]).map((c) => c.name)
   if (!expenseCols.includes('deleted_at')) {
     db.exec('ALTER TABLE expenses ADD COLUMN deleted_at INTEGER')
     log.info('schema_migrated', { table: 'expenses', column: 'deleted_at' })
@@ -658,7 +665,7 @@ export function migrateSchema(db) {
     db.exec("ALTER TABLE expenses ADD COLUMN payment_method TEXT CHECK (payment_method IN ('bizum','transfer','efectivo'))")
     log.info('schema_migrated', { table: 'expenses', column: 'payment_method' })
   }
-  const inviteCols = db.prepare('PRAGMA table_info(expense_invites)').all().map((c) => c.name)
+  const inviteCols = (db.prepare('PRAGMA table_info(expense_invites)').all() as PragmaColumn[]).map((c) => c.name)
   if (!inviteCols.includes('payment_method')) {
     db.exec("ALTER TABLE expense_invites ADD COLUMN payment_method TEXT CHECK (payment_method IN ('bizum','transfer','efectivo'))")
     log.info('schema_migrated', { table: 'expense_invites', column: 'payment_method' })
@@ -679,19 +686,19 @@ export function migrateSchema(db) {
   if (clearedTokens > 0) {
     log.info('invite_plaintext_tokens_cleared', { rows: clearedTokens })
   }
-  const exCommentCols = db.prepare('PRAGMA table_info(expense_comments)').all().map((c) => c.name)
+  const exCommentCols = (db.prepare('PRAGMA table_info(expense_comments)').all() as PragmaColumn[]).map((c) => c.name)
   if (!exCommentCols.includes('author_name')) {
     db.exec('ALTER TABLE expense_comments ADD COLUMN author_name TEXT')
     log.info('schema_migrated', { table: 'expense_comments', column: 'author_name' })
   }
 
   // Id corto legible por tarea (p. ej. CASA-3) + contador por proyecto.
-  const taskColsShort = db.prepare('PRAGMA table_info(tasks)').all().map((c) => c.name)
+  const taskColsShort = (db.prepare('PRAGMA table_info(tasks)').all() as PragmaColumn[]).map((c) => c.name)
   if (!taskColsShort.includes('short_id')) {
     db.exec('ALTER TABLE tasks ADD COLUMN short_id TEXT')
     log.info('schema_migrated', { table: 'tasks', column: 'short_id' })
   }
-  const projectColsShort = db.prepare('PRAGMA table_info(projects)').all().map((c) => c.name)
+  const projectColsShort = (db.prepare('PRAGMA table_info(projects)').all() as PragmaColumn[]).map((c) => c.name)
   if (!projectColsShort.includes('task_seq')) {
     db.exec('ALTER TABLE projects ADD COLUMN task_seq INTEGER NOT NULL DEFAULT 0')
     log.info('schema_migrated', { table: 'projects', column: 'task_seq' })
@@ -700,7 +707,7 @@ export function migrateSchema(db) {
 }
 
 /** Prefijo legible de un proyecto para el id corto de tarea ("Casa" -> CASA). */
-export function projectPrefix(name) {
+export function projectPrefix(name: string): string {
   const cleaned = String(name || '')
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, '')
@@ -712,8 +719,10 @@ export function projectPrefix(name) {
  * transacción que inserta la tarea: better-sqlite3 es síncrono y el escritor es
  * único, así que no hay carrera posible.
  */
-export function allocateShortId(db, projectId) {
-  const project = db.prepare('SELECT name, task_seq FROM projects WHERE id = ?').get(projectId)
+export function allocateShortId(db: Database.Database, projectId: string): string | null {
+  const project = db.prepare('SELECT name, task_seq FROM projects WHERE id = ?').get(projectId) as
+    | { name: string; task_seq: number | null }
+    | undefined
   if (!project) return null
   const seq = (project.task_seq ?? 0) + 1
   db.prepare('UPDATE projects SET task_seq = ? WHERE id = ?').run(seq, projectId)
@@ -722,17 +731,17 @@ export function allocateShortId(db, projectId) {
 
 /** Asigna short_id a las tareas que no lo tengan, por proyecto y en orden de
  *  creación. Idempotente: no toca las que ya lo tienen. */
-function backfillShortIds(db) {
-  const missing = db.prepare('SELECT COUNT(*) AS n FROM tasks WHERE short_id IS NULL').get().n
+function backfillShortIds(db: Database.Database): void {
+  const missing = (db.prepare('SELECT COUNT(*) AS n FROM tasks WHERE short_id IS NULL').get() as { n: number }).n
   if (missing === 0) return
   const updTask = db.prepare('UPDATE tasks SET short_id = ? WHERE id = ?')
   const updSeq = db.prepare('UPDATE projects SET task_seq = ? WHERE id = ?')
   const tx = db.transaction(() => {
-    for (const p of db.prepare('SELECT id, name, task_seq FROM projects').all()) {
+    for (const p of db.prepare('SELECT id, name, task_seq FROM projects').all() as Array<{ id: string; name: string; task_seq: number | null }>) {
       let seq = p.task_seq ?? 0
       const tasks = db
         .prepare('SELECT id FROM tasks WHERE project_id = ? AND short_id IS NULL ORDER BY created_at, id')
-        .all(p.id)
+        .all(p.id) as Array<{ id: string }>
       for (const t of tasks) {
         seq += 1
         updTask.run(`${projectPrefix(p.name)}-${seq}`, t.id)
@@ -754,15 +763,15 @@ const INBOX_PROJECT_NAME = 'Inbox'
 
 /** Garantiza que existe el proyecto inbox y que TODOS los usuarios son miembros
  *  (las tareas sin proyecto deben ser visibles para cualquiera). Idempotente. */
-export function ensureInbox(db) {
+export function ensureInbox(db: Database.Database): string {
   const now = Date.now()
-  let project = db.prepare('SELECT id FROM projects WHERE is_inbox = 1').get()
+  let project = db.prepare('SELECT id FROM projects WHERE is_inbox = 1').get() as { id: string } | undefined
   if (!project) {
     const fixed = db.prepare('SELECT id FROM projects WHERE id = ?').get(INBOX_PROJECT_ID)
     if (fixed) {
       db.prepare('UPDATE projects SET is_inbox = 1 WHERE id = ?').run(INBOX_PROJECT_ID)
     } else {
-      const pos = db.prepare('SELECT COALESCE(MIN(position) - 1, 0) AS p FROM projects').get().p
+      const pos = (db.prepare('SELECT COALESCE(MIN(position) - 1, 0) AS p FROM projects').get() as { p: number }).p
       db.prepare(
         `INSERT INTO projects (id, name, emoji, color, position, owner_id, is_inbox, created_at)
          VALUES (?, ?, ?, ?, ?, NULL, 1, ?)`
@@ -782,7 +791,7 @@ export function ensureInbox(db) {
 }
 
 /** Añade un usuario recién creado como miembro del inbox (idempotente). */
-export function ensureUserInInbox(db, userId) {
+export function ensureUserInInbox(db: Database.Database, userId: string): void {
   db.prepare(
     `INSERT OR IGNORE INTO project_members (project_id, user_id, role, added_at)
      SELECT id, ?, 'member', ? FROM projects WHERE is_inbox = 1`
@@ -791,7 +800,7 @@ export function ensureUserInInbox(db, userId) {
 
 // Checkpoint WAL periódico (llamado cada hora desde index.js): sin esto el WAL
 // crece indefinidamente. También limpia sesiones caducadas.
-export function hourlyMaintenance(db, label) {
+export function hourlyMaintenance(db: Database.Database, label: string): void {
   db.pragma('wal_checkpoint(TRUNCATE)')
   const { changes: sessChanges } = db.prepare('DELETE FROM sessions WHERE expires_at < ?').run(Date.now())
   if (sessChanges > 0) log.info('sessions_expired_purged', { db: label, count: sessChanges })
@@ -807,14 +816,14 @@ export function hourlyMaintenance(db, label) {
   if (attChanges > 0) log.info('login_attempts_purged', { db: label, count: attChanges })
 }
 
-export function kvGet(db, key, fallback = null) {
-  const row = db.prepare('SELECT value FROM kv WHERE key = ?').get(key)
+export function kvGet(db: Database.Database, key: string, fallback: string | null = null): string | null {
+  const row = db.prepare('SELECT value FROM kv WHERE key = ?').get(key) as { value: string } | undefined
   return row ? row.value : fallback
 }
 
-export function getArchiveAfterDays(db) {
+export function getArchiveAfterDays(db: Database.Database): number {
   const raw = kvGet(db, 'archive_after_days', '3')
-  const parsed = parseInt(raw, 10)
+  const parsed = parseInt(raw ?? '3', 10)
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 3
 }
 
@@ -824,7 +833,7 @@ export function getArchiveAfterDays(db) {
 // arrancar y cada hora. Devuelve el número de tareas archivadas (0 si no tocaba).
 // El primer UPDATE auto-cura done_at de tareas 'hecho' sin marca (semillas
 // demo nuevas o BDs pre-migración): les da updated_at como fecha de entrada.
-export function archiveStaleDoneTasks(db) {
+export function archiveStaleDoneTasks(db: Database.Database): number {
   const days = getArchiveAfterDays(db)
   const cutoff = Date.now() - days * 24 * 60 * 60 * 1000
   const tx = db.transaction(() => {
@@ -838,7 +847,7 @@ export function archiveStaleDoneTasks(db) {
          WHERE "column" = 'hecho' AND archived_at IS NULL AND deleted_at IS NULL
            AND done_at IS NOT NULL AND done_at < ?`
       )
-      .all(cutoff)
+      .all(cutoff) as Array<{ id: string; position: number }>
     if (stale.length === 0) return 0
     const now = Date.now()
     const archive = db.prepare('UPDATE tasks SET archived_at = ? WHERE id = ?')
@@ -858,7 +867,7 @@ export function archiveStaleDoneTasks(db) {
 }
 
 // Auto-archivo de GASTOS: espejo del de tareas, sobre el paso 'hecho' (Pagado).
-export function archiveStaleDoneExpenses(db) {
+export function archiveStaleDoneExpenses(db: Database.Database): number {
   const days = getArchiveAfterDays(db)
   const cutoff = Date.now() - days * 24 * 60 * 60 * 1000
   const tx = db.transaction(() => {
@@ -872,7 +881,7 @@ export function archiveStaleDoneExpenses(db) {
          WHERE step = 'hecho' AND archived_at IS NULL AND deleted_at IS NULL
            AND done_at IS NOT NULL AND done_at < ?`
       )
-      .all(cutoff)
+      .all(cutoff) as Array<{ id: string; position: number }>
     if (stale.length === 0) return 0
     const now = Date.now()
     const archive = db.prepare('UPDATE expenses SET archived_at = ? WHERE id = ?')
@@ -891,7 +900,7 @@ export function archiveStaleDoneExpenses(db) {
   return archived
 }
 
-export function kvSet(db, key, value) {
+export function kvSet(db: Database.Database, key: string, value: unknown): void {
   db.prepare('INSERT INTO kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
     .run(key, String(value))
 }

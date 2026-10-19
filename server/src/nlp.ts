@@ -1,12 +1,17 @@
-// nlp.js — parser de lenguaje natural para tareas (ES/EN). Extrae una fecha de
+// nlp.ts — parser de lenguaje natural para tareas (ES/EN). Extrae una fecha de
 // vencimiento y/o una recurrencia de un texto en prosa, y devuelve el título
 // limpio (sin la parte temporal). Lógica pura y determinista, sin LLM.
 //
 // Devuelve null si no se detecta nada. La detección es de mínimo sorpresa: solo
 // se extrae cuando el patrón es inequívoco; el resto del texto queda intacto.
 
+import type { Frequency, Recurrence } from './recurrence.js'
+
+export type Lang = 'es' | 'en'
+type WeekdayDict = Record<string, number>
+
 // Días de la semana: index 0=domingo ... 6=sábado (mismo convenio que el front).
-const DAYS = {
+const DAYS: Record<Lang, WeekdayDict> = {
   es: {
     domingo: 0, domingos: 0, lunes: 1, martes: 2, miércoles: 3, miercoles: 3,
     jueves: 4, viernes: 5, sábado: 6, sabado: 6, sábados: 6, sabados: 6,
@@ -19,31 +24,31 @@ const DAYS = {
 }
 
 // Unidades de recurrencia por idioma → frecuencia.
-const FREQ = {
+const FREQ: Record<Lang, Record<string, Frequency>> = {
   es: { día: 'daily', dias: 'daily', semana: 'weekly', semanas: 'weekly', mes: 'monthly', meses: 'monthly', año: 'monthly', años: 'monthly' },
   en: { day: 'daily', days: 'daily', week: 'weekly', weeks: 'weekly', month: 'monthly', months: 'monthly', year: 'monthly', years: 'monthly' },
 }
 
 // Número de meses al que equivale una unidad de recurrencia (años → monthly 12).
-const MONTHS = {
+const MONTHS: Record<Lang, Record<string, number>> = {
   es: { año: 12, años: 12 },
   en: { year: 12, years: 12 },
 }
 
-const fmtISO = (d) => {
+const fmtISO = (d: Date): string => {
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const dd = String(d.getDate()).padStart(2, '0')
   return `${y}-${m}-${dd}`
 }
 
-const addDays = (s, n) => {
+const addDays = (s: string, n: number): string => {
   const d = new Date(s + 'T12:00:00')
   d.setDate(d.getDate() + n)
   return fmtISO(d)
 }
 
-function nextWeekday(fromISO, weekday) {
+function nextWeekday(fromISO: string, weekday: number): string {
   const base = new Date(fromISO + 'T12:00:00')
   const today = base.getDay()
   let diff = (weekday - today + 7) % 7
@@ -55,7 +60,7 @@ function nextWeekday(fromISO, weekday) {
 
 // "el viernes" de un GASTO: el más reciente (hoy cuenta). Los gastos se
 // cuentan hacia atrás, a diferencia de los vencimientos.
-function lastWeekday(fromISO, weekday) {
+function lastWeekday(fromISO: string, weekday: number): string {
   const base = new Date(fromISO + 'T12:00:00')
   const diff = (base.getDay() - weekday + 7) % 7
   const d = new Date(fromISO + 'T12:00:00')
@@ -63,13 +68,13 @@ function lastWeekday(fromISO, weekday) {
   return fmtISO(d)
 }
 
-function todayLocal() {
+function todayLocal(): string {
   const d = new Date()
   return fmtISO(d)
 }
 
 // Quita de un texto una lista de substrings detectados (la parte temporal).
-function stripParts(text, parts) {
+function stripParts(text: string, parts: string[]): string {
   let out = text
   for (const p of parts.sort((a, b) => b.length - a.length)) {
     out = out.replace(new RegExp(`\\b${p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi'), ' ')
@@ -84,11 +89,19 @@ function stripParts(text, parts) {
  * @param {string} [today] fecha base 'YYYY-MM-DD' (inyectable en tests)
  * @returns {{due_date: string|null, recurrence: object|null, cleanedTitle: string}|null}
  */
-export function parseTaskText(text, lang, today = todayLocal()) {
+export function parseTaskText(
+  text: string,
+  lang: Lang,
+  today: string = todayLocal()
+): { due_date: string | null; recurrence: Recurrence | null; cleanedTitle: string } | null {
   if (!text || typeof text !== 'string') return null
   const low = text.toLowerCase()
   const dict = lang === 'en' ? DAYS.en : DAYS.es
-  const found = { due_date: null, recurrence: null, parts: [] }
+  const found: { due_date: string | null; recurrence: Recurrence | null; parts: string[] } = {
+    due_date: null,
+    recurrence: null,
+    parts: [],
+  }
 
   // --- Fecha explícita ISO ---
   const iso = low.match(/\b(\d{4})-(\d{2})-(\d{2})\b/)
@@ -138,12 +151,13 @@ export function parseTaskText(text, lang, today = todayLocal()) {
   if (everyN) {
     const unit = everyN[2].toLowerCase()
     const interval = parseInt(everyN[1], 10)
-    let freq = FREQ[lang][unit]
+    const freq = FREQ[lang][unit]
     let months = interval
-    if (MONTHS[lang][unit]) months = interval * MONTHS[lang][unit]
+    const monthsPerUnit = MONTHS[lang][unit]
+    if (monthsPerUnit) months = interval * monthsPerUnit
     found.recurrence = { freq, interval, weekdays: null, mode: 'due' }
     found.parts.push(everyN[0])
-    if (freq === 'monthly' && MONTHS[lang][unit]) found.recurrence.interval = months
+    if (freq === 'monthly' && monthsPerUnit) found.recurrence.interval = months
   }
 
   // --- Recurrencia: "cada/every <día> [y <día>...]" → weekly con weekdays ---
@@ -153,14 +167,19 @@ export function parseTaskText(text, lang, today = todayLocal()) {
       : /\b(todos los|los|cada)\s+((?:lunes|martes|miércoles|miercoles|jueves|viernes|sábados|sabados|domingos|sábado|sabado|domingo)(?:\s*y\s*(?:lunes|martes|miércoles|miercoles|jueves|viernes|sábados|sabados|domingos|sábado|sabado|domingo))*)\b/
   )
   if (everyDays) {
-    const prefix = lang === 'en' ? 'every' : everyDays[1]
-    const daysList = lang === 'en' ? everyDays[1] : everyDays[2]
+    const prefix = lang === 'en' ? 'every' : (everyDays[1] as string)
+    const daysList = lang === 'en' ? (everyDays[1] as string) : (everyDays[2] as string)
     const weekdays = []
     for (const [day, idx] of Object.entries(dict)) {
       if (new RegExp(`\\b${day}\\b`, 'i').test(daysList)) weekdays.push(idx)
     }
     if (weekdays.length > 0) {
-      found.recurrence = { freq: 'weekly', interval: 1, weekdays: [...new Set(weekdays)].sort(), mode: 'due' }
+      found.recurrence = {
+        freq: 'weekly',
+        interval: 1,
+        weekdays: [...new Set(weekdays)].sort((a, b) => a - b),
+        mode: 'due',
+      }
       found.parts.push(prefix)
       found.parts.push(...(daysList.match(/[a-záéíóúñ]+/gi) || []))
     }
@@ -212,11 +231,19 @@ export function parseTaskText(text, lang, today = todayLocal()) {
  * (€ / euro(s) / eur). Devuelve null si no hay nada inequívoco.
  * @returns {{spent_at: string|null, amount_cents: number|null, cleanedTitle: string}|null}
  */
-export function parseExpenseText(text, lang, today = todayLocal()) {
+export function parseExpenseText(
+  text: string,
+  lang: Lang,
+  today: string = todayLocal()
+): { spent_at: string | null; amount_cents: number | null; cleanedTitle: string } | null {
   if (!text || typeof text !== 'string') return null
   const low = text.toLowerCase()
   const dict = lang === 'en' ? DAYS.en : DAYS.es
-  const found = { spent_at: null, amount_cents: null, parts: [] }
+  const found: { spent_at: string | null; amount_cents: number | null; parts: string[] } = {
+    spent_at: null,
+    amount_cents: null,
+    parts: [],
+  }
 
   // --- Fecha explícita ISO ---
   const iso = low.match(/\b(\d{4})-(\d{2})-(\d{2})\b/)

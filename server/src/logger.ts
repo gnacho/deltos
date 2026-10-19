@@ -1,5 +1,5 @@
 // ============================================================================
-// logger.js — logger NDJSON a stdout SIN dependencias (skill log-ops).
+// logger.ts — logger NDJSON a stdout SIN dependencias (skill log-ops).
 //
 // Reglas del stack que cumple:
 //   - NDJSON a stdout → journald rota; NADA de ficheros ni rotación in-app.
@@ -17,15 +17,18 @@
 // ============================================================================
 import { createHash } from 'node:crypto'
 
-const LEVEL_PRIORITY = { debug: 10, info: 20, warn: 30, error: 40 }
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
+export type LogAttrs = Record<string, unknown>
 
-function parseLevel(raw) {
+const LEVEL_PRIORITY: Record<LogLevel, number> = { debug: 10, info: 20, warn: 30, error: 40 }
+
+function parseLevel(raw: string | undefined): LogLevel {
   const v = (raw ?? 'info').toLowerCase()
   return v === 'debug' || v === 'info' || v === 'warn' || v === 'error' ? v : 'info'
 }
 
 // Nivel mínimo: LOG_LEVEL=debug solo vía override temporal de systemd.
-const MIN_LEVEL = parseLevel(process.env.LOG_LEVEL)
+const MIN_LEVEL: LogLevel = parseLevel(process.env.LOG_LEVEL)
 
 // --- Lista canónica de claves sensibles (case-insensitive) ------------------
 // Mantener sincronizada con docs/logging.md y CONVENTIONS.md.
@@ -56,24 +59,24 @@ const SENSITIVE_KEYS = new Set([
 const SENSITIVE_SUBSTRINGS = ['token', 'secret', 'password']
 const CENSOR = '[REDACTADO]'
 
-export function isSensitiveKey(key) {
+export function isSensitiveKey(key: string): boolean {
   const k = String(key).toLowerCase()
   return SENSITIVE_KEYS.has(k) || SENSITIVE_SUBSTRINGS.some((s) => k.includes(s))
 }
 
 // Redacción recursiva por clave (objetos y arrays). Profundidad acotada.
-export function redact(value, depth = 0) {
+export function redact(value: unknown, depth = 0): unknown {
   if (depth > 8 || value === null || value === undefined) return value
   if (value instanceof Error) {
     // Errores: nombre y mensaje; el stack solo en debug (no toca disco en prod).
-    const out = { name: value.name, message: value.message }
+    const out: LogAttrs = { name: value.name, message: value.message }
     if (MIN_LEVEL === 'debug' && value.stack) out.stack = value.stack
     return out
   }
   if (Array.isArray(value)) return value.map((v) => redact(v, depth + 1))
   if (typeof value === 'object') {
-    const out = {}
-    for (const [k, v] of Object.entries(value)) {
+    const out: LogAttrs = {}
+    for (const [k, v] of Object.entries(value as LogAttrs)) {
       out[k] = isSensitiveKey(k) ? CENSOR : redact(v, depth + 1)
     }
     return out
@@ -82,46 +85,48 @@ export function redact(value, depth = 0) {
 }
 
 // user_id → 'u_' + SHA-256 truncado (estable para correlacionar, irreversible).
-export function hashUserId(userId) {
+export function hashUserId(userId: string | number | null | undefined): string | undefined {
   if (!userId) return undefined
   return 'u_' + createHash('sha256').update(String(userId)).digest('hex').slice(0, 12)
 }
 
 export class Logger {
-  constructor(context) {
+  readonly context: LogAttrs
+
+  constructor(context: LogAttrs) {
     this.context = context
   }
 
-  static root(baseContext = {}) {
+  static root(baseContext: LogAttrs = {}): Logger {
     return new Logger(baseContext)
   }
 
   /** Logger hijo con contexto heredado (component, request_id...). */
-  child(context) {
+  child(context: LogAttrs): Logger {
     return new Logger({ ...this.context, ...context })
   }
 
-  debug(msg, attrs = {}) {
+  debug(msg: string, attrs: LogAttrs = {}): void {
     this.emit('debug', msg, attrs)
   }
-  info(msg, attrs = {}) {
+  info(msg: string, attrs: LogAttrs = {}): void {
     this.emit('info', msg, attrs)
   }
-  warn(msg, attrs = {}) {
+  warn(msg: string, attrs: LogAttrs = {}): void {
     this.emit('warn', msg, attrs)
   }
-  error(msg, attrs = {}) {
+  error(msg: string, attrs: LogAttrs = {}): void {
     this.emit('error', msg, attrs)
   }
 
-  emit(level, msg, attrs) {
+  emit(level: LogLevel, msg: string, attrs: LogAttrs): void {
     if (LEVEL_PRIORITY[level] < LEVEL_PRIORITY[MIN_LEVEL]) return
-    const line = {
+    const line: LogAttrs = {
       level,
       ts: new Date().toISOString(),
       msg, // nombre del evento, estático: nunca interpolar datos aquí
       ...this.context,
-      ...redact(attrs),
+      ...(redact(attrs) as LogAttrs),
     }
     process.stdout.write(JSON.stringify(line) + '\n')
   }

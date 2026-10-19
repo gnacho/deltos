@@ -1,4 +1,4 @@
-// sse.js — hub de Server-Sent Events (contrato de eventos, skill api-stack).
+// sse.ts — hub de Server-Sent Events (contrato de eventos, skill api-stack).
 // El front solo lee: SSE en vez de WebSocket (reconexión gratis con EventSource).
 //
 // Contrato:
@@ -15,9 +15,20 @@
 //     tras Nginx Proxy Manager: proxies cierran conexiones idle ~60 s).
 //   - `data` mantiene {type:'changed', entity} por compatibilidad con el
 //     frontend actual hasta la fase 2.
+import type { SSEStreamingApi } from 'hono/streaming'
+
+export type SseEntity =
+  | 'users'
+  | 'projects'
+  | 'tasks'
+  | 'labels'
+  | 'comments'
+  | 'attachments'
+  | 'settings'
+  | 'decisions'
 
 // Dominio singular para el nombre del evento (entity plural del dominio).
-const DOMAIN = {
+const DOMAIN: Partial<Record<SseEntity, string>> = {
   users: 'user',
   projects: 'project',
   tasks: 'task',
@@ -28,16 +39,28 @@ const DOMAIN = {
   decisions: 'decision',
 }
 
-export function eventName(entity) {
+export function eventName(entity: SseEntity): string {
   return `${DOMAIN[entity] ?? entity}.changed`
 }
 
-export function createHub(maxClients = 20) {
-  const clients = new Set()
+export interface Hub {
+  maxClients: number
+  size(): number
+  seq(): number
+  add(stream: SSEStreamingApi): void
+  remove(stream: SSEStreamingApi): void
+  hello(stream: SSEStreamingApi): Promise<void>
+  resync(stream: SSEStreamingApi, lastEventId: string | undefined): Promise<void> | undefined
+  broadcast(entity: SseEntity): void
+  shutdown(): void
+}
+
+export function createHub(maxClients = 20): Hub {
+  const clients = new Set<SSEStreamingApi>()
   let seq = 0 // id monótono de eventos SSE (en memoria; ver contrato arriba)
 
   // Escribe un evento con id monótono asignado por el hub.
-  function send(stream, event, data) {
+  function send(stream: SSEStreamingApi, event: string, data: unknown): Promise<void> {
     seq += 1
     return stream.writeSSE({ id: String(seq), event, data: JSON.stringify(data) })
   }
@@ -65,10 +88,11 @@ export function createHub(maxClients = 20) {
       if (Number.isFinite(last) && last < seq) {
         return send(stream, 'sync.resync', { type: 'changed', entity: '*' }).catch(() => {})
       }
+      return undefined
     },
     // Notifica a todos los clientes que una entidad cambió:
     // event: '<dominio>.changed', data: {"type":"changed","entity":"tasks"|…}
-    broadcast(entity) {
+    broadcast(entity: SseEntity) {
       const event = eventName(entity)
       const data = JSON.stringify({ type: 'changed', entity })
       seq += 1

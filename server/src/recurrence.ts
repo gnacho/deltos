@@ -1,4 +1,4 @@
-// recurrence.js — recurrencia de tareas: parseo de la config JSON y cálculo de
+// recurrence.ts — recurrencia de tareas: parseo de la config JSON y cálculo de
 // la próxima fecha de vencimiento. Lógica pura (testable sin BD) + helpers que
 // leen el historial de completados de la serie para el modo adaptativo.
 //
@@ -11,58 +11,71 @@
 //                         la serie (adaptativo); fallback al intervalo si no hay
 //                         historia suficiente.
 // weekdays solo aplica a weekly: días concretos de la semana (0=domingo...6=sábado).
+import type Database from 'better-sqlite3'
+
 const DAY = 24 * 60 * 60 * 1000
 
-export const FREQUENCIES = ['daily', 'weekly', 'monthly']
+export const FREQUENCIES = ['daily', 'weekly', 'monthly'] as const
+export type Frequency = (typeof FREQUENCIES)[number]
+export type RecurrenceMode = 'due' | 'completion'
 
-// Normaliza la config cruda (del JSON de BD o del body) a un objeto válido.
-// Devuelve null si no es una recurrencia usable.
-export function normalizeRecurrence(rec) {
+export interface Recurrence {
+  freq: Frequency
+  interval: number
+  weekdays: number[] | null
+  mode: RecurrenceMode
+}
+
+/** Normaliza la config cruda (del JSON de BD o del body) a un objeto válido.
+ *  Devuelve null si no es una recurrencia usable. */
+export function normalizeRecurrence(rec: unknown): Recurrence | null {
   if (!rec || typeof rec !== 'object') return null
-  const freq = FREQUENCIES.includes(rec.freq) ? rec.freq : null
+  const raw = rec as { freq?: unknown; interval?: unknown; weekdays?: unknown; mode?: unknown }
+  const freq = FREQUENCIES.includes(raw.freq as Frequency) ? (raw.freq as Frequency) : null
   if (!freq) return null
-  const interval = Number.isInteger(rec.interval) && rec.interval >= 1 ? rec.interval : 1
-  let weekdays = null
-  if (freq === 'weekly' && Array.isArray(rec.weekdays) && rec.weekdays.length > 0) {
-    weekdays = [...new Set(rec.weekdays.filter((n) => Number.isInteger(n) && n >= 0 && n <= 6))].sort()
+  const interval = Number.isInteger(raw.interval) && (raw.interval as number) >= 1 ? (raw.interval as number) : 1
+  let weekdays: number[] | null = null
+  if (freq === 'weekly' && Array.isArray(raw.weekdays) && raw.weekdays.length > 0) {
+    const days = [...new Set(raw.weekdays.filter((n: unknown) => Number.isInteger(n) && (n as number) >= 0 && (n as number) <= 6))] as number[]
+    weekdays = days.sort((a, b) => a - b)
     if (weekdays.length === 0) weekdays = null
   }
-  const mode = rec.mode === 'completion' ? 'completion' : 'due'
+  const mode: RecurrenceMode = raw.mode === 'completion' ? 'completion' : 'due'
   return { freq, interval, weekdays, mode }
 }
 
-export function serializeRecurrence(rec) {
+export function serializeRecurrence(rec: Recurrence): string {
   return JSON.stringify(rec)
 }
 
 // --- utilidades de fecha (YYYY-MM-DD, sin zona horaria) ----------------------
 
-function parseISO(s) {
+function parseISO(s: string): Date {
   const [y, m, d] = s.split('-').map(Number)
   return new Date(Date.UTC(y, m - 1, d))
 }
 
-function fmtISO(d) {
+function fmtISO(d: Date): string {
   return d.toISOString().slice(0, 10)
 }
 
-function addDays(s, n) {
+function addDays(s: string, n: number): string {
   return fmtISO(new Date(parseISO(s).getTime() + n * DAY))
 }
 
-function addMonths(s, n) {
+function addMonths(s: string, n: number): string {
   const [y, m, d] = s.split('-').map(Number)
   const target = new Date(Date.UTC(y, m - 1 + n, 1))
   const lastDay = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate()
   return fmtISO(new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth(), Math.min(d, lastDay))))
 }
 
-function weekdayOf(s) {
+function weekdayOf(s: string): number {
   return parseISO(s).getUTCDay()
 }
 
 // Siguiente ocurrencia ESTRICTAMENTE después de `from` según la config.
-export function nextOccurrence(from, rec) {
+export function nextOccurrence(from: string, rec: Recurrence): string | null {
   if (rec.freq === 'daily') return addDays(from, rec.interval)
   if (rec.freq === 'monthly') return addMonths(from, rec.interval)
   if (rec.freq === 'weekly') {
@@ -79,7 +92,7 @@ export function nextOccurrence(from, rec) {
   return null
 }
 
-export function todayLocal() {
+export function todayLocal(): string {
   const d = new Date()
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')
@@ -92,8 +105,8 @@ export function todayLocal() {
 // Fechas de completado (epoch ms) de la serie: eventos moved→hecho de las
 // tareas del grupo (la instancia que se completa ya está incluida cuando se
 // llama desde el move handler, porque el evento se registra antes).
-export function completionDates(db, groupId) {
-  return db
+export function completionDates(db: Database.Database, groupId: string): number[] {
+  return (db
     .prepare(
       `SELECT ae.created_at
        FROM activity_events ae
@@ -102,11 +115,11 @@ export function completionDates(db, groupId) {
          AND json_extract(ae.data, '$.to') = 'hecho'
        ORDER BY ae.created_at`
     )
-    .all(groupId)
+    .all(groupId) as Array<{ created_at: number }>)
     .map((r) => r.created_at)
 }
 
-export function median(arr) {
+export function median(arr: number[]): number {
   const sorted = [...arr].sort((a, b) => a - b)
   const mid = Math.floor(sorted.length / 2)
   return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2
@@ -115,21 +128,33 @@ export function median(arr) {
 // Intervalo efectivo en días para el modo adaptativo: mediana de los gaps entre
 // completados consecutivos de la serie; si no hay >= 2 completados, el intervalo
 // configurado. Nunca por debajo de 1 día.
-export function adaptiveInterval(completionsMs, configured) {
+export function adaptiveInterval(completionsMs: number[], configured: number): number {
   if (completionsMs.length < 2) return configured
-  const gaps = []
+  const gaps: number[] = []
   for (let i = 1; i < completionsMs.length; i++) {
     gaps.push(Math.round((completionsMs[i] - completionsMs[i - 1]) / DAY))
   }
   return Math.max(1, Math.round(median(gaps)))
 }
 
+/** Fila mínima de tarea que necesita el cálculo de la próxima fecha. */
+export interface RecurrentTaskRow {
+  id: string
+  due_date?: string | null
+  recurrence?: string | Recurrence | null
+  recurrence_group_id?: string | null
+}
+
 // Próxima fecha de vencimiento de una tarea recurrente que se acaba de completar.
 //   task   → la fila de la tarea (con recurrence JSON string + recurrence_group_id)
 //   today  → 'YYYY-MM-DD' (fecha actual, inyectable en tests)
 // Devuelve 'YYYY-MM-DD' o null si la tarea no es recurrente.
-export function computeNextDue(db, task, today = todayLocal()) {
-  let rec
+export function computeNextDue(
+  db: Database.Database,
+  task: RecurrentTaskRow,
+  today: string = todayLocal()
+): string | null {
+  let rec: Recurrence | null
   try {
     rec = normalizeRecurrence(typeof task.recurrence === 'string' ? JSON.parse(task.recurrence) : task.recurrence)
   } catch {
@@ -150,7 +175,7 @@ export function computeNextDue(db, task, today = todayLocal()) {
   // mode 'due': desde el vencimiento previo, cadencia constante; si quedó en el
   // pasado (tarea vencida que se completa tarde), avanza hasta superar hoy.
   const base = task.due_date || today
-  let next = nextOccurrence(base, rec)
-  while (next <= today) next = nextOccurrence(next, rec)
+  let next = nextOccurrence(base, rec) as string
+  while (next <= today) next = nextOccurrence(next, rec) as string
   return next
 }

@@ -1,5 +1,5 @@
-// config.js — configuración por variables de entorno, validada con zod.
-// Falla rápido al arrancar si la configuración es inválida (ver index.js).
+// config.ts — configuración por variables de entorno, validada con zod.
+// Falla rápido al arrancar si la configuración es inválida (ver index.ts).
 import { fileURLToPath } from 'node:url'
 import { z } from 'zod'
 import fs from 'node:fs'
@@ -51,7 +51,11 @@ const envSchema = z
       })
     }
     const PLACEHOLDER_MARKERS = ['cambia', 'changeme', 'change-me', 'example', 'placeholder', 'your-secret', 'replace_me', 'xxx']
-    for (const [key, val] of [['AUTH_PASS', env.AUTH_PASS], ['SESSION_SECRET', env.SESSION_SECRET]]) {
+    const secretsToCheck: Array<[string, string | undefined]> = [
+      ['AUTH_PASS', env.AUTH_PASS],
+      ['SESSION_SECRET', env.SESSION_SECRET],
+    ]
+    for (const [key, val] of secretsToCheck) {
       if (val && PLACEHOLDER_MARKERS.some((m) => val.toLowerCase().includes(m))) {
         ctx.addIssue({
           code: 'custom',
@@ -62,6 +66,8 @@ const envSchema = z
     }
   })
 
-export function loadConfig(env = process.env) {
+export type Config = z.infer<typeof envSchema>
+
+export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   return envSchema.parse(env)
 }

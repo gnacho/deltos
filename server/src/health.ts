@@ -1,5 +1,8 @@
-// health.js — GET /health: estado de la BD, uptime y memoria.
-export function registerHealth(app, { prod, demo }) {
+// health.ts — GET /health: estado de la BD, uptime y memoria.
+import type { Hono } from 'hono'
+import type Database from 'better-sqlite3'
+
+export function registerHealth(app: Hono, { prod, demo }: { prod: Database.Database; demo?: Database.Database | null }) {
   app.get('/health', (c) => {
     let dbOk = true
     try {

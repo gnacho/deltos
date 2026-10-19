@@ -4,11 +4,13 @@
   "description": "Backend de Deltos — PWA de gestión de tareas para pareja (Hono + better-sqlite3)",
   "type": "module",
   "engines": {
-    "node": ">=24 <25"
+    "node": ">=24"
   },
   "scripts": {
-    "start": "node src/index.js",
-    "dev": "node --watch src/index.js",
+    "start": "node dist/index.js",
+    "dev": "tsc -p tsconfig.build.json && node --watch dist/index.js",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
     "test": "node node_modules/vitest/vitest.mjs run"
   },
   "dependencies": {
@@ -22,6 +24,10 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^26.6.5",
+    "@types/web-push": "^3.6.4",
+    "typescript": "^7.0.2",
     "vitest": "^4.1.11"
   },
   "allowScripts": {
