@@ -1,0 +1,1914 @@
+// routes-domain.ts — rutas del dominio Deltos: bootstrap, proyectos, etiquetas,
+// tareas (CRUD + mover), comentarios, adjuntos, feed de actividad.
+// Todas bajo requireAuth; c.get('db') apunta a la BD de la sesión (prod o demo).
+// Convenciones api-stack (CONVENTIONS.md): zValidator en cada ruta, errores
+// por httpError() (el envelope lo construye app.onError), 201+Location al
+// crear, 204 sin cuerpo en DELETE, 409 ante UNIQUE, keyset en /api/activity.
+import crypto from 'node:crypto'
+import fs from 'node:fs'
+import path from 'node:path'
+import { z } from 'zod'
+import bcrypt from 'bcryptjs'
+import { zValidator } from '@hono/zod-validator'
+import { SqliteError } from 'better-sqlite3'
+import { requireAdmin } from './auth.js'
+import { kvGet, kvSet, allocateShortId, ensureUserInInbox } from './db.js'
+import { notifyUsers, notifyAllExcept, notifyInterested } from './push.js'
+import { httpError, validationHook } from './errors.js'
+import { ERROR_CODES } from './error-codes.js'
+import { decodeCursor, keysetPage } from './pagination.js'
+import { logger } from './logger.js'
+import { isBackupTimerActive } from './backup.js'
+import { normalizeRecurrence, serializeRecurrence, computeNextDue, todayLocal, adaptiveInterval, completionDates } from './recurrence.js'
+import { grantCompletionPoints, revertCompletionPoints } from './routes-gamification.js'
+import { parseTaskText } from './nlp.js'
+import type { Context, Hono, MiddlewareHandler, Next } from 'hono'
+import type Database from 'better-sqlite3'
+import type { AppEnv, SessionUser } from './types.js'
+import type { Hub } from './sse.js'
+import type { PushData, PushOptions } from './push.js'
+import { currentUser } from './auth.js'
+
+/** Fila de tasks tal como está en la BD. */
+interface TaskRow {
+  id: string
+  project_id: string
+  short_id: string | null
+  title: string
+  description: string | null
+  column: string
+  position: number
+  priority: string | null
+  due_date: string | null
+  recurrence: string | null
+  recurrence_group_id: string | null
+  recurrence_paused: number | null
+  assignee_id: string | null
+  created_by: string
+  created_at: number
+  updated_at: number
+  done_at: number | null
+  archived_at: number | null
+  deleted_at: number | null
+  [key: string]: unknown
+}
+
+/** Fila de projects. */
+interface ProjectRow {
+  id: string
+  name: string
+  emoji: string | null
+  color: string | null
+  position: number
+  owner_id: string | null
+  is_inbox: number | null
+  created_at: number
+  [key: string]: unknown
+}
+
+/** Fila de members hidratada (JOIN project_members + users). */
+interface MemberRow {
+  id: string
+  username: string
+  color: string | null
+  role: string
+}
+
+/** Etiqueta asociada a una tarea (JOIN task_labels + labels). */
+interface TaskLabelRow {
+  task_id: string
+  id: string
+  name: string
+  color: string
+}
+
+/** Fila de attachments (con stored_name para resolver el fichero). */
+interface AttachmentRow {
+  id: string
+  task_id: string
+  stored_name: string
+  filename: string
+  size: number
+  mime: string
+  uploaded_by: string | null
+  created_at: number
+  [key: string]: unknown
+}
+
+/** Fila de task_subtasks con el project_id de su tarea (JOIN). */
+interface SubtaskRow {
+  id: string
+  task_id: string
+  parent_id: string | null
+  title: string
+  done: number
+  position: number
+  created_at: number
+  project_id: string
+  [key: string]: unknown
+}
+
+/** Comentario con el usuario resuelto. */
+interface CommentRow {
+  id: string
+  task_id: string
+  body: string
+  created_at: number
+  username: string | null
+  user_color: string | null
+  author_name?: string | null
+  [key: string]: unknown
+}
+
+const log = logger.child({ component: 'domain' })
+
+// Notificación fire-and-forget a usuarios concretos (nunca bloquea la HTTP).
+function notifyIds(
+  db: Database.Database,
+  demo: boolean,
+  ids: string[],
+  tipo: string,
+  datos: PushData,
+  opciones: PushOptions = {}
+): void {
+  if (!ids || ids.length === 0) return
+  notifyUsers(db, ids, tipo, datos, { ...opciones, demo }).catch((err) =>
+    log.error('push_notify_failed', { tipo, error: err })
+  )
+}
+
+// Extrae @username de un texto y los resuelve a IDs de usuario existentes
+// (case-insensitive), excluyendo al actor. Para notificar menciones.
+export function extraerMenciones(db: Database.Database, text: string, actorId: string): string[] {
+  const matches = (text || '').match(/@([A-Za-z0-9_]+)/g) || []
+  const nicks = [...new Set(matches.map((m) => m.slice(1)).map((n) => n.toLowerCase()))]
+  if (nicks.length === 0) return []
+  const placeholders = nicks.map(() => '?').join(',')
+  const rows = db
+    .prepare(`SELECT id FROM users WHERE LOWER(username) IN (${placeholders})`)
+    .all(...nicks) as Array<{ id: string }>
+  return [...new Set(rows.map((r) => r.id).filter((id) => id !== actorId))]
+}
+
+// --- Validación zod (límites de input) -------------------------------------
+
+const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'usa YYYY-MM-DD')
+const colorSchema = z.string().regex(/^[a-z]{2,20}$/, 'color inválido')
+const columnSchema = z.enum(['nuevo', 'encurso', 'hecho'])
+const prioritySchema = z.enum(['alta', 'media', 'baja']).nullable()
+// Los ids de Deltos son UUID strings; param suelto (no UUID estricto) para no
+// rechazar ids legados: la autorización la da la sesión, no la forma del id.
+const idParamSchema = z.object({ id: z.string().min(1).max(64) })
+
+const projectSchema = z.object({
+  name: z.string().min(1).max(80),
+  emoji: z.string().max(40).default(''),
+  color: colorSchema.default('sky'),
+  member_ids: z.array(z.string().min(1).max(64)).max(50).default([]),
+})
+// PATCH: campos explícitamente opcionales SIN default — zod v4 mantiene el
+// default del schema base dentro de .partial() y un PATCH que no envíe el
+// campo lo RESETEARÍA al default (bug v1.6.0: renombrar etiqueta → slate).
+const projectPatchSchema = z.object({
+  name: z.string().min(1).max(80).optional(),
+  emoji: z.string().max(40).optional(),
+  color: colorSchema.optional(),
+})
+
+const labelSchema = z.object({
+  name: z.string().min(1).max(40),
+  color: colorSchema.default('slate'),
+})
+const labelPatchSchema = z.object({
+  name: z.string().min(1).max(40).optional(),
+  color: colorSchema.optional(),
+})
+
+const recurrenceSchema = z
+  .object({
+    freq: z.enum(['daily', 'weekly', 'monthly']),
+    interval: z.number().int().min(1).max(999).default(1),
+    weekdays: z.array(z.number().int().min(0).max(6)).max(7).nullish(),
+    mode: z.enum(['due', 'completion']).default('due'),
+  })
+  .nullable()
+
+const taskCreateSchema = z.object({
+  project_id: z.string().min(1).max(64),
+  title: z.string().min(1).max(200),
+  description: z.string().max(5000).default(''),
+  column: columnSchema.default('nuevo'),
+  priority: prioritySchema.optional(),
+  due_date: dateSchema.nullable().optional(),
+  assignee_id: z.string().max(64).nullable().optional(),
+  labels: z.array(z.string().max(64)).max(20).default([]),
+  recurrence: recurrenceSchema.nullable().optional(),
+  // Subtareas recogidas en el modal de creación (raíz, sin anidar): se
+  // insertan en la misma transacción que la tarea.
+  subtasks: z.array(z.string().min(1).max(200)).max(50).default([]),
+})
+
+const taskPatchSchema = z
+  .object({
+    title: z.string().min(1).max(200),
+    description: z.string().max(5000),
+    priority: prioritySchema,
+    due_date: dateSchema.nullable(),
+    assignee_id: z.string().max(64).nullable(),
+    labels: z.array(z.string().max(64)).max(20),
+    project_id: z.string().min(1).max(64),
+    recurrence: recurrenceSchema.nullable(),
+  })
+  .partial()
+
+const moveSchema = z.object({
+  column: columnSchema,
+  position: z.number().int().min(0).max(100000),
+})
+
+const parseSchema = z.object({
+  text: z.string().min(1).max(200),
+  lang: z.enum(['es', 'en']).default('es'),
+})
+
+const commentSchema = z.object({
+  body: z.string().min(1).max(2000),
+})
+
+const subtaskSchema = z.object({
+  title: z.string().min(1).max(200),
+  parent_id: z.string().max(64).nullable().optional(),
+})
+
+const subtaskPatchSchema = z
+  .object({
+    title: z.string().min(1).max(200),
+    done: z.boolean(),
+  })
+  .partial()
+
+const userCreateSchema = z.object({
+  username: z.string().min(1).max(50),
+  password: z.string().min(10, 'la contraseña inicial debe tener al menos 10 caracteres').max(100),
+  color: colorSchema.default('slate'),
+  role: z.enum(['admin', 'user']).default('user'),
+})
+
+const demoToggleSchema = z.object({ enabled: z.boolean() })
+
+const userRoleSchema = z.object({ role: z.enum(['admin', 'user']) })
+const userPasswordSchema = z.object({
+  password: z.string().min(10, 'la contraseña debe tener al menos 10 caracteres').max(100),
+})
+const userLanguageSchema = z.object({ language: z.enum(['auto', 'es', 'en']) })
+
+const serverSettingsSchema = z.object({
+  backup_enabled: z.boolean(),
+  backup_retention_days: z.number().int().min(1).max(365),
+  max_attachments_per_task: z.number().int().min(5).max(50),
+  plugin_expenses_enabled: z.boolean(),
+  archive_after_days: z.number().int().min(1).max(365),
+})
+
+// Query del feed de actividad: keyset por cursor opaco (sin page/offset).
+const activityQuerySchema = z.object({
+  cursor: z.string().max(200).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(30),
+})
+
+// Búsqueda global: texto libre, mínimo 2 caracteres (el front no consulta antes).
+const searchQuerySchema = z.object({
+  q: z.string().trim().min(1).max(100),
+})
+
+function countAdmins(db: Database.Database): number {
+  return (db.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'admin'").get() as { n: number }).n
+}
+
+const USER_COLS = 'id, username, display_name, email, phone, color, language, role, created_at'
+
+// --- Helpers ----------------------------------------------------------------
+
+function addEvent(
+  db: Database.Database,
+  taskId: string,
+  userId: string,
+  type: string,
+  data: Record<string, unknown> = {}
+): void {
+  db.prepare(
+    'INSERT INTO activity_events (id, task_id, user_id, type, data, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run(crypto.randomUUID(), taskId, userId, type, JSON.stringify(data), Date.now())
+}
+
+function auditLog(
+  db: Database.Database,
+  actorId: string,
+  action: string,
+  targetType: string,
+  targetId: string | null,
+  data: Record<string, unknown> = {}
+): void {
+  db.prepare(
+    'INSERT INTO admin_audit (id, actor_id, action, target_type, target_id, data, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ).run(crypto.randomUUID(), actorId, action, targetType, targetId, JSON.stringify(data), Date.now())
+}
+
+// --- Membresía de proyecto (visibilidad y autorización) --------------------
+
+// ¿Es el usuario miembro del proyecto (lo ve)?
+function isMember(db: Database.Database, userId: string, projectId: string): boolean {
+  return !!db
+    .prepare('SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ?')
+    .get(projectId, userId)
+}
+
+// Lanza 403 PROJECT_NOT_MEMBER si el usuario no es miembro.
+function requireMember(db: Database.Database, userId: string, projectId: string): void {
+  if (!isMember(db, userId, projectId)) httpError(403, ERROR_CODES.PROJECT_NOT_MEMBER)
+}
+
+// ¿Puede gestionar el proyecto (editar/borrar/gestionar miembros)?
+// admin siempre; owner_id NULL (legado) → cualquier miembro; si no, solo owner.
+function canManageProject(
+  db: Database.Database,
+  user: SessionUser,
+  project: Pick<ProjectRow, 'id' | 'owner_id'>
+): boolean {
+  if (user.role === 'admin') return true
+  if (project.owner_id == null) return isMember(db, user.id, project.id)
+  return project.owner_id === user.id
+}
+
+function requireProjectOwner(
+  db: Database.Database,
+  user: SessionUser,
+  project: Pick<ProjectRow, 'id' | 'owner_id'>
+): void {
+  if (!canManageProject(db, user, project)) httpError(403, ERROR_CODES.PROJECT_NOT_OWNER)
+}
+
+// Lista de miembros hidratada (owner primero, luego por username).
+function memberList(db: Database.Database, projectId: string): MemberRow[] {
+  return db
+    .prepare(
+      `SELECT u.id, u.username, u.color, pm.role
+       FROM project_members pm JOIN users u ON u.id = pm.user_id
+       WHERE pm.project_id = ?
+       ORDER BY (pm.role = 'owner') DESC, u.username`
+    )
+    .all(projectId) as MemberRow[]
+}
+
+// Valida que los ids sean usuarios reales; devuelve únicos válidos.
+function validUserIds(db: Database.Database, ids: string[]): Set<string> {
+  const unique = [...new Set(ids)]
+  if (unique.length === 0) return new Set<string>()
+  const ph = unique.map(() => '?').join(',')
+  const rows = db.prepare(`SELECT id FROM users WHERE id IN (${ph})`).all(...unique) as Array<{ id: string }>
+  return new Set(rows.map((r) => r.id))
+}
+
+// Hidrata tareas con labels[], assignee y counts {comments, attachments}
+function hydrateTasks(db: Database.Database, whereSql = '', params: unknown[] = []) {
+  // Devuelve las tareas con la forma pública del API (sin columnas internas).
+  const filter = whereSql ? `t.deleted_at IS NULL AND (${whereSql})` : 't.deleted_at IS NULL'
+  const tasks = db
+    .prepare(
+      `SELECT t.*, u.username AS assignee_username, u.color AS assignee_color,
+              (SELECT COUNT(*) FROM comments cm WHERE cm.task_id = t.id) AS comments_count,
+              (SELECT COUNT(*) FROM attachments at WHERE at.task_id = t.id) AS attachments_count,
+              (SELECT COUNT(*) FROM activity_events sl
+                WHERE sl.task_id = t.id AND sl.type = 'due'
+                  AND COALESCE(json_extract(sl.data, '$.reset'), 0) != 1
+                  AND sl.created_at > COALESCE(
+                    (SELECT MAX(e.created_at) FROM activity_events e
+                      WHERE e.task_id = t.id AND (
+                        (e.type = 'moved' AND json_extract(e.data, '$.to') = 'hecho') OR
+                        (e.type = 'due' AND COALESCE(json_extract(e.data, '$.reset'), 0) = 1)
+                      )),
+                    t.created_at
+                  )
+              ) AS slips_count
+       FROM tasks t LEFT JOIN users u ON u.id = t.assignee_id
+       WHERE ${filter}
+       ORDER BY t."column", t.position`
+    )
+    .all(...params) as Array<TaskRow & {
+    assignee_username: string | null
+    assignee_color: string | null
+    comments_count: number
+    attachments_count: number
+    slips_count: number
+  }>
+  if (tasks.length === 0) return []
+  const labels = db
+    .prepare(
+      `SELECT tl.task_id, l.id, l.name, l.color
+       FROM task_labels tl JOIN labels l ON l.id = tl.label_id`
+    )
+    .all() as TaskLabelRow[]
+  const byTask = new Map<string, Array<{ id: string; name: string; color: string }>>()
+  for (const l of labels) {
+    if (!byTask.has(l.task_id)) byTask.set(l.task_id, [])
+    byTask.get(l.task_id)?.push({ id: l.id, name: l.name, color: l.color })
+  }
+  return tasks.map((t) => ({
+    id: t.id,
+    project_id: t.project_id,
+    short_id: t.short_id ?? null,
+    title: t.title,
+    description: t.description,
+    column: t.column,
+    position: t.position,
+    priority: t.priority,
+    due_date: t.due_date,
+    recurrence: t.recurrence ? JSON.parse(t.recurrence) : null,
+    recurrence_group_id: t.recurrence_group_id,
+    recurrence_paused: !!t.recurrence_paused,
+    assignee_id: t.assignee_id,
+    assignee: t.assignee_id
+      ? { id: t.assignee_id, username: t.assignee_username, color: t.assignee_color }
+      : null,
+    created_by: t.created_by,
+    created_at: t.created_at,
+    updated_at: t.updated_at,
+    done_at: t.done_at ?? null,
+    archived_at: t.archived_at ?? null,
+    labels: byTask.get(t.id) || [],
+    counts: { comments: t.comments_count, attachments: t.attachments_count },
+    slips: t.slips_count,
+  }))
+}
+
+function replaceTaskLabels(db: Database.Database, taskId: string, labelIds: string[]): void {
+  db.prepare('DELETE FROM task_labels WHERE task_id = ?').run(taskId)
+  const ins = db.prepare('INSERT OR IGNORE INTO task_labels (task_id, label_id) VALUES (?, ?)')
+  for (const labelId of labelIds) ins.run(taskId, labelId)
+}
+
+function getTask(db: Database.Database, id: string): TaskRow | undefined {
+  return db.prepare('SELECT * FROM tasks WHERE id = ? AND deleted_at IS NULL').get(id) as TaskRow | undefined
+}
+
+// Crea la siguiente instancia de una tarea recurrente al completarse.
+// Devuelve la tarea hidratada nueva o null si no se pudo (no debería).
+function createRecurringInstance(db: Database.Database, doneTask: TaskRow, actorId: string) {
+  if (doneTask.recurrence_paused) return null
+  const rec = normalizeRecurrence(typeof doneTask.recurrence === 'string' ? JSON.parse(doneTask.recurrence) : doneTask.recurrence)
+  if (!rec) return null
+  const nextDue = computeNextDue(db, doneTask, todayLocal())
+  if (!nextDue) return null
+  const id = crypto.randomUUID()
+  const now = Date.now()
+  const pos = (db
+    .prepare('SELECT COALESCE(MAX(position) + 1, 0) AS p FROM tasks WHERE "column" = ?')
+    .get('nuevo') as { p: number }).p
+  const groupId = doneTask.recurrence_group_id || doneTask.id
+  const create = db.transaction(() => {
+    const shortId = allocateShortId(db, doneTask.project_id)
+    db.prepare(
+      `INSERT INTO tasks (id, project_id, title, description, "column", position, priority, due_date, assignee_id, created_by, created_at, updated_at, recurrence, recurrence_group_id, short_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      id, doneTask.project_id, doneTask.title, doneTask.description, 'nuevo', pos,
+      doneTask.priority ?? null, nextDue, doneTask.assignee_id ?? null, actorId, now, now,
+      serializeRecurrence(rec), groupId, shortId
+    )
+    replaceTaskLabels(db, id, getTaskLabelIds(db, doneTask.id))
+    copySubtasksWithReset(db, doneTask.id, id)
+    addEvent(db, id, actorId, 'created')
+  })
+  create()
+  return hydrateTasks(db, 't.id = ?', [id])[0]
+}
+
+// Copia las subtareas de la tarea completada a la nueva instancia recurrente,
+// con done=0 (reset automático) y preservando el anidamiento (parent_id).
+function copySubtasksWithReset(db: Database.Database, fromTaskId: string, toTaskId: string): void {
+  const subs = db
+    .prepare('SELECT id, parent_id, title, position FROM task_subtasks WHERE task_id = ? ORDER BY position')
+    .all(fromTaskId)
+  if (subs.length === 0) return
+  const now = Date.now()
+  const idMap = new Map<string, string>()
+  const ins = db.prepare(
+    'INSERT INTO task_subtasks (id, task_id, parent_id, title, done, position, created_at) VALUES (?, ?, ?, ?, 0, ?, ?)'
+  )
+  for (const s of subs as Array<{ id: string; parent_id: string | null; title: string; position: number }>) {
+    const newId = crypto.randomUUID()
+    idMap.set(s.id, newId)
+    ins.run(newId, toTaskId, s.parent_id ? (idMap.get(s.parent_id) ?? null) : null, s.title, s.position, now)
+  }
+}
+
+function getTaskLabelIds(db: Database.Database, taskId: string): string[] {
+  return (db.prepare('SELECT label_id FROM task_labels WHERE task_id = ?').all(taskId) as Array<{ label_id: string }>).map((r) => r.label_id)
+}
+
+// Borra de disco los adjuntos de una tarea (mejor esfuerzo)
+function removeAttachmentFiles(db: Database.Database, uploadsDir: string, taskId: string): void {
+  const rows = db.prepare('SELECT stored_name FROM attachments WHERE task_id = ?').all(taskId) as Array<{ stored_name: string }>
+  for (const r of rows) {
+    try {
+      fs.unlinkSync(path.join(uploadsDir, path.basename(r.stored_name)))
+    } catch {
+      // el fichero puede no existir: no es fatal
+    }
+  }
+}
+
+// --- Rutas ------------------------------------------------------------------
+
+export function registerDomainRoutes(
+  app: Hono<AppEnv>,
+  {
+    hub,
+    uploadsDir,
+    prod,
+    config,
+    dataDir,
+  }: {
+    hub: Hub
+    uploadsDir: string
+    prod: Database.Database
+    config: { maxUploadBytes: number; maxSseClients: number; cookieSecure: boolean; staticDir: string }
+    dataDir: string
+  }
+): void {
+  // GET /api/bootstrap — UNA llamada para pintar el tablero.
+  // Proyectos y tareas se filtran por membresía: cada usuario solo ve los
+  // proyectos de los que es miembro (y sus tareas).
+  app.get('/api/bootstrap', (c: Context<AppEnv>) => {
+    const db = c.get('db')
+    const user = currentUser(c)
+    const users = db.prepare('SELECT id, username, color FROM users ORDER BY username').all() as Array<{
+      id: string
+      username: string
+      color: string | null
+    }>
+    const projects = db
+      .prepare(
+        `SELECT p.id, p.name, p.emoji, p.color, p.position, p.owner_id, p.is_inbox,
+                COALESCE(SUM(CASE WHEN t."column" = 'nuevo' THEN 1 ELSE 0 END), 0) AS nuevo,
+                COALESCE(SUM(CASE WHEN t."column" = 'encurso' THEN 1 ELSE 0 END), 0) AS encurso,
+                COALESCE(SUM(CASE WHEN t."column" = 'hecho' THEN 1 ELSE 0 END), 0) AS hecho
+         FROM projects p LEFT JOIN tasks t ON t.project_id = p.id AND t.deleted_at IS NULL AND t.archived_at IS NULL
+         WHERE p.id IN (SELECT project_id FROM project_members WHERE user_id = ?)
+         GROUP BY p.id ORDER BY p.position`
+      )
+      .all(user.id) as Array<
+      Pick<ProjectRow, 'id' | 'name' | 'emoji' | 'color' | 'position' | 'owner_id' | 'is_inbox'> & {
+        nuevo: number
+        encurso: number
+        hecho: number
+      }
+    >
+    const shapedProjects = projects.map((p) => ({
+        id: p.id,
+        name: p.name,
+        emoji: p.emoji,
+        color: p.color,
+        position: p.position,
+        owner_id: p.owner_id,
+        is_inbox: p.is_inbox === 1,
+        counts: { nuevo: p.nuevo, encurso: p.encurso, hecho: p.hecho },
+        members: [] as MemberRow[],
+      }))
+    // Hidratar miembros de los proyectos visibles en una sola consulta.
+    if (projects.length > 0) {
+      const ids = projects.map((p) => p.id)
+      const placeholders = ids.map(() => '?').join(',')
+      const rows = db
+        .prepare(
+          `SELECT pm.project_id, u.id, u.username, u.color, pm.role
+           FROM project_members pm JOIN users u ON u.id = pm.user_id
+           WHERE pm.project_id IN (${placeholders})
+           ORDER BY (pm.role = 'owner') DESC, u.username`
+        )
+        .all(...ids) as Array<MemberRow & { project_id: string }>
+      const byProject = new Map<string, MemberRow[]>()
+      for (const r of rows) {
+        if (!byProject.has(r.project_id)) byProject.set(r.project_id, [])
+        byProject.get(r.project_id)?.push({ id: r.id, username: r.username, color: r.color, role: r.role })
+      }
+      for (const p of shapedProjects) p.members = byProject.get(p.id) ?? []
+    }
+    const labels = db.prepare('SELECT id, name, color FROM labels ORDER BY name').all()
+    const tasks = hydrateTasks(
+      db,
+      't.project_id IN (SELECT project_id FROM project_members WHERE user_id = ?)',
+      [user.id]
+    )
+    return c.json({ users, projects: shapedProjects, labels, tasks })
+  })
+
+  // --- Proyectos ---
+  app.post('/api/projects', zValidator('json', projectSchema, validationHook), (c: Context<AppEnv>) => {
+    const db = c.get('db')
+    const user = currentUser(c)
+    const data = c.req.valid('json' as never) as z.infer<typeof projectSchema>
+    const id = crypto.randomUUID()
+    const pos = (db.prepare('SELECT COALESCE(MAX(position) + 1, 0) AS p FROM projects').get() as { p: number }).p
+    const now = Date.now()
+    // Miembros adicionales (el owner se añade siempre). Se filtran a usuarios
+    // reales y se descarta el propio owner (se inserta aparte con role owner).
+    const validIds = validUserIds(db, data.member_ids.filter((mid) => mid !== user.id))
+    const ins = db.transaction(() => {
+      db.prepare(
+        'INSERT INTO projects (id, name, emoji, color, position, owner_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      ).run(id, data.name, data.emoji, data.color, pos, user.id, now)
+      db.prepare(
+        'INSERT INTO project_members (project_id, user_id, role, added_at) VALUES (?, ?, ?, ?)'
+      ).run(id, user.id, 'owner', now)
+      const insMember = db.prepare(
+        'INSERT OR IGNORE INTO project_members (project_id, user_id, role, added_at) VALUES (?, ?, ?, ?)'
+      )
+      for (const mid of validIds) insMember.run(id, mid, 'member', now)
+    })
+    ins()
+    hub.broadcast('projects')
+    c.header('Location', `/api/projects/${id}`)
+    const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(id) as ProjectRow | undefined
+    return c.json({ project: { ...project, members: memberList(db, id) } }, 201)
+  })
+
+  app.patch(
+    '/api/projects/:id',
+    zValidator('param', idParamSchema, validationHook),
+    zValidator('json', projectPatchSchema, validationHook),
+    (c: Context<AppEnv>) => {
+      const db = c.get('db')
+      const user = currentUser(c)
+      const project = db.prepare('SELECT * FROM projects WHERE id = ?').get((c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id) as ProjectRow | undefined
+      if (!project) httpError(404, ERROR_CODES.PROJECT_NOT_FOUND)
+      if (project.is_inbox) httpError(403, ERROR_CODES.PROJECT_INBOX)
+      requireProjectOwner(db, user, project)
+      const data = c.req.valid('json' as never) as z.infer<typeof projectPatchSchema>
+      db.prepare('UPDATE projects SET name = ?, emoji = ?, color = ? WHERE id = ?').run(
+        data.name ?? project.name,
+        data.emoji ?? project.emoji,
+        data.color ?? project.color,
+        project.id
+      )
+      hub.broadcast('projects')
+      return c.json({ project: db.prepare('SELECT * FROM projects WHERE id = ?').get(project.id) as ProjectRow | undefined })
+    }
+  )
+
+  app.delete('/api/projects/:id', zValidator('param', idParamSchema, validationHook), (c: Context<AppEnv>) => {
+    const db = c.get('db')
+    const user = currentUser(c)
+    const project = db.prepare('SELECT id, owner_id, is_inbox FROM projects WHERE id = ?').get((c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id) as Pick<ProjectRow, 'id' | 'owner_id' | 'is_inbox'> | undefined
+    if (!project) httpError(404, ERROR_CODES.PROJECT_NOT_FOUND)
+    if (project.is_inbox) httpError(403, ERROR_CODES.PROJECT_INBOX)
+    requireProjectOwner(db, user, project)
+    const taskIds = db.prepare('SELECT id FROM tasks WHERE project_id = ?').all(project.id) as Array<{ id: string }>
+    for (const t of taskIds) removeAttachmentFiles(db, uploadsDir, t.id)
+    db.prepare('DELETE FROM projects WHERE id = ?').run(project.id) // cascada a tareas y miembros
+    hub.broadcast('projects')
+    hub.broadcast('tasks')
+    return c.body(null, 204)
+  })
+
+  // --- Miembros de un proyecto (gestión: solo owner/admin) ---
+  // PUT reemplaza la lista de miembros adicionales; el owner (y el propio
+  // usuario que gestiona) se retienen siempre para evitar bloquearse fuera.
+  const membersSchema = z.object({ member_ids: z.array(z.string().min(1).max(64)).max(50) })
+  app.put(
+    '/api/projects/:id/members',
+    zValidator('param', idParamSchema, validationHook),
+    zValidator('json', membersSchema, validationHook),
+    (c: Context<AppEnv>) => {
+      const db = c.get('db')
+      const user = currentUser(c)
+      const project = db.prepare('SELECT * FROM projects WHERE id = ?').get((c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id) as ProjectRow | undefined
+      if (!project) httpError(404, ERROR_CODES.PROJECT_NOT_FOUND)
+      if (project.is_inbox) httpError(403, ERROR_CODES.PROJECT_INBOX)
+      requireProjectOwner(db, user, project)
+      const data = c.req.valid('json' as never) as z.infer<typeof membersSchema>
+      const validIds = validUserIds(db, data.member_ids)
+      const now = Date.now()
+      const tx = db.transaction(() => {
+        db.prepare("DELETE FROM project_members WHERE project_id = ? AND role = 'member'").run(project.id)
+        const ins = db.prepare(
+          'INSERT OR IGNORE INTO project_members (project_id, user_id, role, added_at) VALUES (?, ?, ?, ?)'
+        )
+        for (const mid of validIds) if (mid !== project.owner_id) ins.run(project.id, mid, 'member', now)
+        // Anti self-lockout: quien gestiona siempre se queda.
+        ins.run(project.id, user.id, project.owner_id === user.id ? 'owner' : 'member', now)
+      })
+      tx()
+      hub.broadcast('projects')
+      return c.json({ members: memberList(db, project.id) })
+    }
+  )
+
+  // --- Etiquetas (globales) ---
+  app.post('/api/labels', zValidator('json', labelSchema, validationHook), (c: Context<AppEnv>) => {
+    const db = c.get('db')
+    const data = c.req.valid('json' as never) as z.infer<typeof labelSchema>
+    if (db.prepare('SELECT id FROM labels WHERE name = ?').get(data.name)) {
+      httpError(409, ERROR_CODES.LABEL_NAME_TAKEN)
+    }
+    const id = crypto.randomUUID()
+    try {
+      db.prepare('INSERT INTO labels (id, name, color) VALUES (?, ?, ?)').run(id, data.name, data.color)
+    } catch (err) {
+      // Carrera entre el chequeo y el INSERT: UNIQUE con código de dominio.
+      if (err instanceof SqliteError && err.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+        httpError(409, ERROR_CODES.LABEL_NAME_TAKEN)
+      }
+      throw err
+    }
+    hub.broadcast('labels')
+    c.header('Location', `/api/labels/${id}`)
+    return c.json({ label: { id, ...data } }, 201)
+  })
+
+  app.patch(
+    '/api/labels/:id',
+    zValidator('param', idParamSchema, validationHook),
+    zValidator('json', labelPatchSchema, validationHook),
+    (c: Context<AppEnv>) => {
+      const db = c.get('db')
+      const label = db.prepare('SELECT * FROM labels WHERE id = ?').get((c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id) as { id: string; name: string; color: string } | undefined
+      if (!label) httpError(404, ERROR_CODES.LABEL_NOT_FOUND)
+      const data = c.req.valid('json' as never) as z.infer<typeof labelPatchSchema>
+      try {
+        db.prepare('UPDATE labels SET name = ?, color = ? WHERE id = ?').run(
+          data.name ?? label.name,
+          data.color ?? label.color,
+          label.id
+        )
+      } catch (err) {
+        if (err instanceof SqliteError && err.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+          httpError(409, ERROR_CODES.LABEL_NAME_TAKEN)
+        }
+        throw err
+      }
+      hub.broadcast('labels')
+      return c.json({ label: db.prepare('SELECT * FROM labels WHERE id = ?').get(label.id) as { id: string; name: string; color: string } | undefined })
+    }
+  )
+
+  app.delete('/api/labels/:id', zValidator('param', idParamSchema, validationHook), (c: Context<AppEnv>) => {
+    const db = c.get('db')
+    const { changes } = db.prepare('DELETE FROM labels WHERE id = ?').run((c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id)
+    if (!changes) httpError(404, ERROR_CODES.LABEL_NOT_FOUND)
+    hub.broadcast('labels')
+    hub.broadcast('tasks')
+    return c.body(null, 204)
+  })
+
+  // --- Tareas ---
+  // Parseo de lenguaje natural: dado un texto, sugiere due_date/recurrence.
+  app.post('/api/tasks/parse', zValidator('json', parseSchema, validationHook), (c: Context<AppEnv>) => {
+    const { text, lang } = c.req.valid('json' as never) as z.infer<typeof parseSchema>
+    const result = parseTaskText(text, lang)
+    if (!result) return c.json({ parsed: false })
+    return c.json({ parsed: true, ...result })
+  })
+
+  app.post('/api/tasks', zValidator('json', taskCreateSchema, validationHook), (c: Context<AppEnv>) => {
+    const db = c.get('db')
+    const user = currentUser(c)
+    const data = c.req.valid('json' as never) as z.infer<typeof taskCreateSchema>
+    if (!db.prepare('SELECT id FROM projects WHERE id = ?').get(data.project_id)) {
+      httpError(404, ERROR_CODES.PROJECT_NOT_FOUND)
+    }
+    // Solo miembros del proyecto pueden crear tareas en él.
+    requireMember(db, user.id, data.project_id)
+    if (data.assignee_id) {
+      if (!db.prepare('SELECT id FROM users WHERE id = ?').get(data.assignee_id)) {
+        httpError(404, ERROR_CODES.ASSIGNEE_NOT_FOUND)
+      }
+      // El asignado debe poder ver la tarea: ser miembro del proyecto.
+      if (!isMember(db, data.assignee_id, data.project_id)) {
+        httpError(422, ERROR_CODES.ASSIGNEE_NOT_MEMBER)
+      }
+    }
+    const id = crypto.randomUUID()
+    const now = Date.now()
+    const pos = (db
+      .prepare(
+        'SELECT COALESCE(MAX(position) + 1, 0) AS p FROM tasks WHERE "column" = ? AND archived_at IS NULL AND deleted_at IS NULL'
+      )
+      .get(data.column) as { p: number }).p
+    const rec = data.recurrence != null ? normalizeRecurrence(data.recurrence) : null
+    const create = db.transaction(() => {
+      const shortId = allocateShortId(db, data.project_id)
+      db.prepare(
+        `INSERT INTO tasks (id, project_id, title, description, "column", position, priority, due_date, assignee_id, created_by, created_at, updated_at, recurrence, recurrence_group_id, done_at, short_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run(
+        id, data.project_id, data.title, data.description, data.column, pos,
+        data.priority ?? null, data.due_date ?? null, data.assignee_id ?? null, user.id, now, now,
+        rec ? serializeRecurrence(rec) : null, rec ? id : null,
+        data.column === 'hecho' ? now : null, shortId
+      )
+      replaceTaskLabels(db, id, data.labels)
+      if (data.subtasks.length > 0) {
+        const insSub = db.prepare(
+          'INSERT INTO task_subtasks (id, task_id, parent_id, title, done, position, created_at) VALUES (?, ?, NULL, ?, 0, ?, ?)'
+        )
+        data.subtasks.forEach((title, i) => insSub.run(crypto.randomUUID(), id, title, i, now))
+      }
+      addEvent(db, id, user.id, 'created')
+    })
+    create()
+    hub.broadcast('tasks')
+    // Push: si la tarea lleva asignado, recibe 'asignacion' (único aviso al
+    // interesado; evita el ruido de avisar a todo el proyecto con 'tarea_creada').
+    const datosPush = { usuario: user.username, titulo: data.title }
+    const asignado = data.assignee_id && data.assignee_id !== user.id ? data.assignee_id : null
+    if (asignado) notifyIds(db, c.get('demo'), [asignado], 'asignacion', datosPush)
+    c.header('Location', `/api/tasks/${id}`)
+    return c.json({ task: hydrateTasks(db, 't.id = ?', [id])[0] }, 201)
+  })
+
+  app.patch(
+    '/api/tasks/:id',
+    zValidator('param', idParamSchema, validationHook),
+    zValidator('json', taskPatchSchema, validationHook),
+    (c: Context<AppEnv>) => {
+      const db = c.get('db')
+      const user = currentUser(c)
+      const task = getTask(db, (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id)
+      if (!task) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
+      // Solo miembros del proyecto de la tarea pueden editarla.
+      requireMember(db, user.id, task.project_id)
+      const data = c.req.valid('json' as never) as z.infer<typeof taskPatchSchema>
+      if (data.assignee_id) {
+        if (!db.prepare('SELECT id FROM users WHERE id = ?').get(data.assignee_id)) {
+          httpError(404, ERROR_CODES.ASSIGNEE_NOT_FOUND)
+        }
+        // El asignado debe ser miembro del proyecto efectivo (actual o destino).
+        const effProject = data.project_id !== undefined ? data.project_id : task.project_id
+        if (!isMember(db, data.assignee_id, effProject)) {
+          httpError(422, ERROR_CODES.ASSIGNEE_NOT_MEMBER)
+        }
+      }
+
+      const now = Date.now()
+      const update = db.transaction(() => {
+        // Cada cambio registra su activity_event
+        if (data.title !== undefined && data.title !== task.title) {
+          db.prepare('UPDATE tasks SET title = ? WHERE id = ?').run(data.title, task.id)
+          addEvent(db, task.id, user.id, 'title', { from: task.title, to: data.title })
+        }
+        if (data.project_id !== undefined && data.project_id !== task.project_id) {
+          if (!db.prepare('SELECT id FROM projects WHERE id = ?').get(data.project_id)) {
+            httpError(404, ERROR_CODES.PROJECT_NOT_FOUND)
+          }
+          requireMember(db, user.id, data.project_id)
+          db.prepare('UPDATE tasks SET project_id = ? WHERE id = ?').run(data.project_id, task.id)
+          addEvent(db, task.id, user.id, 'project', { from: task.project_id, to: data.project_id })
+        }
+        if (data.description !== undefined && data.description !== task.description) {
+          db.prepare('UPDATE tasks SET description = ? WHERE id = ?').run(data.description, task.id)
+          addEvent(db, task.id, user.id, 'description', { from: task.description, to: data.description })
+        }
+        if (data.priority !== undefined && data.priority !== task.priority) {
+          db.prepare('UPDATE tasks SET priority = ? WHERE id = ?').run(data.priority, task.id)
+          addEvent(db, task.id, user.id, 'priority', { from: task.priority, to: data.priority })
+        }
+        if (data.due_date !== undefined && data.due_date !== task.due_date) {
+          db.prepare('UPDATE tasks SET due_date = ? WHERE id = ?').run(data.due_date, task.id)
+          addEvent(db, task.id, user.id, 'due', { from: task.due_date, to: data.due_date })
+        }
+        if (data.assignee_id !== undefined && data.assignee_id !== task.assignee_id) {
+          db.prepare('UPDATE tasks SET assignee_id = ? WHERE id = ?').run(data.assignee_id, task.id)
+          addEvent(db, task.id, user.id, 'assigned', { from: task.assignee_id, to: data.assignee_id })
+        }
+        if (data.labels !== undefined) replaceTaskLabels(db, task.id, data.labels)
+        if (data.recurrence !== undefined) {
+          const prevRec = task.recurrence ? JSON.parse(task.recurrence) : null
+          const newRec = data.recurrence != null ? normalizeRecurrence(data.recurrence) : null
+          const recChanged = JSON.stringify(prevRec) !== JSON.stringify(newRec)
+          if (recChanged) {
+            db.prepare('UPDATE tasks SET recurrence = ? WHERE id = ?')
+              .run(newRec ? serializeRecurrence(newRec) : null, task.id)
+            if (newRec) {
+              // Cambiar/activar recurrencia inicia una serie nueva (grupo propio).
+              db.prepare('UPDATE tasks SET recurrence_group_id = ? WHERE id = ?').run(task.id, task.id)
+            } else {
+              db.prepare('UPDATE tasks SET recurrence_group_id = NULL WHERE id = ?').run(task.id)
+            }
+          }
+        }
+        db.prepare('UPDATE tasks SET updated_at = ? WHERE id = ?').run(now, task.id)
+      })
+      update()
+      hub.broadcast('tasks')
+      // Push: cambio de asignación → aviso al nuevo asignado.
+      if (data.assignee_id !== undefined && data.assignee_id && data.assignee_id !== task.assignee_id && data.assignee_id !== user.id) {
+        notifyIds(db, c.get('demo'), [data.assignee_id], 'asignacion', { usuario: user.username, titulo: task.title })
+      }
+      return c.json({ task: hydrateTasks(db, 't.id = ?', [task.id])[0] })
+    }
+  )
+
+  /* "La hago hoy": fija el vencimiento a hoy y reinicia la línea base del
+   *  contador de aplazamientos (el evento 'due' lleva reset: true y el
+   *  contador de slips lo ignora y lo usa como nuevo punto de partida). */
+  app.post('/api/tasks/:id/do-today', zValidator('param', idParamSchema, validationHook), (c: Context<AppEnv>) => {
+    const db = c.get('db')
+    const user = currentUser(c)
+    const task = getTask(db, (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id)
+    if (!task) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
+    requireMember(db, user.id, task.project_id)
+    const today = todayLocal()
+    db.prepare('UPDATE tasks SET due_date = ?, updated_at = ? WHERE id = ?').run(
+      today,
+      Date.now(),
+      task.id,
+    )
+    addEvent(db, task.id, user.id, 'due', { from: task.due_date, to: today, reset: true })
+    hub.broadcast('tasks')
+    return c.json({ task: hydrateTasks(db, 't.id = ?', [task.id])[0] })
+  })
+
+  // Mover tarjeta: reordena posiciones de ambas columnas en transacción + evento 'moved'
+  app.post(
+    '/api/tasks/:id/move',
+    zValidator('param', idParamSchema, validationHook),
+    zValidator('json', moveSchema, validationHook),
+    (c: Context<AppEnv>) => {
+      const db = c.get('db')
+      const user = currentUser(c)
+      const task = getTask(db, (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id)
+      if (!task) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
+      requireMember(db, user.id, task.project_id)
+      const data = c.req.valid('json' as never) as z.infer<typeof moveSchema>
+
+      const fromCol = task.column
+      const fromPos = task.position
+      const toCol = data.column
+      const targetCount = (db
+        .prepare(
+          'SELECT COUNT(*) AS n FROM tasks WHERE "column" = ? AND id != ? AND archived_at IS NULL AND deleted_at IS NULL'
+        )
+        .get(toCol, task.id) as { n: number }).n
+      const toPos = Math.min(data.position, targetCount)
+
+      // Gamificación: puntos al entrar en 'hecho' desde otra columna; revertir
+      // al salir de 'hecho' (por ejemplo, movida por error).
+      let granted = 0
+      let reverted = 0
+      const move = db.transaction(() => {
+        if (task.archived_at) {
+          // Tarea archivada: su posición origen está congelada (fue compactada
+          // al archivar). Solo abre hueco en la destino y reactiva.
+          db.prepare(
+            'UPDATE tasks SET position = position + 1 WHERE "column" = ? AND position >= ? AND archived_at IS NULL AND deleted_at IS NULL'
+          ).run(toCol, toPos)
+        } else if (fromCol === toCol) {
+          if (toPos === fromPos) return false // sin cambio
+          if (toPos < fromPos) {
+            db.prepare(
+              'UPDATE tasks SET position = position + 1 WHERE "column" = ? AND position >= ? AND position < ? AND archived_at IS NULL AND deleted_at IS NULL'
+            ).run(toCol, toPos, fromPos)
+          } else {
+            db.prepare(
+              'UPDATE tasks SET position = position - 1 WHERE "column" = ? AND position > ? AND position <= ? AND archived_at IS NULL AND deleted_at IS NULL'
+            ).run(toCol, fromPos, toPos)
+          }
+        } else {
+          // compacta la columna origen y abre hueco en la destino (solo activas)
+          db.prepare(
+            'UPDATE tasks SET position = position - 1 WHERE "column" = ? AND position > ? AND archived_at IS NULL AND deleted_at IS NULL'
+          ).run(fromCol, fromPos)
+          db.prepare(
+            'UPDATE tasks SET position = position + 1 WHERE "column" = ? AND position >= ? AND archived_at IS NULL AND deleted_at IS NULL'
+          ).run(toCol, toPos)
+        }
+        // Mover reactiva la tarea (si estaba archivada, vuelve al tablero) y
+        // marca/clear done_at según entre o salga de 'hecho'.
+        const doneAt = toCol === 'hecho' ? Date.now() : null
+        db.prepare(
+          'UPDATE tasks SET "column" = ?, position = ?, updated_at = ?, archived_at = NULL, done_at = ? WHERE id = ?'
+        ).run(toCol, toPos, Date.now(), doneAt, task.id)
+        addEvent(db, task.id, user.id, 'moved', { from: fromCol, to: toCol })
+        if (fromCol !== 'hecho' && toCol === 'hecho') {
+          granted = grantCompletionPoints(db, task, user.id)
+        } else if (fromCol === 'hecho' && toCol !== 'hecho') {
+          reverted = revertCompletionPoints(db, task.id)
+        }
+        return true
+      })
+      move()
+      // Recurrencia: al completar (mover a 'hecho') y si la tarea es recurrente,
+      // se crea la siguiente instancia en 'nuevo' con la próxima fecha.
+      let recurred = null
+      if (fromCol !== 'hecho' && toCol === 'hecho' && task.recurrence) {
+        recurred = createRecurringInstance(db, task, user.id)
+      }
+      if (granted > 0 || reverted > 0) hub.broadcast('gamification')
+      hub.broadcast('tasks')
+      notifyInterested(db, c.get('demo'), task, user.id, 'tarea_movida', { usuario: user.username, titulo: task.title, columna: toCol })
+      return c.json({ task: hydrateTasks(db, 't.id = ?', [task.id])[0] })
+    }
+  )
+
+  app.delete('/api/tasks/:id', zValidator('param', idParamSchema, validationHook), (c: Context<AppEnv>) => {
+    const db = c.get('db')
+    const user = currentUser(c)
+    const task = getTask(db, (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id)
+    if (!task) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
+    requireMember(db, user.id, task.project_id)
+    const del = db.transaction(() => {
+      db.prepare('UPDATE tasks SET deleted_at = ? WHERE id = ?').run(Date.now(), task.id)
+      // Las archivadas ya están fuera de la secuencia: no se compacta.
+      if (!task.archived_at) {
+        db.prepare(
+          'UPDATE tasks SET position = position - 1 WHERE "column" = ? AND position > ? AND archived_at IS NULL AND deleted_at IS NULL'
+        ).run(task.column, task.position)
+      }
+    })
+    del()
+    hub.broadcast('tasks')
+    return c.body(null, 204)
+  })
+
+  // Archivar tarea (manual): solo tareas en 'hecho'. La tarea desaparece del
+  // tablero y se recupera con "mostrar archivadas" (o moviéndola). No es
+  // borrar: conserva comentarios, adjuntos e historial.
+  app.post('/api/tasks/:id/archive', zValidator('param', idParamSchema, validationHook), (c: Context<AppEnv>) => {
+    const db = c.get('db')
+    const user = currentUser(c)
+    const task = getTask(db, (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id)
+    if (!task) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
+    requireMember(db, user.id, task.project_id)
+    if (task.column !== 'hecho') httpError(422, ERROR_CODES.TASK_NOT_DONE)
+    if (task.archived_at) return c.json({ task: hydrateTasks(db, 't.id = ?', [task.id])[0] })
+    const now = Date.now()
+    const archive = db.transaction(() => {
+      db.prepare('UPDATE tasks SET archived_at = ? WHERE id = ?').run(now, task.id)
+      db.prepare(
+        'UPDATE tasks SET position = position - 1 WHERE "column" = ? AND position > ? AND archived_at IS NULL AND deleted_at IS NULL'
+      ).run(task.column, task.position)
+    })
+    archive()
+    hub.broadcast('tasks')
+    return c.json({ task: hydrateTasks(db, 't.id = ?', [task.id])[0] })
+  })
+
+  // Completar y archivar en un paso: útil para limpiar recordatorios desde el
+  // Resumen. Si la tarea no está en 'hecho' se mueve primero (con recurrencia),
+  // luego se archiva. Idempotente si ya estaba archivada.
+  app.post('/api/tasks/:id/done-and-archive', zValidator('param', idParamSchema, validationHook), (c: Context<AppEnv>) => {
+    const db = c.get('db')
+    const user = currentUser(c)
+    const task = getTask(db, (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id)
+    if (!task) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
+    requireMember(db, user.id, task.project_id)
+    if (task.archived_at) return c.json({ task: hydrateTasks(db, 't.id = ?', [task.id])[0] })
+
+    const now = Date.now()
+    let archivePos = task.position
+    let granted = 0
+    const tx = db.transaction(() => {
+      if (task.column !== 'hecho') {
+        // compactar columna origen y mover a hecho al final
+        db.prepare(
+          'UPDATE tasks SET position = position - 1 WHERE "column" = ? AND position > ? AND archived_at IS NULL AND deleted_at IS NULL'
+        ).run(task.column, task.position)
+        archivePos = (db
+          .prepare(
+            'SELECT COALESCE(MAX(position) + 1, 0) AS p FROM tasks WHERE "column" = ? AND archived_at IS NULL AND deleted_at IS NULL'
+          )
+          .get('hecho') as { p: number }).p
+        db.prepare(
+          'UPDATE tasks SET "column" = ?, position = ?, updated_at = ?, done_at = ?, archived_at = NULL WHERE id = ?'
+        ).run('hecho', archivePos, now, now, task.id)
+        addEvent(db, task.id, user.id, 'moved', { from: task.column, to: 'hecho' })
+        // Gamificación: mismos puntos que el move a 'hecho'.
+        granted = grantCompletionPoints(db, task, user.id)
+      }
+      // archivar
+      db.prepare('UPDATE tasks SET archived_at = ? WHERE id = ?').run(now, task.id)
+      db.prepare(
+        'UPDATE tasks SET position = position - 1 WHERE "column" = ? AND position > ? AND archived_at IS NULL AND deleted_at IS NULL'
+      ).run('hecho', archivePos)
+    })
+    tx()
+
+    // Recurrencia: al completar (si no estaba ya en hecho) y si es recurrente,
+    // se crea la siguiente instancia en 'nuevo'.
+    if (task.column !== 'hecho' && task.recurrence) {
+      createRecurringInstance(db, task, user.id)
+    }
+
+    if (granted > 0) hub.broadcast('gamification')
+    hub.broadcast('tasks')
+    return c.json({ task: hydrateTasks(db, 't.id = ?', [task.id])[0] })
+  })
+
+  // Listado de series recurrentes para la vista Periódicas. Incluye la
+  // instancia activa, la próxima fecha y el estado (open/paused/waiting).
+  app.get('/api/tasks/recurring', (c: Context<AppEnv>) => {
+    const db = c.get('db')
+    const user = currentUser(c)
+    const today = todayLocal()
+    const rows = db
+      .prepare(
+        `SELECT t.*, p.name AS project_name, p.color AS project_color
+         FROM tasks t
+         JOIN project_members pm ON pm.project_id = t.project_id
+         JOIN projects p ON p.id = t.project_id
+         WHERE pm.user_id = ? AND t.recurrence IS NOT NULL AND t.deleted_at IS NULL`
+      )
+      .all(user.id) as Array<TaskRow & { project_name: string; project_color: string | null }>
+
+    interface RecurrenceSeries {
+      group_id: string
+      title: string
+      project_id: string
+      project_name: string
+      project_color: string | null
+      rec: ReturnType<typeof normalizeRecurrence>
+      tasks: Array<TaskRow & { project_name: string; project_color: string | null }>
+    }
+    const byGroup = new Map<string, RecurrenceSeries>()
+    for (const t of rows) {
+      const rec = normalizeRecurrence(typeof t.recurrence === 'string' ? JSON.parse(t.recurrence) : t.recurrence)
+      if (!rec) continue
+      const groupId = t.recurrence_group_id || t.id
+      const series = byGroup.get(groupId) || {
+        group_id: groupId,
+        title: t.title,
+        project_id: t.project_id,
+        project_name: t.project_name,
+        project_color: t.project_color,
+        rec,
+        tasks: [],
+      }
+      series.tasks.push(t)
+      byGroup.set(groupId, series)
+    }
+
+    const result = []
+    for (const s of byGroup.values()) {
+      const active = s.tasks.find((t) => t.column !== 'hecho' && !t.archived_at) || null
+      const completed = s.tasks
+        .filter((t) => t.column === 'hecho' || t.archived_at)
+        .sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0))
+      const lastCompleted = completed[0] || null
+      const isPaused = active ? !!active.recurrence_paused : s.tasks.some((t) => t.recurrence_paused)
+
+      let nextDue = null
+      if (active) {
+        nextDue = active.due_date || null
+      } else if (lastCompleted) {
+        nextDue = computeNextDue(db, lastCompleted, today)
+      }
+
+      let status = 'waiting'
+      if (isPaused) status = 'paused'
+      else if (active) status = 'open'
+
+      const intervalDays =
+        s.rec?.mode === 'completion'
+          ? adaptiveInterval(completionDates(db, s.group_id), s.rec.interval)
+          : (s.rec?.interval ?? 1) * (s.rec?.freq === 'daily' ? 1 : s.rec?.freq === 'weekly' ? 7 : 30)
+
+      result.push({
+        group_id: s.group_id,
+        title: s.title,
+        project: { id: s.project_id, name: s.project_name, color: s.project_color },
+        recurrence: s.rec,
+        active_task_id: active ? active.id : null,
+        next_due: nextDue,
+        status,
+        effective_interval_days: intervalDays,
+        last_completed_at: lastCompleted ? lastCompleted.updated_at : null,
+      })
+    }
+
+    return c.json({ series: result })
+  })
+
+  // Pausar/reanudar una serie recurrente. Afecta a la instancia activa (o se
+  // almacena en el grupo para futuras instancias si no hay activa ahora).
+  app.post('/api/tasks/recurring/:id/pause', zValidator('param', idParamSchema, validationHook), (c: Context<AppEnv>) => {
+    const db = c.get('db')
+    const user = currentUser(c)
+    const groupId = (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id
+    const rows = db
+      .prepare(
+        `SELECT t.* FROM tasks t
+         JOIN project_members pm ON pm.project_id = t.project_id
+         WHERE t.recurrence_group_id = ? AND pm.user_id = ? AND t.deleted_at IS NULL`
+      )
+      .all(groupId, user.id)
+    if (rows.length === 0) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
+    db.prepare('UPDATE tasks SET recurrence_paused = 1 WHERE recurrence_group_id = ?').run(groupId)
+    hub.broadcast('tasks')
+    return c.body(null, 204)
+  })
+
+  app.post('/api/tasks/recurring/:id/resume', zValidator('param', idParamSchema, validationHook), (c: Context<AppEnv>) => {
+    const db = c.get('db')
+    const user = currentUser(c)
+    const groupId = (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id
+    const rows = db
+      .prepare(
+        `SELECT t.* FROM tasks t
+         JOIN project_members pm ON pm.project_id = t.project_id
+         WHERE t.recurrence_group_id = ? AND pm.user_id = ? AND t.deleted_at IS NULL`
+      )
+      .all(groupId, user.id)
+    if (rows.length === 0) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
+    db.prepare('UPDATE tasks SET recurrence_paused = 0 WHERE recurrence_group_id = ?').run(groupId)
+    hub.broadcast('tasks')
+    return c.body(null, 204)
+  })
+
+  // Desarchivar: la tarea vuelve al final de 'hecho' con ventana fresca de
+  // 3 días antes de que el auto-archivo la vuelva a archivar.
+  app.post('/api/tasks/:id/unarchive', zValidator('param', idParamSchema, validationHook), (c: Context<AppEnv>) => {
+    const db = c.get('db')
+    const user = currentUser(c)
+    const task = getTask(db, (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id)
+    if (!task) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
+    requireMember(db, user.id, task.project_id)
+    if (!task.archived_at) return c.json({ task: hydrateTasks(db, 't.id = ?', [task.id])[0] })
+    const now = Date.now()
+    const unarchive = db.transaction(() => {
+      const pos = (db
+        .prepare(
+          'SELECT COALESCE(MAX(position) + 1, 0) AS p FROM tasks WHERE "column" = ? AND archived_at IS NULL AND deleted_at IS NULL'
+        )
+        .get('hecho') as { p: number }).p
+      db.prepare(
+        'UPDATE tasks SET archived_at = NULL, done_at = ?, "column" = ?, position = ? WHERE id = ?'
+      ).run(now, 'hecho', pos, task.id)
+    })
+    unarchive()
+    hub.broadcast('tasks')
+    return c.json({ task: hydrateTasks(db, 't.id = ?', [task.id])[0] })
+  })
+
+  // Detalle completo: task + labels + attachments + comments + activity (paginado LIMIT 50)
+  app.get('/api/tasks/:id', zValidator('param', idParamSchema, validationHook), (c: Context<AppEnv>) => {
+    const db = c.get('db')
+    const user = currentUser(c)
+    const hydrated = hydrateTasks(db, 't.id = ?', [(c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id])[0]
+    if (!hydrated) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
+    // Sin membresía → 404 (no filtrar existencia para no revelarla).
+    if (!isMember(db, user.id, hydrated.project_id)) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
+    const attachments = db
+      .prepare(
+        `SELECT a.id, a.filename, a.size, a.mime, a.created_at, a.uploaded_by, u.username AS uploaded_by_username
+         FROM attachments a LEFT JOIN users u ON u.id = a.uploaded_by
+         WHERE a.task_id = ? ORDER BY a.created_at`
+      )
+      .all(hydrated.id)
+    const comments = db
+      .prepare(
+        `SELECT cm.id, cm.body, cm.created_at, cm.user_id, u.username, u.color AS user_color
+         FROM comments cm LEFT JOIN users u ON u.id = cm.user_id
+         WHERE cm.task_id = ? ORDER BY cm.created_at`
+      )
+      .all(hydrated.id)
+    const activity = db
+      .prepare(
+        `SELECT e.id, e.type, e.data, e.created_at, e.user_id, u.username
+         FROM activity_events e LEFT JOIN users u ON u.id = e.user_id
+         WHERE e.task_id = ? ORDER BY e.created_at DESC LIMIT 50`
+      )
+      .all(hydrated.id) as Array<{ id: string; type: string; data: string | null; created_at: number; user_id: string | null; username: string | null }>
+    const shapedActivity = activity.map((e) => ({ ...e, data: JSON.parse(e.data || '{}') }))
+    const subtasks = db
+      .prepare('SELECT id, parent_id, title, done, position FROM task_subtasks WHERE task_id = ? ORDER BY position')
+      .all(hydrated.id) as Array<{ id: string; parent_id: string | null; title: string; done: number; position: number }>
+    return c.json({ task: hydrated, attachments, comments, activity: shapedActivity, subtasks })
+  })
+
+  // --- Subtareas ---
+  app.post(
+    '/api/tasks/:id/subtasks',
+    zValidator('param', idParamSchema, validationHook),
+    zValidator('json', subtaskSchema, validationHook),
+    (c: Context<AppEnv>) => {
+      const db = c.get('db')
+      const user = currentUser(c)
+      const task = getTask(db, (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id)
+      if (!task) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
+      requireMember(db, user.id, task.project_id)
+      const data = c.req.valid('json' as never) as z.infer<typeof subtaskSchema>
+      if (data.parent_id) {
+        const parent = db.prepare('SELECT id FROM task_subtasks WHERE id = ? AND task_id = ?').get(data.parent_id, task.id)
+        if (!parent) httpError(404, ERROR_CODES.SUBTASK_NOT_FOUND)
+      }
+      const id = crypto.randomUUID()
+      const now = Date.now()
+      const pos = (db
+        .prepare('SELECT COALESCE(MAX(position) + 1, 0) AS p FROM task_subtasks WHERE task_id = ? AND parent_id IS ?')
+        .get(task.id, data.parent_id ?? null) as { p: number }).p
+      db.prepare(
+        'INSERT INTO task_subtasks (id, task_id, parent_id, title, done, position, created_at) VALUES (?, ?, ?, ?, 0, ?, ?)'
+      ).run(id, task.id, data.parent_id ?? null, data.title, pos, now)
+      db.prepare('UPDATE tasks SET updated_at = ? WHERE id = ?').run(now, task.id)
+      hub.broadcast('tasks')
+      return c.json({ subtask: db.prepare('SELECT id, parent_id, title, done, position FROM task_subtasks WHERE id = ?').get(id) }, 201)
+    }
+  )
+
+  app.patch(
+    '/api/subtasks/:id',
+    zValidator('param', idParamSchema, validationHook),
+    zValidator('json', subtaskPatchSchema, validationHook),
+    (c: Context<AppEnv>) => {
+      const db = c.get('db')
+      const user = currentUser(c)
+      const sub = db.prepare(
+        'SELECT s.*, t.project_id FROM task_subtasks s JOIN tasks t ON t.id = s.task_id WHERE s.id = ?'
+      ).get((c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id) as SubtaskRow | undefined
+      if (!sub) httpError(404, ERROR_CODES.SUBTASK_NOT_FOUND)
+      requireMember(db, user.id, sub.project_id)
+      const data = c.req.valid('json' as never) as z.infer<typeof subtaskPatchSchema>
+      const now = Date.now()
+      if (data.title !== undefined) {
+        db.prepare('UPDATE task_subtasks SET title = ? WHERE id = ?').run(data.title, sub.id)
+      }
+      if (data.done !== undefined && data.done !== !!sub.done) {
+        db.prepare('UPDATE task_subtasks SET done = ? WHERE id = ?').run(data.done ? 1 : 0, sub.id)
+      }
+      db.prepare('UPDATE tasks SET updated_at = ? WHERE id = ?').run(now, sub.task_id)
+      hub.broadcast('tasks')
+      return c.json({ subtask: db.prepare('SELECT id, parent_id, title, done, position FROM task_subtasks WHERE id = ?').get(sub.id) })
+    }
+  )
+
+  app.delete('/api/subtasks/:id', zValidator('param', idParamSchema, validationHook), (c: Context<AppEnv>) => {
+    const db = c.get('db')
+    const user = currentUser(c)
+    const sub = db.prepare(
+      'SELECT s.*, t.project_id FROM task_subtasks s JOIN tasks t ON t.id = s.task_id WHERE s.id = ?'
+    ).get((c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id) as SubtaskRow | undefined
+    if (!sub) httpError(404, ERROR_CODES.SUBTASK_NOT_FOUND)
+    requireMember(db, user.id, sub.project_id)
+    const { changes } = db.prepare('DELETE FROM task_subtasks WHERE id = ?').run(sub.id)
+    if (changes) {
+      db.prepare('UPDATE tasks SET updated_at = ? WHERE id = ?').run(Date.now(), sub.task_id)
+    }
+    hub.broadcast('tasks')
+    return c.body(null, 204)
+  })
+
+  // --- Comentarios ---
+  app.post(
+    '/api/tasks/:id/comments',
+    zValidator('param', idParamSchema, validationHook),
+    zValidator('json', commentSchema, validationHook),
+    (c: Context<AppEnv>) => {
+      const db = c.get('db')
+      const user = currentUser(c)
+      const task = getTask(db, (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id)
+      if (!task) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
+      requireMember(db, user.id, task.project_id)
+      const data = c.req.valid('json' as never) as z.infer<typeof commentSchema>
+      const id = crypto.randomUUID()
+      const now = Date.now()
+      db.prepare('INSERT INTO comments (id, task_id, user_id, body, created_at) VALUES (?, ?, ?, ?, ?)')
+        .run(id, task.id, user.id, data.body, now)
+      db.prepare('UPDATE tasks SET updated_at = ? WHERE id = ?').run(now, task.id)
+      hub.broadcast('comments')
+      notifyInterested(db, c.get('demo'), task, user.id, 'comentario', { usuario: user.username, titulo: task.title })
+      // @menciones: avisa a los usuarios citados con tipo 'mencion'
+      const mencionados = extraerMenciones(db, data.body, user.id)
+      if (mencionados.length) notifyIds(db, c.get('demo'), mencionados, 'mencion', { usuario: user.username, titulo: task.title })
+      // Location: no hay GET de comentario individual; apunta a la tarea que lo contiene.
+      c.header('Location', `/api/tasks/${task.id}`)
+      return c.json(
+        { comment: { id, body: data.body, created_at: now, user_id: user.id, username: user.username, user_color: user.color } },
+        201
+      )
+    }
+  )
+
+  // --- Adjuntos ---
+  const ALLOWED_MIME_TYPES = new Set([
+    'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml',
+    'application/pdf',
+    'text/plain', 'text/csv',
+    'application/json',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.oasis.opendocument.text',
+    'application/vnd.oasis.opendocument.spreadsheet',
+    'application/vnd.oasis.opendocument.presentation',
+    'application/zip', 'application/gzip',
+    'application/x-tar',
+  ])
+  app.post(
+    '/api/tasks/:id/attachments',
+    zValidator('param', idParamSchema, validationHook),
+    async (c: Context<AppEnv>) => {
+      const db = c.get('db')
+      const user = currentUser(c)
+      const task = getTask(db, (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id)
+      if (!task) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
+      requireMember(db, user.id, task.project_id)
+      // Multipart: no va por zValidator('json'); se validan presencia y tamaño.
+      const body = await c.req.parseBody().catch(() => null)
+      const file = body?.file
+      if (!file || typeof file === 'string' || typeof file.arrayBuffer !== 'function') {
+        httpError(400, ERROR_CODES.UPLOAD_FILE_REQUIRED)
+      }
+      if (file.size > c.get('maxUploadBytes')) {
+        httpError(413, ERROR_CODES.UPLOAD_TOO_LARGE)
+      }
+      const mime = String(file.type || 'application/octet-stream').slice(0, 100)
+      if (!ALLOWED_MIME_TYPES.has(mime)) {
+        httpError(415, ERROR_CODES.UPLOAD_INVALID_MIME)
+      }
+      const maxAttachments = parseInt(kvGet(prod, 'max_attachments_per_task', '50') ?? '50', 10)
+      const currentCount = (db.prepare('SELECT COUNT(*) AS n FROM attachments WHERE task_id = ?').get(task.id) as { n: number }).n
+      if (currentCount >= maxAttachments) {
+        httpError(409, ERROR_CODES.ATTACHMENTS_LIMIT_EXCEEDED)
+      }
+      // Nombre aleatorio en disco; la extensión se sanea (solo alfanumérica, máx 10)
+      const ext = path.extname(file.name || '').replace(/[^a-zA-Z0-9.]/g, '').slice(0, 10)
+      const stored = `${crypto.randomUUID()}${ext}`
+      const buffer = Buffer.from(await file.arrayBuffer())
+      fs.mkdirSync(uploadsDir, { recursive: true })
+      fs.writeFileSync(path.join(uploadsDir, stored), buffer)
+
+      const id = crypto.randomUUID()
+      const now = Date.now()
+      const filename = String(file.name || 'adjunto').slice(0, 200)
+      const insert = db.transaction(() => {
+        db.prepare(
+          'INSERT INTO attachments (id, task_id, filename, stored_name, size, mime, uploaded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        ).run(id, task.id, filename, stored, buffer.length, mime, user.id, now)
+        db.prepare('UPDATE tasks SET updated_at = ? WHERE id = ?').run(now, task.id)
+        addEvent(db, task.id, user.id, 'attachment', { filename })
+      })
+      insert()
+      hub.broadcast('attachments')
+      hub.broadcast('tasks')
+      c.header('Location', `/api/attachments/${id}`)
+      return c.json(
+        { attachment: { id, filename, size: buffer.length, mime, created_at: now, uploaded_by: user.id, uploaded_by_username: user.username } },
+        201
+      )
+    }
+  )
+
+  app.get('/api/attachments/:id', zValidator('param', idParamSchema, validationHook), (c: Context<AppEnv>) => {
+    const db = c.get('db')
+    const user = currentUser(c)
+    const att = db.prepare('SELECT * FROM attachments WHERE id = ?').get((c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id) as
+      | (AttachmentRow & { stored_name: string; filename: string; mime: string })
+      | undefined
+    if (!att) httpError(404, ERROR_CODES.ATTACHMENT_NOT_FOUND)
+    // Membresía: el adjunto pertenece a una tarea de un proyecto; solo los
+    // miembros pueden descargarlo (issue #169). 404 para no revelar existencia.
+    const task = db.prepare('SELECT project_id FROM tasks WHERE id = ?').get(att.task_id) as
+      | { project_id: string }
+      | undefined
+    if (!task || !isMember(db, user.id, task.project_id)) {
+      httpError(404, ERROR_CODES.ATTACHMENT_NOT_FOUND)
+    }
+    const filePath = path.join(uploadsDir, path.basename(att.stored_name))
+    if (!fs.existsSync(filePath)) httpError(404, ERROR_CODES.ATTACHMENT_FILE_MISSING)
+    c.header('Content-Type', att.mime || 'application/octet-stream')
+    c.header(
+      'Content-Disposition',
+      `attachment; filename*=UTF-8''${encodeURIComponent(att.filename)}`
+    )
+    return c.body(fs.readFileSync(filePath))
+  })
+
+  // --- Export de datos (datos del usuario: solo proyectos visibles) ---
+  app.get('/api/export', (c: Context<AppEnv>) => {
+    const db = c.get('db')
+    const user = currentUser(c)
+    const memberRows = db
+      .prepare('SELECT project_id FROM project_members WHERE user_id = ?')
+      .all(user.id) as Array<{ project_id: string }>
+    const memberProjects = memberRows.map((r) => r.project_id)
+    // Helper: consulta sobre proyectos visibles (vacío si no hay ninguno).
+    const qByProject = (sql: string): Array<Record<string, unknown>> =>
+      memberProjects.length
+        ? (db.prepare(sql.replace('__IDS__', memberProjects.map(() => '?').join(','))).all(...memberProjects) as Array<
+            Record<string, unknown>
+          >)
+        : []
+    const projects = qByProject('SELECT * FROM projects WHERE id IN (__IDS__) ORDER BY position')
+    const labels = db.prepare('SELECT * FROM labels ORDER BY name').all()
+    const tasks = qByProject('SELECT * FROM tasks WHERE deleted_at IS NULL AND project_id IN (__IDS__) ORDER BY "column", position')
+    const taskIds = tasks.map((t) => String(t.id))
+    const qByTask = (sql: string): Array<Record<string, unknown>> =>
+      taskIds.length
+        ? (db.prepare(sql.replace('__IDS__', taskIds.map(() => '?').join(','))).all(...taskIds) as Array<
+            Record<string, unknown>
+          >)
+        : []
+    const comments = qByTask('SELECT * FROM comments WHERE task_id IN (__IDS__) ORDER BY created_at')
+    const attachments = qByTask('SELECT id, task_id, filename, size, mime, created_at FROM attachments WHERE task_id IN (__IDS__) ORDER BY created_at')
+    const events = qByTask('SELECT * FROM activity_events WHERE task_id IN (__IDS__) ORDER BY created_at')
+    const trash = qByProject('SELECT * FROM tasks WHERE deleted_at IS NOT NULL AND project_id IN (__IDS__) ORDER BY deleted_at DESC')
+    const expenses = db.prepare('SELECT * FROM expenses WHERE deleted_at IS NULL ORDER BY step, position').all()
+    const expenseTrash = db.prepare('SELECT * FROM expenses WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC').all()
+    return c.json({
+      exported_at: new Date().toISOString(),
+      user: { id: user.id, username: user.username, email: user.email, language: user.language },
+      projects, labels, tasks, comments, attachments, events, trash, expenses, expense_trash: expenseTrash,
+    })
+  })
+
+  // --- Papelera: tareas borradas (soft-delete), solo de proyectos visibles ---
+  app.get('/api/trash', (c: Context<AppEnv>) => {
+    const db = c.get('db')
+    const user = currentUser(c)
+    const tasks = db
+      .prepare(
+        `SELECT t.*, p.name AS project_name
+         FROM tasks t LEFT JOIN projects p ON p.id = t.project_id
+         WHERE t.deleted_at IS NOT NULL
+           AND t.project_id IN (SELECT project_id FROM project_members WHERE user_id = ?)
+         ORDER BY t.deleted_at DESC`
+      )
+      .all(user.id) as Array<Record<string, unknown>>
+    const expenses = db
+      .prepare(
+        `SELECT e.*, u.username AS created_by_username
+         FROM expenses e JOIN users u ON u.id = e.created_by
+         WHERE e.deleted_at IS NOT NULL
+         ORDER BY e.deleted_at DESC`
+      )
+      .all() as Array<Record<string, unknown>>
+    return c.json({ tasks, expenses: expenses.map((e) => ({ ...e })) })
+  })
+
+  app.post('/api/trash/:id/restore', zValidator('param', idParamSchema, validationHook), (c: Context<AppEnv>) => {
+    const db = c.get('db')
+    const user = currentUser(c)
+    const task = db.prepare('SELECT * FROM tasks WHERE id = ? AND deleted_at IS NOT NULL').get((c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id) as
+      | TaskRow
+      | undefined
+    if (!task) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
+    requireMember(db, user.id, task.project_id)
+    // Restaurar reactiva siempre: si estaba archivada al borrarse, vuelve
+    // activa al tablero (done_at fresco si vuelve a 'hecho').
+    const pos = (db.prepare(
+      'SELECT COALESCE(MAX(position) + 1, 0) AS p FROM tasks WHERE "column" = ? AND archived_at IS NULL AND deleted_at IS NULL'
+    ).get(task.column) as { p: number }).p
+    const now = Date.now()
+    db.prepare(
+      'UPDATE tasks SET deleted_at = NULL, position = ?, updated_at = ?, archived_at = NULL, done_at = CASE WHEN "column" = \'hecho\' THEN ? ELSE NULL END WHERE id = ?'
+    ).run(pos, now, now, task.id)
+    hub.broadcast('tasks')
+    return c.json({ task: hydrateTasks(db, 't.id = ?', [task.id])[0] })
+  })
+
+  app.delete('/api/trash/:id', zValidator('param', idParamSchema, validationHook), (c: Context<AppEnv>) => {
+    const db = c.get('db')
+    const user = currentUser(c)
+    const task = db.prepare('SELECT * FROM tasks WHERE id = ? AND deleted_at IS NOT NULL').get((c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id) as
+      | TaskRow
+      | undefined
+    if (!task) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
+    requireMember(db, user.id, task.project_id)
+    removeAttachmentFiles(db, uploadsDir, task.id)
+    db.prepare('DELETE FROM tasks WHERE id = ?').run(task.id)
+    hub.broadcast('tasks')
+    return c.body(null, 204)
+  })
+
+  app.delete('/api/trash', (c: Context<AppEnv>) => {
+    const db = c.get('db')
+    const user = currentUser(c)
+    const ids = db
+      .prepare(
+        `SELECT id FROM tasks WHERE deleted_at IS NOT NULL
+         AND project_id IN (SELECT project_id FROM project_members WHERE user_id = ?)`
+      )
+      .all(user.id) as Array<{ id: string }>
+    for (const { id: tid } of ids) removeAttachmentFiles(db, uploadsDir, tid)
+    db.prepare(
+      `DELETE FROM tasks WHERE deleted_at IS NOT NULL
+       AND project_id IN (SELECT project_id FROM project_members WHERE user_id = ?)`
+    ).run(user.id)
+    hub.broadcast('tasks')
+    return c.body(null, 204)
+  })
+
+  // --- Papelera de gastos ---
+  app.post('/api/trash/expense/:id/restore', zValidator('param', idParamSchema, validationHook), (c: Context<AppEnv>) => {
+    const db = c.get('db')
+    const id = (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id
+    const exp = db.prepare('SELECT * FROM expenses WHERE id = ? AND deleted_at IS NOT NULL').get(id) as
+      | { id: string; step: string; [key: string]: unknown }
+      | undefined
+    if (!exp) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
+    const pos = (db.prepare('SELECT COALESCE(MAX(position) + 1, 0) AS p FROM expenses WHERE step = ? AND deleted_at IS NULL')
+      .get(exp.step) as { p: number }).p
+    db.prepare('UPDATE expenses SET deleted_at = NULL, position = ?, updated_at = ? WHERE id = ?').run(pos, Date.now(), id)
+    hub.broadcast('expenses')
+    return c.json({ ok: true })
+  })
+
+  app.delete('/api/trash/expense/:id', zValidator('param', idParamSchema, validationHook), (c: Context<AppEnv>) => {
+    const db = c.get('db')
+    const id = (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id
+    const exp = db.prepare('SELECT * FROM expenses WHERE id = ? AND deleted_at IS NOT NULL').get(id)
+    if (!exp) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
+    db.prepare('DELETE FROM expenses WHERE id = ?').run(id)
+    hub.broadcast('expenses')
+    return c.body(null, 204)
+  })
+
+  app.delete('/api/trash/expenses', (c: Context<AppEnv>) => {
+    const db = c.get('db')
+    db.prepare('DELETE FROM expenses WHERE deleted_at IS NOT NULL').run()
+    hub.broadcast('expenses')
+    return c.body(null, 204)
+  })
+
+  // --- Búsqueda global: tareas del usuario por texto (título, descripción,
+  // persona asignada, proyecto o etiqueta). Solo proyectos de los que es
+  // miembro. LIKE con ESCAPE para que % y _ del texto no sean comodines.
+  app.get('/api/search', zValidator('query', searchQuerySchema, validationHook), (c: Context<AppEnv>) => {
+    const db = c.get('db')
+    const user = currentUser(c)
+    const q = (c.req.valid('query' as never) as z.infer<typeof searchQuerySchema>).q.trim()
+    if (q.length < 2) return c.json({ tasks: [] })
+    const escaped = q.replace(/[\\%_]/g, (ch) => `\\${ch}`)
+    const like = `%${escaped}%`
+    const tasks = hydrateTasks(
+      db,
+      `t.project_id IN (SELECT project_id FROM project_members WHERE user_id = ?)
+       AND (
+         t.title LIKE ? ESCAPE '\\'
+         OR t.description LIKE ? ESCAPE '\\'
+         OR u.username LIKE ? ESCAPE '\\'
+         OR EXISTS (SELECT 1 FROM projects p WHERE p.id = t.project_id AND p.name LIKE ? ESCAPE '\\')
+         OR EXISTS (SELECT 1 FROM task_labels tl JOIN labels l ON l.id = tl.label_id
+                    WHERE tl.task_id = t.id AND l.name LIKE ? ESCAPE '\\')
+       )`,
+      [user.id, like, like, like, like, like],
+    )
+    return c.json({ tasks: tasks.slice(0, 50) })
+  })
+
+  // --- Feed global de actividad: paginación KEYSET (skill api-stack) ---------
+  // Cursor opaco base64url {ts, id} sobre (created_at DESC, id DESC); LIMIT n+1;
+  // respuesta { items, nextCursor, hasMore }. Cursor malformado → 400
+  // INVALID_CURSOR. (Antes: page/limit/total con OFFSET — cambio de contrato,
+  // ver CONVENTIONS.md para la fase 2 del frontend.)
+  app.get('/api/activity', zValidator('query', activityQuerySchema, validationHook), (c: Context<AppEnv>) => {
+    const db = c.get('db')
+    const { cursor, limit } = c.req.valid('query' as never) as z.infer<typeof activityQuerySchema>
+    const decoded = cursor ? decodeCursor(cursor) : null
+    const keyset = decoded
+      ? 'WHERE (e.created_at < @cts OR (e.created_at = @cts AND e.id < @cid))'
+      : ''
+    const visibilityJoin =
+      'JOIN project_members pm ON pm.project_id = t.project_id AND pm.user_id = @uid'
+    const rows = db
+      .prepare(
+        `SELECT e.id, e.type, e.data, e.created_at, e.task_id,
+                t.title AS task_title, t.project_id, p.name AS project_name,
+                u.username, u.color AS user_color
+         FROM activity_events e
+         JOIN tasks t ON t.id = e.task_id AND t.deleted_at IS NULL
+         JOIN projects p ON p.id = t.project_id
+         ${visibilityJoin}
+         LEFT JOIN users u ON u.id = e.user_id
+         ${keyset}
+         ORDER BY e.created_at DESC, e.id DESC
+         LIMIT @limitPlusOne`
+      )
+      .all({
+        ...(decoded ? { cts: decoded.ts, cid: decoded.id } : {}),
+        uid: currentUser(c).id,
+        limitPlusOne: limit + 1,
+      }) as Array<{ created_at: number; id: string; data: string | null; [key: string]: unknown }>
+    const shapedRows = rows.map((e) => ({ ...e, data: JSON.parse(e.data || '{}') }))
+    const page = keysetPage(shapedRows, limit)
+    return c.json({ items: page.items, nextCursor: page.nextCursor, hasMore: page.hasMore })
+  })
+
+  // --- Admin: usuarios ---
+  app.get('/api/users', (c: Context<AppEnv>) => {
+    requireAdmin(c)
+    const db = c.get('db')
+    const users = db
+      .prepare('SELECT id, username, email, phone, color, language, role, created_at FROM users ORDER BY username')
+      .all()
+    return c.json({ users })
+  })
+
+  app.post('/api/users', zValidator('json', userCreateSchema, validationHook), async (c: Context<AppEnv>) => {
+    requireAdmin(c)
+    const db = c.get('db')
+    const me = currentUser(c)
+    const data = c.req.valid('json' as never) as z.infer<typeof userCreateSchema>
+    if (db.prepare('SELECT id FROM users WHERE username = ?').get(data.username)) {
+      httpError(409, ERROR_CODES.USER_ALREADY_EXISTS)
+    }
+    const hash = await bcrypt.hash(data.password, 10)
+    const id = crypto.randomUUID()
+    try {
+      db.prepare(
+        'INSERT INTO users (id, username, password_hash, color, language, role, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      ).run(id, data.username, hash, data.color, 'auto', data.role, Date.now())
+      // Todo usuario nuevo entra en el proyecto "Sin proyecto" (bandeja común).
+      ensureUserInInbox(db, id)
+    } catch (err) {
+      if (err instanceof SqliteError && err.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+        httpError(409, ERROR_CODES.USER_ALREADY_EXISTS)
+      }
+      throw err
+    }
+    hub.broadcast('users')
+    auditLog(db, me.id, 'user_created', 'user', id, { username: data.username, role: data.role })
+    c.header('Location', `/api/users/${id}`)
+    return c.json(
+      { user: db.prepare('SELECT id, username, email, phone, color, language, role, created_at FROM users WHERE id = ?').get(id) },
+      201
+    )
+  })
+
+  // Cambio de rol (admin). Salvaguardas: no auto-cambio y protección último admin.
+  app.put(
+    '/api/users/:id/role',
+    zValidator('param', idParamSchema, validationHook),
+    zValidator('json', userRoleSchema, validationHook),
+    (c: Context<AppEnv>) => {
+      requireAdmin(c)
+      const db = c.get('db')
+      const me = currentUser(c)
+      const id = (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id
+      if (id === me.id) httpError(400, ERROR_CODES.USER_SELF_ROLE)
+      const data = c.req.valid('json' as never) as z.infer<typeof userRoleSchema>
+      const target = db.prepare(`SELECT ${USER_COLS} FROM users WHERE id = ?`).get(id) as SessionUser | undefined as SessionUser | undefined
+      if (!target) httpError(404, ERROR_CODES.USER_NOT_FOUND)
+      if (target.role === 'admin' && data.role === 'user' && countAdmins(db) <= 1) {
+        httpError(400, ERROR_CODES.USER_LAST_ADMIN)
+      }
+      db.prepare('UPDATE users SET role = ? WHERE id = ?').run(data.role, id)
+      auditLog(db, me.id, 'user_role_changed', 'user', id, { from: target.role, to: data.role })
+      hub.broadcast('users')
+      return c.json({ user: db.prepare(`SELECT ${USER_COLS} FROM users WHERE id = ?`).get(id) })
+    }
+  )
+
+  // Reset de contraseña (admin): re-hashea y destruye las sesiones del usuario.
+  app.put(
+    '/api/users/:id/password',
+    zValidator('param', idParamSchema, validationHook),
+    zValidator('json', userPasswordSchema, validationHook),
+    async (c: Context<AppEnv>) => {
+      requireAdmin(c)
+      const db = c.get('db')
+      const id = (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id
+      const data = c.req.valid('json' as never) as z.infer<typeof userPasswordSchema>
+      if (!db.prepare('SELECT id FROM users WHERE id = ?').get(id)) {
+        httpError(404, ERROR_CODES.USER_NOT_FOUND)
+      }
+      const hash = await bcrypt.hash(data.password, 10)
+      db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, id)
+      db.prepare('DELETE FROM sessions WHERE user_id = ?').run(id)
+      auditLog(db, currentUser(c).id, 'user_password_reset', 'user', id)
+      hub.broadcast('users')
+      return c.json({ ok: true })
+    }
+  )
+
+  // Idioma de un usuario (admin): users.language es la fuente de verdad.
+  app.put(
+    '/api/users/:id/language',
+    zValidator('param', idParamSchema, validationHook),
+    zValidator('json', userLanguageSchema, validationHook),
+    (c: Context<AppEnv>) => {
+      requireAdmin(c)
+      const db = c.get('db')
+      const id = (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id
+      const data = c.req.valid('json' as never) as z.infer<typeof userLanguageSchema>
+      if (!db.prepare('SELECT id FROM users WHERE id = ?').get(id)) {
+        httpError(404, ERROR_CODES.USER_NOT_FOUND)
+      }
+      db.prepare('UPDATE users SET language = ? WHERE id = ?').run(data.language, id)
+      auditLog(db, currentUser(c).id, 'user_language_changed', 'user', id, { to: data.language })
+      hub.broadcast('users')
+      return c.json({ user: db.prepare(`SELECT ${USER_COLS} FROM users WHERE id = ?`).get(id) })
+    }
+  )
+
+  // Borrado (admin). Salvaguardas: no auto-borrado, protección último admin;
+  // destruye las sesiones del usuario eliminado.
+  app.delete('/api/users/:id', zValidator('param', idParamSchema, validationHook), (c: Context<AppEnv>) => {
+    requireAdmin(c)
+    const db = c.get('db')
+    const me = currentUser(c)
+    const id = (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id
+    if (id === me.id) httpError(400, ERROR_CODES.USER_SELF_DELETE)
+    const target = db.prepare(`SELECT ${USER_COLS} FROM users WHERE id = ?`).get(id) as SessionUser | undefined
+    if (!target) httpError(404, ERROR_CODES.USER_NOT_FOUND)
+    if (target.role === 'admin' && countAdmins(db) <= 1) {
+      httpError(400, ERROR_CODES.USER_LAST_ADMIN)
+    }
+    db.prepare('DELETE FROM sessions WHERE user_id = ?').run(id)
+    auditLog(db, me.id, 'user_deleted', 'user', id, { username: target.username })
+    db.prepare('DELETE FROM users WHERE id = ?').run(id)
+    hub.broadcast('users')
+    return c.body(null, 204)
+  })
+
+  // --- Visibilidad del botón demo en el login (flag en kv de producción) ---
+  // GET público (la pantalla de login lo consulta para mostrar/ocultar el botón).
+  app.get('/api/settings/demo', (c: Context<AppEnv>) => {
+    return c.json({ demo_enabled: kvGet(prod, 'demo_enabled', '1') === '1' })
+  })
+
+  // PUT solo admin de producción: muestra u oculta el botón demo del login.
+  app.put('/api/settings/demo', zValidator('json', demoToggleSchema, validationHook), (c: Context<AppEnv>) => {
+    requireAdmin(c)
+    if (c.get('demo')) httpError(403, ERROR_CODES.SETTINGS_PROD_ONLY)
+    const data = c.req.valid('json' as never) as z.infer<typeof demoToggleSchema>
+    kvSet(prod, 'demo_enabled', data.enabled ? '1' : '0')
+    auditLog(prod, currentUser(c).id, 'demo_toggled', 'setting', 'demo_enabled', { enabled: data.enabled })
+    hub.broadcast('settings')
+    return c.json({ demo_enabled: data.enabled })
+  })
+
+  // --- Audit log (admin): histórico de acciones administrativas ---
+  app.get('/api/admin/audit', zValidator('query', activityQuerySchema, validationHook), (c: Context<AppEnv>) => {
+    requireAdmin(c)
+    const db = c.get('db')
+    const { cursor, limit } = c.req.valid('query' as never) as z.infer<typeof activityQuerySchema>
+    const decoded = cursor ? decodeCursor(cursor) : null
+    const keyset = decoded
+      ? 'WHERE (a.created_at < @cts OR (a.created_at = @cts AND a.id < @cid))'
+      : ''
+    const auditRows = db
+      .prepare(
+        `SELECT a.*, u.username AS actor_username
+         FROM admin_audit a
+         LEFT JOIN users u ON u.id = a.actor_id
+         ${keyset}
+         ORDER BY a.created_at DESC, a.id DESC
+         LIMIT @limitPlusOne`
+      )
+      .all({
+        ...(decoded ? { cts: decoded.ts, cid: decoded.id } : {}),
+        limitPlusOne: limit + 1,
+      }) as Array<{ created_at: number; id: string; data: string | null; [key: string]: unknown }>
+    const shapedRows = auditRows.map((r) => ({ ...r, data: JSON.parse(r.data || '{}') }))
+    const page = keysetPage(shapedRows, limit)
+    return c.json({ items: page.items, nextCursor: page.nextCursor, hasMore: page.hasMore })
+  })
+
+  // --- Ajustes del servidor (admin): backup y adjuntos ---
+  app.get('/api/settings/server', async (c: Context<AppEnv>) => {
+    requireAdmin(c)
+    return c.json({
+      backup_enabled: kvGet(prod, 'backup_enabled', '1') === '1',
+      backup_retention_days: parseInt(kvGet(prod, 'backup_retention_days', '3') ?? '3', 10),
+      max_attachments_per_task: parseInt(kvGet(prod, 'max_attachments_per_task', '50') ?? '50', 10),
+      backup_last_run: kvGet(prod, 'backup_last_run'),
+      backup_path: kvGet(prod, 'backup_path'),
+      backup_timer_active: await isBackupTimerActive(),
+      plugin_expenses_enabled: kvGet(prod, 'plugin_expenses_enabled', '0') === '1',
+      archive_after_days: parseInt(kvGet(prod, 'archive_after_days', '3') ?? '3', 10),
+    })
+  })
+
+  app.put('/api/settings/server', zValidator('json', serverSettingsSchema, validationHook), (c: Context<AppEnv>) => {
+    requireAdmin(c)
+    if (c.get('demo')) httpError(403, ERROR_CODES.SETTINGS_PROD_ONLY)
+    const data = c.req.valid('json' as never) as z.infer<typeof serverSettingsSchema>
+    kvSet(prod, 'backup_enabled', data.backup_enabled ? '1' : '0')
+    kvSet(prod, 'backup_retention_days', String(data.backup_retention_days))
+    kvSet(prod, 'max_attachments_per_task', String(data.max_attachments_per_task))
+    kvSet(prod, 'plugin_expenses_enabled', data.plugin_expenses_enabled ? '1' : '0')
+    kvSet(prod, 'archive_after_days', String(data.archive_after_days))
+    auditLog(prod, currentUser(c).id, 'server_settings_changed', 'setting', 'server', data)
+    hub.broadcast('settings')
+    return c.json({
+      backup_enabled: data.backup_enabled,
+      backup_retention_days: data.backup_retention_days,
+      max_attachments_per_task: data.max_attachments_per_task,
+      plugin_expenses_enabled: data.plugin_expenses_enabled,
+      archive_after_days: data.archive_after_days,
+    })
+  })
+
+  // Backup manual: ejecuta el script de backup y registra resultado
+  app.post('/api/settings/backup/run', async (c: Context<AppEnv>) => {
+    requireAdmin(c)
+    if (c.get('demo')) httpError(403, ERROR_CODES.SETTINGS_PROD_ONLY)
+    const { execBackup } = await import('./backup.js')
+    const result = await execBackup(prod, { DATA_DIR: dataDir })
+    if (!result.ok) httpError(500, ERROR_CODES.SETTINGS_BACKUP_FAILED)
+    return c.json({ ok: true, path: result.path, size: result.size })
+  })
+}

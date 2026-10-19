@@ -1,0 +1,419 @@
+// routes-gamification.ts - gamificacion: puntos por completar tareas y por
+// decisiones, recompensas canjeables y resumen (karma semanal, rachas, saldo).
+//
+// Reglas de puntos:
+//   - Al mover una tarea a 'hecho' (move o done-and-archive desde otra
+//     columna), quien la completa gana base 5 + bonus por prioridad
+//     (alta +5, media +2, baja +0).
+//   - Anti-farming: una tarea solo concede puntos una vez cada 23 h
+//     (independientemente del usuario), comprobado contra el ledger activo.
+//   - Reversion: si una tarea sale de 'hecho', su ultima entrada activa se
+//     marca como revertida (reverted_at). Al volver a 'hecho' se reactiva la
+//     entrada revertida si aun esta dentro de la ventana anti-farming;
+//     si no, se crea una nueva.
+//   - Decisiones (issue #280): elegir una solucion concede +8 a su autor
+//     (se revierten al reabrir/cambiar; reelegir reactiva) y votar concede
+//     +1 una vez por usuario y decision (retirar revierte, revotar reactiva).
+//     Nada por proponer soluciones ni por cerrar.
+// El saldo de un usuario es SUM(ledger activo) - SUM(canjes). Todas las rutas
+// bajo requireAuth (middleware global /api/*).
+import crypto from 'node:crypto'
+import { z } from 'zod'
+import { zValidator } from '@hono/zod-validator'
+import { httpError, validationHook } from './errors.js'
+import { ERROR_CODES } from './error-codes.js'
+import type { Context, Hono } from 'hono'
+import type Database from 'better-sqlite3'
+import type { AppEnv } from './types.js'
+import type { Hub } from './sse.js'
+import { currentUser } from './auth.js'
+
+/** Tarea mínima que necesita la concesión de puntos. */
+interface PointsTask {
+  id: string
+  priority: string | null
+}
+
+/** Decisión mínima para las concesiones de puntos. */
+interface PointsDecision {
+  id: string
+}
+
+/** Entrada del ledger de puntos. */
+interface LedgerRow {
+  id: string
+  user_id: string
+  points: number
+  total?: number
+  n?: number
+}
+
+const BASE_POINTS = 5
+const PRIORITY_BONUS: Record<string, number> = { alta: 5, media: 2, baja: 0 }
+const ANTI_FARMING_MS = 23 * 60 * 60 * 1000
+// Gamificación de decisiones (issue #280): al autor de la solución ELEGIDA
+// +8 (se revierten al reabrir/cambiar); votar +1 una vez por decisión.
+const CHOSEN_POINTS = 8
+const VOTE_POINTS = 1
+
+const idParamSchema = z.object({ id: z.string().min(1).max(64) })
+
+/** Fila de gam_rewards. */
+interface RewardRow {
+  id: string
+  title: string
+  emoji: string
+  cost: number
+  active: number
+  created_by: string
+  created_at: number
+}
+
+const rewardSchema = z.object({
+  title: z.string().min(1).max(120),
+  emoji: z.string().max(16).default('🎁'),
+  cost: z.number().int().min(1).max(100000),
+})
+
+/**
+ * Concede puntos por completar una tarea. Pensado para llamarse DENTRO de la
+ * transaccion del move. Devuelve los puntos concedidos (0 si el anti-farming
+ * bloquea una nueva concesion).
+ *
+ * Logica:
+ *  - Si hay una entrada activa reciente (< 23 h) de la tarea: no concede.
+ *  - Si hay una entrada revertida reciente (< 23 h): la reactiva.
+ *  - En cualquier otro caso: inserta una entrada nueva.
+ */
+export function grantCompletionPoints(db: Database.Database, task: PointsTask, userId: string): number {
+  const cutoff = Date.now() - ANTI_FARMING_MS
+  const activeRecent = db
+    .prepare(
+      'SELECT 1 FROM gam_points_ledger WHERE task_id = ? AND created_at >= ? AND reverted_at IS NULL LIMIT 1'
+    )
+    .get(task.id, cutoff)
+  if (activeRecent) return 0
+
+  const reverted = db
+    .prepare(
+      'SELECT id, points FROM gam_points_ledger WHERE task_id = ? AND created_at >= ? AND reverted_at IS NOT NULL ORDER BY created_at DESC LIMIT 1'
+    )
+    .get(task.id, cutoff) as { id: string; points: number } | undefined
+  if (reverted) {
+    db.prepare('UPDATE gam_points_ledger SET reverted_at = NULL WHERE id = ?').run(reverted.id)
+    return reverted.points
+  }
+
+  const points = BASE_POINTS + (task.priority ? (PRIORITY_BONUS[task.priority] ?? 0) : 0)
+  db.prepare(
+    `INSERT INTO gam_points_ledger (id, user_id, task_id, points, reason, created_at, reverted_at)
+     VALUES (?, ?, ?, ?, 'task_done', ?, NULL)`
+  ).run(crypto.randomUUID(), userId, task.id, points, Date.now())
+  return points
+}
+
+/**
+ * Revierte los puntos de una tarea al salir de 'hecho'. Marca la ultima
+ * entrada activa como revertida. Devuelve los puntos revertidos (0 si no
+ * habia entrada activa).
+ */
+export function revertCompletionPoints(db: Database.Database, taskId: string): number {
+  const entry = db
+    .prepare(
+      'SELECT id, points FROM gam_points_ledger WHERE task_id = ? AND reverted_at IS NULL ORDER BY created_at DESC LIMIT 1'
+    )
+    .get(taskId) as { id: string; points: number } | undefined
+  if (!entry) return 0
+  db.prepare('UPDATE gam_points_ledger SET reverted_at = ? WHERE id = ?').run(Date.now(), entry.id)
+  return entry.points
+}
+
+/**
+ * Concede puntos al autor de la solución ELEGIDA de una decisión (+8, issue
+ * #280). Pensado para llamarse DENTRO de la transacción del choose, después
+ * de revertChosenPoints. Inserta con decision_id y task_id NULL.
+ *
+ * Idempotencia por decisión + autor (una decisión elegida solo paga a un
+ * autor: si ya hay entrada activa suya, no-op; si hay una revertida, la
+ * reactiva, mismo patrón que las tareas).
+ */
+export function grantChosenPoints(db: Database.Database, decision: PointsDecision, solutionId: string): number {
+  const solution = db
+    .prepare('SELECT proposer_id FROM decision_solutions WHERE id = ? AND decision_id = ?')
+    .get(solutionId, decision.id) as { proposer_id: string } | undefined
+  if (!solution) return 0
+  const active = db
+    .prepare(
+      "SELECT id, points FROM gam_points_ledger WHERE decision_id = ? AND user_id = ? AND reason = 'decision_chosen' AND reverted_at IS NULL LIMIT 1"
+    )
+    .get(decision.id, solution.proposer_id)
+  if (active) return 0
+  const cutoff = Date.now() - ANTI_FARMING_MS
+  const reverted = db
+    .prepare(
+      "SELECT id, points FROM gam_points_ledger WHERE decision_id = ? AND user_id = ? AND reason = 'decision_chosen' AND reverted_at IS NOT NULL AND created_at >= ? ORDER BY created_at DESC LIMIT 1"
+    )
+    .get(decision.id, solution.proposer_id, cutoff) as { id: string; points: number } | undefined
+  if (reverted) {
+    db.prepare('UPDATE gam_points_ledger SET reverted_at = NULL WHERE id = ?').run(reverted.id)
+    return reverted.points
+  }
+  db.prepare(
+    `INSERT INTO gam_points_ledger (id, user_id, task_id, decision_id, points, reason, created_at, reverted_at)
+     VALUES (?, ?, NULL, ?, ${CHOSEN_POINTS}, 'decision_chosen', ?, NULL)`
+  ).run(crypto.randomUUID(), solution.proposer_id, decision.id, Date.now())
+  return CHOSEN_POINTS
+}
+
+/**
+ * Revierte TODAS las concesiones decision_chosen activas de la decisión
+ * (reabrir, elegir otra/cerrar sin solución, borrar la solución elegida).
+ * Devuelve los puntos revertidos (0 si no había).
+ */
+export function revertChosenPoints(db: Database.Database, decisionId: string): number {
+  const entries = db
+    .prepare(
+      "SELECT id, points FROM gam_points_ledger WHERE decision_id = ? AND reason = 'decision_chosen' AND reverted_at IS NULL"
+    )
+    .all(decisionId) as Array<{ id: string; points: number }>
+  const now = Date.now()
+  let total = 0
+  for (const entry of entries) {
+    db.prepare('UPDATE gam_points_ledger SET reverted_at = ? WHERE id = ?').run(now, entry.id)
+    total += entry.points
+  }
+  return total
+}
+
+/**
+ * Concede +1 por votar en una decisión, UNA vez por usuario y decisión
+ * (issue #280). Pensado para llamarse DENTRO de la transacción del vote.
+ * Mover el voto no repite (entrada activa -> no-op); tras retirar el voto,
+ * volver a votar reactiva la entrada revertida (patrón del ledger).
+ */
+export function grantVotePoints(db: Database.Database, decisionId: string, userId: string): number {
+  const active = db
+    .prepare(
+      "SELECT 1 FROM gam_points_ledger WHERE decision_id = ? AND user_id = ? AND reason = 'decision_vote' AND reverted_at IS NULL LIMIT 1"
+    )
+    .get(decisionId, userId)
+  if (active) return 0
+  const reverted = db
+    .prepare(
+      "SELECT id, points FROM gam_points_ledger WHERE decision_id = ? AND user_id = ? AND reason = 'decision_vote' AND reverted_at IS NOT NULL ORDER BY created_at DESC LIMIT 1"
+    )
+    .get(decisionId, userId) as { id: string; points: number } | undefined
+  if (reverted) {
+    db.prepare('UPDATE gam_points_ledger SET reverted_at = NULL WHERE id = ?').run(reverted.id)
+    return reverted.points
+  }
+  db.prepare(
+    `INSERT INTO gam_points_ledger (id, user_id, task_id, decision_id, points, reason, created_at, reverted_at)
+     VALUES (?, ?, NULL, ?, ${VOTE_POINTS}, 'decision_vote', ?, NULL)`
+  ).run(crypto.randomUUID(), userId, decisionId, Date.now())
+  return VOTE_POINTS
+}
+
+/**
+ * Revierte el +1 del voto de un usuario en una decisión (al retirarlo).
+ * Devuelve los puntos revertidos (0 si no había entrada activa).
+ */
+export function revertVotePoints(db: Database.Database, decisionId: string, userId: string): number {
+  const entry = db
+    .prepare(
+      "SELECT id, points FROM gam_points_ledger WHERE decision_id = ? AND user_id = ? AND reason = 'decision_vote' AND reverted_at IS NULL LIMIT 1"
+    )
+    .get(decisionId, userId) as { id: string; points: number } | undefined
+  if (!entry) return 0
+  db.prepare('UPDATE gam_points_ledger SET reverted_at = ? WHERE id = ?').run(Date.now(), entry.id)
+  return entry.points
+}
+
+/** Lunes 00:00 local de la semana actual (epoch ms). */
+function mondayStartMs(now = new Date()): number {
+  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7)) // getDay: domingo=0 -> lunes=0
+  return d.getTime()
+}
+
+/** 'YYYY-MM-DD' en hora local (para comparar dias de racha). */
+function localDay(ms: number): string {
+  const d = new Date(ms)
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  return `${d.getFullYear()}-${mm}-${dd}`
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000
+
+/**
+ * Racha: dias consecutivos con al menos una concesion activa, terminando hoy
+ * o ayer (si hoy aun no hay, la racha viva es la que termino ayer).
+ */
+function streakDays(daysSet: Set<string>, nowMs = Date.now()): number {
+  let cursor = localDay(nowMs)
+  if (!daysSet.has(cursor)) {
+    cursor = localDay(nowMs - DAY_MS)
+    if (!daysSet.has(cursor)) return 0
+  }
+  let streak = 0
+  let cursorMs = new Date(`${cursor}T00:00:00`).getTime()
+  while (daysSet.has(localDay(cursorMs))) {
+    streak += 1
+    cursorMs -= DAY_MS
+  }
+  return streak
+}
+
+export function registerGamificationRoutes(app: Hono<AppEnv>, { hub }: { hub: Hub }): void {
+  // Resumen global: por cada usuario del sistema, saldo, puntos de la semana
+  // (desde el lunes 00:00 local), racha de dias y total de tareas completadas.
+  app.get('/api/gamification/summary', (c: Context<AppEnv>) => {
+    const db = c.get('db')
+    const users = db
+      .prepare('SELECT id, username, display_name, color FROM users ORDER BY created_at, username')
+      .all() as Array<{ id: string; username: string; display_name: string | null; color: string | null }>
+    const weekStart = mondayStartMs()
+    const activeWhere = 'reverted_at IS NULL'
+
+    // tasks_done_total cuenta SOLO entradas de tarea: las de decisión
+    // (decision_chosen/decision_vote, task_id NULL) no son tareas.
+    const earned = db
+      .prepare(
+        `SELECT user_id, SUM(points) AS total,
+                SUM(CASE WHEN task_id IS NOT NULL THEN 1 ELSE 0 END) AS n
+         FROM gam_points_ledger WHERE ${activeWhere} GROUP BY user_id`
+      )
+      .all() as Array<{ user_id: string; total: number; n: number }>
+    const earnedWeek = db
+      .prepare(`SELECT user_id, SUM(points) AS total FROM gam_points_ledger WHERE created_at >= ? AND ${activeWhere} GROUP BY user_id`)
+      .all(weekStart) as Array<{ user_id: string; total: number }>
+    const spent = db
+      .prepare('SELECT user_id, SUM(cost) AS total FROM gam_redemptions GROUP BY user_id')
+      .all() as Array<{ user_id: string; total: number }>
+    const days = db
+      .prepare(`SELECT DISTINCT user_id, created_at FROM gam_points_ledger WHERE ${activeWhere} ORDER BY user_id, created_at`)
+      .all() as Array<{ user_id: string; created_at: number }>
+
+    const earnedMap = new Map(earned.map((r) => [r.user_id, r]))
+    const weekMap = new Map(earnedWeek.map((r) => [r.user_id, r.total]))
+    const spentMap = new Map(spent.map((r) => [r.user_id, r.total]))
+    const daysMap = new Map<string, Set<string>>()
+    for (const r of days) {
+      if (!daysMap.has(r.user_id)) daysMap.set(r.user_id, new Set())
+      daysMap.get(r.user_id)?.add(localDay(r.created_at))
+    }
+
+    const summary = users.map((u) => {
+      const totalEarned = earnedMap.get(u.id)?.total ?? 0
+      const totalSpent = spentMap.get(u.id) ?? 0
+      return {
+        user_id: u.id,
+        display_name: u.display_name,
+        username: u.username,
+        color: u.color,
+        balance: totalEarned - totalSpent,
+        week_points: weekMap.get(u.id) ?? 0,
+        streak_days: streakDays(daysMap.get(u.id) ?? new Set()),
+        tasks_done_total: earnedMap.get(u.id)?.n ?? 0,
+      }
+    })
+
+    const recent = db
+      .prepare(
+        `SELECT l.id, l.user_id, u.username, u.display_name, l.task_id, t.title AS task_title,
+                l.decision_id, d.title AS decision_title,
+                l.points, l.reason, l.created_at
+         FROM gam_points_ledger l
+         JOIN users u ON u.id = l.user_id
+         LEFT JOIN tasks t ON t.id = l.task_id
+         LEFT JOIN decisions d ON d.id = l.decision_id
+         WHERE l.reverted_at IS NULL
+         ORDER BY l.created_at DESC, l.id DESC
+         LIMIT 10`
+      )
+      .all()
+
+    const redemptions = db
+      .prepare(
+        `SELECT r.id, r.user_id, u.username, u.display_name, r.reward_id,
+                w.title AS reward_title, w.emoji AS reward_emoji, r.cost, r.created_at
+         FROM gam_redemptions r
+         JOIN users u ON u.id = r.user_id
+         JOIN gam_rewards w ON w.id = r.reward_id
+         ORDER BY r.created_at DESC, r.id DESC
+         LIMIT 10`
+      )
+      .all()
+
+    return c.json({ users: summary, recent, redemptions })
+  })
+
+  // Recompensas activas (cualquier usuario autenticado las ve y las crea).
+  app.get('/api/rewards', (c: Context<AppEnv>) => {
+    const db = c.get('db')
+    const rewards = db
+      .prepare('SELECT id, title, emoji, cost, created_by, created_at FROM gam_rewards WHERE active = 1 ORDER BY created_at')
+      .all()
+    return c.json({ rewards })
+  })
+
+  app.post('/api/rewards', zValidator('json', rewardSchema, validationHook), (c: Context<AppEnv>) => {
+    const db = c.get('db')
+    const user = currentUser(c)
+    const data = c.req.valid('json' as never) as z.infer<typeof rewardSchema>
+    const id = crypto.randomUUID()
+    db.prepare(
+      'INSERT INTO gam_rewards (id, title, emoji, cost, active, created_by, created_at) VALUES (?, ?, ?, ?, 1, ?, ?)'
+    ).run(id, data.title, data.emoji, data.cost, user.id, Date.now())
+    hub.broadcast('gamification')
+    const reward = db.prepare('SELECT id, title, emoji, cost, created_by, created_at FROM gam_rewards WHERE id = ?').get(id)
+    c.header('Location', `/api/rewards/${id}`)
+    return c.json({ reward }, 201)
+  })
+
+  // Borrado logico: el historial de canjes sigue apuntando a la recompensa.
+  app.delete('/api/rewards/:id', zValidator('param', idParamSchema, validationHook), (c: Context<AppEnv>) => {
+    const db = c.get('db')
+    const id = (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id
+    const reward = db.prepare('SELECT id FROM gam_rewards WHERE id = ? AND active = 1').get(id)
+    if (!reward) httpError(404, ERROR_CODES.REWARD_NOT_FOUND)
+    db.prepare('UPDATE gam_rewards SET active = 0 WHERE id = ?').run(id)
+    hub.broadcast('gamification')
+    return c.body(null, 204)
+  })
+
+  // Canje: valida saldo del usuario actual y descuenta (fila en redemptions
+  // con el coste actual de la recompensa).
+  app.post('/api/rewards/:id/redeem', zValidator('param', idParamSchema, validationHook), (c: Context<AppEnv>) => {
+    const db = c.get('db')
+    const user = currentUser(c)
+    const id = (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id
+    const reward = db.prepare('SELECT * FROM gam_rewards WHERE id = ? AND active = 1').get(id) as
+      | RewardRow
+      | undefined
+    if (!reward) httpError(404, ERROR_CODES.REWARD_NOT_FOUND)
+
+    const redeem = db.transaction(() => {
+      const earned = (db
+        .prepare('SELECT COALESCE(SUM(points), 0) AS total FROM gam_points_ledger WHERE user_id = ? AND reverted_at IS NULL')
+        .get(user.id) as { total: number }).total
+      const spent = (db
+        .prepare('SELECT COALESCE(SUM(cost), 0) AS total FROM gam_redemptions WHERE user_id = ?')
+        .get(user.id) as { total: number }).total
+      const balance = earned - spent
+      if (balance < reward.cost) httpError(400, ERROR_CODES.INSUFFICIENT_POINTS)
+      const redemptionId = crypto.randomUUID()
+      db.prepare(
+        'INSERT INTO gam_redemptions (id, reward_id, user_id, cost, created_at) VALUES (?, ?, ?, ?, ?)'
+      ).run(redemptionId, reward.id, user.id, reward.cost, Date.now())
+      return { id: redemptionId, balance: balance - reward.cost }
+    })
+    const result = redeem()
+    hub.broadcast('gamification')
+    const redemption = db
+      .prepare('SELECT id, reward_id, user_id, cost, created_at FROM gam_redemptions WHERE id = ?')
+      .get(result.id)
+    return c.json({ redemption, balance: result.balance }, 201)
+  })
+}

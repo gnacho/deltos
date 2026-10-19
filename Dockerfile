@@ -12,14 +12,14 @@ RUN npm ci --omit=dev
 # ---------- runtime ----------
 FROM node:24-slim
 ENV NODE_ENV=production \
-    # Nombres REALES de server/src/config.js:
+    # Nombres REALES de server/src/config.ts:
     PORT=3000 \
     DATA_DIR=/app/data \
     # STATIC_DIR por defecto ya resuelve a /app/app/dist (relativo a config.js);
     # se declara explícito por claridad.
     STATIC_DIR=/app/app/dist \
     # Bootstrap del primer admin (solo primer arranque). Si AUTH_PASS falta,
-    # NO se crea admin (ver server/src/auth.js ensureBootstrapAdmin).
+    # NO se crea admin (ver server/src/auth.ts ensureBootstrapAdmin).
     # ¡Cámbialos en el entorno del contenedor!
     AUTH_USER=admin \
     AUTH_PASS=cambiar-1234 \
@@ -39,4 +39,4 @@ USER node
 
 EXPOSE 3000
 # Sin .env: el server arranca con defaults + variables de entorno
-CMD ["node", "server/src/index.js"]
+CMD ["node", "server/dist/index.js"]
