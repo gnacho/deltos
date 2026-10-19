@@ -1,7 +1,7 @@
 {
   "name": "deltos-landing",
   "private": true,
-  "version": "2.6.48",
+  "version": "2.6.50",
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json",
