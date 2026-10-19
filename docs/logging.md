@@ -5,12 +5,12 @@ skill). Summary: **JSON NDJSON to stdout → journald rotates, nobody else rotat
 
 ## What Deltos emits
 
-Own dependency-free logger (`server/src/logger.js`): NDJSON to stdout,
+Own dependency-free logger (`server/src/logger.ts`): NDJSON to stdout,
 levels `debug`/`info`/`warn`/`error`, minimum via `LOG_LEVEL` (default `info`).
 Static messages (event name in `msg`, snake_case) + key-value attributes —
 never interpolated strings with variable data in `msg`.
 
-- **Wide events** (`server/src/wide-event.js`): exactly **1 JSON event per
+- **Wide events** (`server/src/wide-event.ts`): exactly **1 JSON event per
   API request** (`msg: "http_request"`), emitted at the end with `request_id`
   (also in the `x-request-id` response header), `method`, `route` (Hono
   template `/api/tasks/:id`, not the raw path → no query or PII), `status`,

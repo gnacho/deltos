@@ -10,7 +10,7 @@
     "start": "node dist/index.js",
     "dev": "tsc -p tsconfig.build.json && node --watch dist/index.js",
     "build": "tsc -p tsconfig.build.json",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json --noEmit",
     "test": "node node_modules/vitest/vitest.mjs run"
   },
   "dependencies": {

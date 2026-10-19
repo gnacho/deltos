@@ -71,14 +71,21 @@ describe('backup de la base de datos', () => {
   })
 
   it('ya no copia el fichero a pelo ni invoca el CLI sqlite3', () => {
-    const src = fs.readFileSync(new URL('../src/backup.js', import.meta.url), 'utf8')
+    const src = fs.readFileSync(new URL('../src/backup.ts', import.meta.url), 'utf8')
     expect(src).not.toMatch(/copyFileSync/)
     expect(src).not.toMatch(/['"]sqlite3['"]/)
   })
 
   it('el CLI de backup (ruta del timer) produce un snapshot verificado', async () => {
     const { dir } = await makeInstance()
-    const cli = fileURLToPath(new URL('../src/backup-cli.js', import.meta.url))
+    // El CLI se ejecuta compilado (dist/), igual que en producción: Node 24 no
+    // ejecuta TypeScript directamente.
+    const serverDir = fileURLToPath(new URL('..', import.meta.url))
+    execFileSync(process.execPath, [path.join(serverDir, 'node_modules', 'typescript', 'bin', 'tsc'), '-p', 'tsconfig.build.json'], {
+      cwd: serverDir,
+      encoding: 'utf8',
+    })
+    const cli = path.join(serverDir, 'dist', 'backup-cli.js')
 
     const out = execFileSync(process.execPath, [cli, dir], { encoding: 'utf8' })
 

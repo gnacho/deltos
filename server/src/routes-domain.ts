@@ -1,4 +1,4 @@
-// routes-domain.js — rutas del dominio Deltos: bootstrap, proyectos, etiquetas,
+// routes-domain.ts — rutas del dominio Deltos: bootstrap, proyectos, etiquetas,
 // tareas (CRUD + mover), comentarios, adjuntos, feed de actividad.
 // Todas bajo requireAuth; c.get('db') apunta a la BD de la sesión (prod o demo).
 // Convenciones api-stack (CONVENTIONS.md): zValidator en cada ruta, errores
@@ -22,11 +22,115 @@ import { isBackupTimerActive } from './backup.js'
 import { normalizeRecurrence, serializeRecurrence, computeNextDue, todayLocal, adaptiveInterval, completionDates } from './recurrence.js'
 import { grantCompletionPoints, revertCompletionPoints } from './routes-gamification.js'
 import { parseTaskText } from './nlp.js'
+import type { Context, Hono, MiddlewareHandler, Next } from 'hono'
+import type Database from 'better-sqlite3'
+import type { AppEnv, SessionUser } from './types.js'
+import type { Hub } from './sse.js'
+import type { PushData, PushOptions } from './push.js'
+import { currentUser } from './auth.js'
+
+/** Fila de tasks tal como está en la BD. */
+interface TaskRow {
+  id: string
+  project_id: string
+  short_id: string | null
+  title: string
+  description: string | null
+  column: string
+  position: number
+  priority: string | null
+  due_date: string | null
+  recurrence: string | null
+  recurrence_group_id: string | null
+  recurrence_paused: number | null
+  assignee_id: string | null
+  created_by: string
+  created_at: number
+  updated_at: number
+  done_at: number | null
+  archived_at: number | null
+  deleted_at: number | null
+  [key: string]: unknown
+}
+
+/** Fila de projects. */
+interface ProjectRow {
+  id: string
+  name: string
+  emoji: string | null
+  color: string | null
+  position: number
+  owner_id: string | null
+  is_inbox: number | null
+  created_at: number
+  [key: string]: unknown
+}
+
+/** Fila de members hidratada (JOIN project_members + users). */
+interface MemberRow {
+  id: string
+  username: string
+  color: string | null
+  role: string
+}
+
+/** Etiqueta asociada a una tarea (JOIN task_labels + labels). */
+interface TaskLabelRow {
+  task_id: string
+  id: string
+  name: string
+  color: string
+}
+
+/** Fila de attachments (con stored_name para resolver el fichero). */
+interface AttachmentRow {
+  id: string
+  task_id: string
+  stored_name: string
+  filename: string
+  size: number
+  mime: string
+  uploaded_by: string | null
+  created_at: number
+  [key: string]: unknown
+}
+
+/** Fila de task_subtasks con el project_id de su tarea (JOIN). */
+interface SubtaskRow {
+  id: string
+  task_id: string
+  parent_id: string | null
+  title: string
+  done: number
+  position: number
+  created_at: number
+  project_id: string
+  [key: string]: unknown
+}
+
+/** Comentario con el usuario resuelto. */
+interface CommentRow {
+  id: string
+  task_id: string
+  body: string
+  created_at: number
+  username: string | null
+  user_color: string | null
+  author_name?: string | null
+  [key: string]: unknown
+}
 
 const log = logger.child({ component: 'domain' })
 
 // Notificación fire-and-forget a usuarios concretos (nunca bloquea la HTTP).
-function notifyIds(db, demo, ids, tipo, datos, opciones = {}) {
+function notifyIds(
+  db: Database.Database,
+  demo: boolean,
+  ids: string[],
+  tipo: string,
+  datos: PushData,
+  opciones: PushOptions = {}
+): void {
   if (!ids || ids.length === 0) return
   notifyUsers(db, ids, tipo, datos, { ...opciones, demo }).catch((err) =>
     log.error('push_notify_failed', { tipo, error: err })
@@ -35,14 +139,14 @@ function notifyIds(db, demo, ids, tipo, datos, opciones = {}) {
 
 // Extrae @username de un texto y los resuelve a IDs de usuario existentes
 // (case-insensitive), excluyendo al actor. Para notificar menciones.
-export function extraerMenciones(db, text, actorId) {
+export function extraerMenciones(db: Database.Database, text: string, actorId: string): string[] {
   const matches = (text || '').match(/@([A-Za-z0-9_]+)/g) || []
   const nicks = [...new Set(matches.map((m) => m.slice(1)).map((n) => n.toLowerCase()))]
   if (nicks.length === 0) return []
   const placeholders = nicks.map(() => '?').join(',')
   const rows = db
     .prepare(`SELECT id FROM users WHERE LOWER(username) IN (${placeholders})`)
-    .all(...nicks)
+    .all(...nicks) as Array<{ id: string }>
   return [...new Set(rows.map((r) => r.id).filter((id) => id !== actorId))]
 }
 
@@ -177,21 +281,34 @@ const searchQuerySchema = z.object({
   q: z.string().trim().min(1).max(100),
 })
 
-function countAdmins(db) {
-  return db.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'admin'").get().n
+function countAdmins(db: Database.Database): number {
+  return (db.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'admin'").get() as { n: number }).n
 }
 
 const USER_COLS = 'id, username, display_name, email, phone, color, language, role, created_at'
 
 // --- Helpers ----------------------------------------------------------------
 
-function addEvent(db, taskId, userId, type, data = {}) {
+function addEvent(
+  db: Database.Database,
+  taskId: string,
+  userId: string,
+  type: string,
+  data: Record<string, unknown> = {}
+): void {
   db.prepare(
     'INSERT INTO activity_events (id, task_id, user_id, type, data, created_at) VALUES (?, ?, ?, ?, ?, ?)'
   ).run(crypto.randomUUID(), taskId, userId, type, JSON.stringify(data), Date.now())
 }
 
-function auditLog(db, actorId, action, targetType, targetId, data = {}) {
+function auditLog(
+  db: Database.Database,
+  actorId: string,
+  action: string,
+  targetType: string,
+  targetId: string | null,
+  data: Record<string, unknown> = {}
+): void {
   db.prepare(
     'INSERT INTO admin_audit (id, actor_id, action, target_type, target_id, data, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
   ).run(crypto.randomUUID(), actorId, action, targetType, targetId, JSON.stringify(data), Date.now())
@@ -200,31 +317,39 @@ function auditLog(db, actorId, action, targetType, targetId, data = {}) {
 // --- Membresía de proyecto (visibilidad y autorización) --------------------
 
 // ¿Es el usuario miembro del proyecto (lo ve)?
-function isMember(db, userId, projectId) {
+function isMember(db: Database.Database, userId: string, projectId: string): boolean {
   return !!db
     .prepare('SELECT 1 FROM project_members WHERE project_id = ? AND user_id = ?')
     .get(projectId, userId)
 }
 
 // Lanza 403 PROJECT_NOT_MEMBER si el usuario no es miembro.
-function requireMember(db, userId, projectId) {
+function requireMember(db: Database.Database, userId: string, projectId: string): void {
   if (!isMember(db, userId, projectId)) httpError(403, ERROR_CODES.PROJECT_NOT_MEMBER)
 }
 
 // ¿Puede gestionar el proyecto (editar/borrar/gestionar miembros)?
 // admin siempre; owner_id NULL (legado) → cualquier miembro; si no, solo owner.
-function canManageProject(db, user, project) {
+function canManageProject(
+  db: Database.Database,
+  user: SessionUser,
+  project: Pick<ProjectRow, 'id' | 'owner_id'>
+): boolean {
   if (user.role === 'admin') return true
   if (project.owner_id == null) return isMember(db, user.id, project.id)
   return project.owner_id === user.id
 }
 
-function requireProjectOwner(db, user, project) {
+function requireProjectOwner(
+  db: Database.Database,
+  user: SessionUser,
+  project: Pick<ProjectRow, 'id' | 'owner_id'>
+): void {
   if (!canManageProject(db, user, project)) httpError(403, ERROR_CODES.PROJECT_NOT_OWNER)
 }
 
 // Lista de miembros hidratada (owner primero, luego por username).
-function memberList(db, projectId) {
+function memberList(db: Database.Database, projectId: string): MemberRow[] {
   return db
     .prepare(
       `SELECT u.id, u.username, u.color, pm.role
@@ -232,20 +357,21 @@ function memberList(db, projectId) {
        WHERE pm.project_id = ?
        ORDER BY (pm.role = 'owner') DESC, u.username`
     )
-    .all(projectId)
+    .all(projectId) as MemberRow[]
 }
 
 // Valida que los ids sean usuarios reales; devuelve únicos válidos.
-function validUserIds(db, ids) {
+function validUserIds(db: Database.Database, ids: string[]): Set<string> {
   const unique = [...new Set(ids)]
-  if (unique.length === 0) return []
+  if (unique.length === 0) return new Set<string>()
   const ph = unique.map(() => '?').join(',')
-  const rows = db.prepare(`SELECT id FROM users WHERE id IN (${ph})`).all(...unique)
+  const rows = db.prepare(`SELECT id FROM users WHERE id IN (${ph})`).all(...unique) as Array<{ id: string }>
   return new Set(rows.map((r) => r.id))
 }
 
 // Hidrata tareas con labels[], assignee y counts {comments, attachments}
-function hydrateTasks(db, whereSql = '', params = []) {
+function hydrateTasks(db: Database.Database, whereSql = '', params: unknown[] = []) {
+  // Devuelve las tareas con la forma pública del API (sin columnas internas).
   const filter = whereSql ? `t.deleted_at IS NULL AND (${whereSql})` : 't.deleted_at IS NULL'
   const tasks = db
     .prepare(
@@ -268,18 +394,24 @@ function hydrateTasks(db, whereSql = '', params = []) {
        WHERE ${filter}
        ORDER BY t."column", t.position`
     )
-    .all(...params)
+    .all(...params) as Array<TaskRow & {
+    assignee_username: string | null
+    assignee_color: string | null
+    comments_count: number
+    attachments_count: number
+    slips_count: number
+  }>
   if (tasks.length === 0) return []
   const labels = db
     .prepare(
       `SELECT tl.task_id, l.id, l.name, l.color
        FROM task_labels tl JOIN labels l ON l.id = tl.label_id`
     )
-    .all()
-  const byTask = new Map()
+    .all() as TaskLabelRow[]
+  const byTask = new Map<string, Array<{ id: string; name: string; color: string }>>()
   for (const l of labels) {
     if (!byTask.has(l.task_id)) byTask.set(l.task_id, [])
-    byTask.get(l.task_id).push({ id: l.id, name: l.name, color: l.color })
+    byTask.get(l.task_id)?.push({ id: l.id, name: l.name, color: l.color })
   }
   return tasks.map((t) => ({
     id: t.id,
@@ -309,19 +441,19 @@ function hydrateTasks(db, whereSql = '', params = []) {
   }))
 }
 
-function replaceTaskLabels(db, taskId, labelIds) {
+function replaceTaskLabels(db: Database.Database, taskId: string, labelIds: string[]): void {
   db.prepare('DELETE FROM task_labels WHERE task_id = ?').run(taskId)
   const ins = db.prepare('INSERT OR IGNORE INTO task_labels (task_id, label_id) VALUES (?, ?)')
   for (const labelId of labelIds) ins.run(taskId, labelId)
 }
 
-function getTask(db, id) {
-  return db.prepare('SELECT * FROM tasks WHERE id = ? AND deleted_at IS NULL').get(id)
+function getTask(db: Database.Database, id: string): TaskRow | undefined {
+  return db.prepare('SELECT * FROM tasks WHERE id = ? AND deleted_at IS NULL').get(id) as TaskRow | undefined
 }
 
 // Crea la siguiente instancia de una tarea recurrente al completarse.
 // Devuelve la tarea hidratada nueva o null si no se pudo (no debería).
-function createRecurringInstance(db, doneTask, actorId) {
+function createRecurringInstance(db: Database.Database, doneTask: TaskRow, actorId: string) {
   if (doneTask.recurrence_paused) return null
   const rec = normalizeRecurrence(typeof doneTask.recurrence === 'string' ? JSON.parse(doneTask.recurrence) : doneTask.recurrence)
   if (!rec) return null
@@ -329,9 +461,9 @@ function createRecurringInstance(db, doneTask, actorId) {
   if (!nextDue) return null
   const id = crypto.randomUUID()
   const now = Date.now()
-  const pos = db
+  const pos = (db
     .prepare('SELECT COALESCE(MAX(position) + 1, 0) AS p FROM tasks WHERE "column" = ?')
-    .get('nuevo').p
+    .get('nuevo') as { p: number }).p
   const groupId = doneTask.recurrence_group_id || doneTask.id
   const create = db.transaction(() => {
     const shortId = allocateShortId(db, doneTask.project_id)
@@ -353,30 +485,30 @@ function createRecurringInstance(db, doneTask, actorId) {
 
 // Copia las subtareas de la tarea completada a la nueva instancia recurrente,
 // con done=0 (reset automático) y preservando el anidamiento (parent_id).
-function copySubtasksWithReset(db, fromTaskId, toTaskId) {
+function copySubtasksWithReset(db: Database.Database, fromTaskId: string, toTaskId: string): void {
   const subs = db
     .prepare('SELECT id, parent_id, title, position FROM task_subtasks WHERE task_id = ? ORDER BY position')
     .all(fromTaskId)
   if (subs.length === 0) return
   const now = Date.now()
-  const idMap = new Map()
+  const idMap = new Map<string, string>()
   const ins = db.prepare(
     'INSERT INTO task_subtasks (id, task_id, parent_id, title, done, position, created_at) VALUES (?, ?, ?, ?, 0, ?, ?)'
   )
-  for (const s of subs) {
+  for (const s of subs as Array<{ id: string; parent_id: string | null; title: string; position: number }>) {
     const newId = crypto.randomUUID()
     idMap.set(s.id, newId)
     ins.run(newId, toTaskId, s.parent_id ? (idMap.get(s.parent_id) ?? null) : null, s.title, s.position, now)
   }
 }
 
-function getTaskLabelIds(db, taskId) {
-  return db.prepare('SELECT label_id FROM task_labels WHERE task_id = ?').all(taskId).map((r) => r.label_id)
+function getTaskLabelIds(db: Database.Database, taskId: string): string[] {
+  return (db.prepare('SELECT label_id FROM task_labels WHERE task_id = ?').all(taskId) as Array<{ label_id: string }>).map((r) => r.label_id)
 }
 
 // Borra de disco los adjuntos de una tarea (mejor esfuerzo)
-function removeAttachmentFiles(db, uploadsDir, taskId) {
-  const rows = db.prepare('SELECT stored_name FROM attachments WHERE task_id = ?').all(taskId)
+function removeAttachmentFiles(db: Database.Database, uploadsDir: string, taskId: string): void {
+  const rows = db.prepare('SELECT stored_name FROM attachments WHERE task_id = ?').all(taskId) as Array<{ stored_name: string }>
   for (const r of rows) {
     try {
       fs.unlinkSync(path.join(uploadsDir, path.basename(r.stored_name)))
@@ -388,14 +520,33 @@ function removeAttachmentFiles(db, uploadsDir, taskId) {
 
 // --- Rutas ------------------------------------------------------------------
 
-export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataDir }) {
+export function registerDomainRoutes(
+  app: Hono<AppEnv>,
+  {
+    hub,
+    uploadsDir,
+    prod,
+    config,
+    dataDir,
+  }: {
+    hub: Hub
+    uploadsDir: string
+    prod: Database.Database
+    config: { maxUploadBytes: number; maxSseClients: number; cookieSecure: boolean; staticDir: string }
+    dataDir: string
+  }
+): void {
   // GET /api/bootstrap — UNA llamada para pintar el tablero.
   // Proyectos y tareas se filtran por membresía: cada usuario solo ve los
   // proyectos de los que es miembro (y sus tareas).
-  app.get('/api/bootstrap', (c) => {
+  app.get('/api/bootstrap', (c: Context<AppEnv>) => {
     const db = c.get('db')
-    const user = c.get('user')
-    const users = db.prepare('SELECT id, username, color FROM users ORDER BY username').all()
+    const user = currentUser(c)
+    const users = db.prepare('SELECT id, username, color FROM users ORDER BY username').all() as Array<{
+      id: string
+      username: string
+      color: string | null
+    }>
     const projects = db
       .prepare(
         `SELECT p.id, p.name, p.emoji, p.color, p.position, p.owner_id, p.is_inbox,
@@ -406,8 +557,14 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
          WHERE p.id IN (SELECT project_id FROM project_members WHERE user_id = ?)
          GROUP BY p.id ORDER BY p.position`
       )
-      .all(user.id)
-      .map((p) => ({
+      .all(user.id) as Array<
+      Pick<ProjectRow, 'id' | 'name' | 'emoji' | 'color' | 'position' | 'owner_id' | 'is_inbox'> & {
+        nuevo: number
+        encurso: number
+        hecho: number
+      }
+    >
+    const shapedProjects = projects.map((p) => ({
         id: p.id,
         name: p.name,
         emoji: p.emoji,
@@ -416,7 +573,7 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
         owner_id: p.owner_id,
         is_inbox: p.is_inbox === 1,
         counts: { nuevo: p.nuevo, encurso: p.encurso, hecho: p.hecho },
-        members: [],
+        members: [] as MemberRow[],
       }))
     // Hidratar miembros de los proyectos visibles en una sola consulta.
     if (projects.length > 0) {
@@ -429,13 +586,13 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
            WHERE pm.project_id IN (${placeholders})
            ORDER BY (pm.role = 'owner') DESC, u.username`
         )
-        .all(...ids)
-      const byProject = new Map()
+        .all(...ids) as Array<MemberRow & { project_id: string }>
+      const byProject = new Map<string, MemberRow[]>()
       for (const r of rows) {
         if (!byProject.has(r.project_id)) byProject.set(r.project_id, [])
-        byProject.get(r.project_id).push({ id: r.id, username: r.username, color: r.color, role: r.role })
+        byProject.get(r.project_id)?.push({ id: r.id, username: r.username, color: r.color, role: r.role })
       }
-      for (const p of projects) p.members = byProject.get(p.id) ?? []
+      for (const p of shapedProjects) p.members = byProject.get(p.id) ?? []
     }
     const labels = db.prepare('SELECT id, name, color FROM labels ORDER BY name').all()
     const tasks = hydrateTasks(
@@ -443,16 +600,16 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
       't.project_id IN (SELECT project_id FROM project_members WHERE user_id = ?)',
       [user.id]
     )
-    return c.json({ users, projects, labels, tasks })
+    return c.json({ users, projects: shapedProjects, labels, tasks })
   })
 
   // --- Proyectos ---
-  app.post('/api/projects', zValidator('json', projectSchema, validationHook), (c) => {
+  app.post('/api/projects', zValidator('json', projectSchema, validationHook), (c: Context<AppEnv>) => {
     const db = c.get('db')
-    const user = c.get('user')
-    const data = c.req.valid('json')
+    const user = currentUser(c)
+    const data = c.req.valid('json' as never) as z.infer<typeof projectSchema>
     const id = crypto.randomUUID()
-    const pos = db.prepare('SELECT COALESCE(MAX(position) + 1, 0) AS p FROM projects').get().p
+    const pos = (db.prepare('SELECT COALESCE(MAX(position) + 1, 0) AS p FROM projects').get() as { p: number }).p
     const now = Date.now()
     // Miembros adicionales (el owner se añade siempre). Se filtran a usuarios
     // reales y se descarta el propio owner (se inserta aparte con role owner).
@@ -472,7 +629,7 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
     ins()
     hub.broadcast('projects')
     c.header('Location', `/api/projects/${id}`)
-    const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(id)
+    const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(id) as ProjectRow | undefined
     return c.json({ project: { ...project, members: memberList(db, id) } }, 201)
   })
 
@@ -480,14 +637,14 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
     '/api/projects/:id',
     zValidator('param', idParamSchema, validationHook),
     zValidator('json', projectPatchSchema, validationHook),
-    (c) => {
+    (c: Context<AppEnv>) => {
       const db = c.get('db')
-      const user = c.get('user')
-      const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(c.req.valid('param').id)
+      const user = currentUser(c)
+      const project = db.prepare('SELECT * FROM projects WHERE id = ?').get((c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id) as ProjectRow | undefined
       if (!project) httpError(404, ERROR_CODES.PROJECT_NOT_FOUND)
       if (project.is_inbox) httpError(403, ERROR_CODES.PROJECT_INBOX)
       requireProjectOwner(db, user, project)
-      const data = c.req.valid('json')
+      const data = c.req.valid('json' as never) as z.infer<typeof projectPatchSchema>
       db.prepare('UPDATE projects SET name = ?, emoji = ?, color = ? WHERE id = ?').run(
         data.name ?? project.name,
         data.emoji ?? project.emoji,
@@ -495,18 +652,18 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
         project.id
       )
       hub.broadcast('projects')
-      return c.json({ project: db.prepare('SELECT * FROM projects WHERE id = ?').get(project.id) })
+      return c.json({ project: db.prepare('SELECT * FROM projects WHERE id = ?').get(project.id) as ProjectRow | undefined })
     }
   )
 
-  app.delete('/api/projects/:id', zValidator('param', idParamSchema, validationHook), (c) => {
+  app.delete('/api/projects/:id', zValidator('param', idParamSchema, validationHook), (c: Context<AppEnv>) => {
     const db = c.get('db')
-    const user = c.get('user')
-    const project = db.prepare('SELECT id, owner_id, is_inbox FROM projects WHERE id = ?').get(c.req.valid('param').id)
+    const user = currentUser(c)
+    const project = db.prepare('SELECT id, owner_id, is_inbox FROM projects WHERE id = ?').get((c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id) as Pick<ProjectRow, 'id' | 'owner_id' | 'is_inbox'> | undefined
     if (!project) httpError(404, ERROR_CODES.PROJECT_NOT_FOUND)
     if (project.is_inbox) httpError(403, ERROR_CODES.PROJECT_INBOX)
     requireProjectOwner(db, user, project)
-    const taskIds = db.prepare('SELECT id FROM tasks WHERE project_id = ?').all(project.id)
+    const taskIds = db.prepare('SELECT id FROM tasks WHERE project_id = ?').all(project.id) as Array<{ id: string }>
     for (const t of taskIds) removeAttachmentFiles(db, uploadsDir, t.id)
     db.prepare('DELETE FROM projects WHERE id = ?').run(project.id) // cascada a tareas y miembros
     hub.broadcast('projects')
@@ -522,14 +679,14 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
     '/api/projects/:id/members',
     zValidator('param', idParamSchema, validationHook),
     zValidator('json', membersSchema, validationHook),
-    (c) => {
+    (c: Context<AppEnv>) => {
       const db = c.get('db')
-      const user = c.get('user')
-      const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(c.req.valid('param').id)
+      const user = currentUser(c)
+      const project = db.prepare('SELECT * FROM projects WHERE id = ?').get((c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id) as ProjectRow | undefined
       if (!project) httpError(404, ERROR_CODES.PROJECT_NOT_FOUND)
       if (project.is_inbox) httpError(403, ERROR_CODES.PROJECT_INBOX)
       requireProjectOwner(db, user, project)
-      const data = c.req.valid('json')
+      const data = c.req.valid('json' as never) as z.infer<typeof membersSchema>
       const validIds = validUserIds(db, data.member_ids)
       const now = Date.now()
       const tx = db.transaction(() => {
@@ -548,9 +705,9 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
   )
 
   // --- Etiquetas (globales) ---
-  app.post('/api/labels', zValidator('json', labelSchema, validationHook), (c) => {
+  app.post('/api/labels', zValidator('json', labelSchema, validationHook), (c: Context<AppEnv>) => {
     const db = c.get('db')
-    const data = c.req.valid('json')
+    const data = c.req.valid('json' as never) as z.infer<typeof labelSchema>
     if (db.prepare('SELECT id FROM labels WHERE name = ?').get(data.name)) {
       httpError(409, ERROR_CODES.LABEL_NAME_TAKEN)
     }
@@ -573,11 +730,11 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
     '/api/labels/:id',
     zValidator('param', idParamSchema, validationHook),
     zValidator('json', labelPatchSchema, validationHook),
-    (c) => {
+    (c: Context<AppEnv>) => {
       const db = c.get('db')
-      const label = db.prepare('SELECT * FROM labels WHERE id = ?').get(c.req.valid('param').id)
+      const label = db.prepare('SELECT * FROM labels WHERE id = ?').get((c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id) as { id: string; name: string; color: string } | undefined
       if (!label) httpError(404, ERROR_CODES.LABEL_NOT_FOUND)
-      const data = c.req.valid('json')
+      const data = c.req.valid('json' as never) as z.infer<typeof labelPatchSchema>
       try {
         db.prepare('UPDATE labels SET name = ?, color = ? WHERE id = ?').run(
           data.name ?? label.name,
@@ -591,13 +748,13 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
         throw err
       }
       hub.broadcast('labels')
-      return c.json({ label: db.prepare('SELECT * FROM labels WHERE id = ?').get(label.id) })
+      return c.json({ label: db.prepare('SELECT * FROM labels WHERE id = ?').get(label.id) as { id: string; name: string; color: string } | undefined })
     }
   )
 
-  app.delete('/api/labels/:id', zValidator('param', idParamSchema, validationHook), (c) => {
+  app.delete('/api/labels/:id', zValidator('param', idParamSchema, validationHook), (c: Context<AppEnv>) => {
     const db = c.get('db')
-    const { changes } = db.prepare('DELETE FROM labels WHERE id = ?').run(c.req.valid('param').id)
+    const { changes } = db.prepare('DELETE FROM labels WHERE id = ?').run((c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id)
     if (!changes) httpError(404, ERROR_CODES.LABEL_NOT_FOUND)
     hub.broadcast('labels')
     hub.broadcast('tasks')
@@ -606,17 +763,17 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
 
   // --- Tareas ---
   // Parseo de lenguaje natural: dado un texto, sugiere due_date/recurrence.
-  app.post('/api/tasks/parse', zValidator('json', parseSchema, validationHook), (c) => {
-    const { text, lang } = c.req.valid('json')
+  app.post('/api/tasks/parse', zValidator('json', parseSchema, validationHook), (c: Context<AppEnv>) => {
+    const { text, lang } = c.req.valid('json' as never) as z.infer<typeof parseSchema>
     const result = parseTaskText(text, lang)
     if (!result) return c.json({ parsed: false })
     return c.json({ parsed: true, ...result })
   })
 
-  app.post('/api/tasks', zValidator('json', taskCreateSchema, validationHook), (c) => {
+  app.post('/api/tasks', zValidator('json', taskCreateSchema, validationHook), (c: Context<AppEnv>) => {
     const db = c.get('db')
-    const user = c.get('user')
-    const data = c.req.valid('json')
+    const user = currentUser(c)
+    const data = c.req.valid('json' as never) as z.infer<typeof taskCreateSchema>
     if (!db.prepare('SELECT id FROM projects WHERE id = ?').get(data.project_id)) {
       httpError(404, ERROR_CODES.PROJECT_NOT_FOUND)
     }
@@ -633,11 +790,11 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
     }
     const id = crypto.randomUUID()
     const now = Date.now()
-    const pos = db
+    const pos = (db
       .prepare(
         'SELECT COALESCE(MAX(position) + 1, 0) AS p FROM tasks WHERE "column" = ? AND archived_at IS NULL AND deleted_at IS NULL'
       )
-      .get(data.column).p
+      .get(data.column) as { p: number }).p
     const rec = data.recurrence != null ? normalizeRecurrence(data.recurrence) : null
     const create = db.transaction(() => {
       const shortId = allocateShortId(db, data.project_id)
@@ -674,14 +831,14 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
     '/api/tasks/:id',
     zValidator('param', idParamSchema, validationHook),
     zValidator('json', taskPatchSchema, validationHook),
-    (c) => {
+    (c: Context<AppEnv>) => {
       const db = c.get('db')
-      const user = c.get('user')
-      const task = getTask(db, c.req.valid('param').id)
+      const user = currentUser(c)
+      const task = getTask(db, (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id)
       if (!task) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
       // Solo miembros del proyecto de la tarea pueden editarla.
       requireMember(db, user.id, task.project_id)
-      const data = c.req.valid('json')
+      const data = c.req.valid('json' as never) as z.infer<typeof taskPatchSchema>
       if (data.assignee_id) {
         if (!db.prepare('SELECT id FROM users WHERE id = ?').get(data.assignee_id)) {
           httpError(404, ERROR_CODES.ASSIGNEE_NOT_FOUND)
@@ -755,10 +912,10 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
   /* "La hago hoy": fija el vencimiento a hoy y reinicia la línea base del
    *  contador de aplazamientos (el evento 'due' lleva reset: true y el
    *  contador de slips lo ignora y lo usa como nuevo punto de partida). */
-  app.post('/api/tasks/:id/do-today', zValidator('param', idParamSchema, validationHook), (c) => {
+  app.post('/api/tasks/:id/do-today', zValidator('param', idParamSchema, validationHook), (c: Context<AppEnv>) => {
     const db = c.get('db')
-    const user = c.get('user')
-    const task = getTask(db, c.req.valid('param').id)
+    const user = currentUser(c)
+    const task = getTask(db, (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id)
     if (!task) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
     requireMember(db, user.id, task.project_id)
     const today = todayLocal()
@@ -777,22 +934,22 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
     '/api/tasks/:id/move',
     zValidator('param', idParamSchema, validationHook),
     zValidator('json', moveSchema, validationHook),
-    (c) => {
+    (c: Context<AppEnv>) => {
       const db = c.get('db')
-      const user = c.get('user')
-      const task = getTask(db, c.req.valid('param').id)
+      const user = currentUser(c)
+      const task = getTask(db, (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id)
       if (!task) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
       requireMember(db, user.id, task.project_id)
-      const data = c.req.valid('json')
+      const data = c.req.valid('json' as never) as z.infer<typeof moveSchema>
 
       const fromCol = task.column
       const fromPos = task.position
       const toCol = data.column
-      const targetCount = db
+      const targetCount = (db
         .prepare(
           'SELECT COUNT(*) AS n FROM tasks WHERE "column" = ? AND id != ? AND archived_at IS NULL AND deleted_at IS NULL'
         )
-        .get(toCol, task.id).n
+        .get(toCol, task.id) as { n: number }).n
       const toPos = Math.min(data.position, targetCount)
 
       // Gamificación: puntos al entrar en 'hecho' desde otra columna; revertir
@@ -854,10 +1011,10 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
     }
   )
 
-  app.delete('/api/tasks/:id', zValidator('param', idParamSchema, validationHook), (c) => {
+  app.delete('/api/tasks/:id', zValidator('param', idParamSchema, validationHook), (c: Context<AppEnv>) => {
     const db = c.get('db')
-    const user = c.get('user')
-    const task = getTask(db, c.req.valid('param').id)
+    const user = currentUser(c)
+    const task = getTask(db, (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id)
     if (!task) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
     requireMember(db, user.id, task.project_id)
     const del = db.transaction(() => {
@@ -877,10 +1034,10 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
   // Archivar tarea (manual): solo tareas en 'hecho'. La tarea desaparece del
   // tablero y se recupera con "mostrar archivadas" (o moviéndola). No es
   // borrar: conserva comentarios, adjuntos e historial.
-  app.post('/api/tasks/:id/archive', zValidator('param', idParamSchema, validationHook), (c) => {
+  app.post('/api/tasks/:id/archive', zValidator('param', idParamSchema, validationHook), (c: Context<AppEnv>) => {
     const db = c.get('db')
-    const user = c.get('user')
-    const task = getTask(db, c.req.valid('param').id)
+    const user = currentUser(c)
+    const task = getTask(db, (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id)
     if (!task) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
     requireMember(db, user.id, task.project_id)
     if (task.column !== 'hecho') httpError(422, ERROR_CODES.TASK_NOT_DONE)
@@ -900,10 +1057,10 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
   // Completar y archivar en un paso: útil para limpiar recordatorios desde el
   // Resumen. Si la tarea no está en 'hecho' se mueve primero (con recurrencia),
   // luego se archiva. Idempotente si ya estaba archivada.
-  app.post('/api/tasks/:id/done-and-archive', zValidator('param', idParamSchema, validationHook), (c) => {
+  app.post('/api/tasks/:id/done-and-archive', zValidator('param', idParamSchema, validationHook), (c: Context<AppEnv>) => {
     const db = c.get('db')
-    const user = c.get('user')
-    const task = getTask(db, c.req.valid('param').id)
+    const user = currentUser(c)
+    const task = getTask(db, (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id)
     if (!task) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
     requireMember(db, user.id, task.project_id)
     if (task.archived_at) return c.json({ task: hydrateTasks(db, 't.id = ?', [task.id])[0] })
@@ -917,11 +1074,11 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
         db.prepare(
           'UPDATE tasks SET position = position - 1 WHERE "column" = ? AND position > ? AND archived_at IS NULL AND deleted_at IS NULL'
         ).run(task.column, task.position)
-        archivePos = db
+        archivePos = (db
           .prepare(
             'SELECT COALESCE(MAX(position) + 1, 0) AS p FROM tasks WHERE "column" = ? AND archived_at IS NULL AND deleted_at IS NULL'
           )
-          .get('hecho').p
+          .get('hecho') as { p: number }).p
         db.prepare(
           'UPDATE tasks SET "column" = ?, position = ?, updated_at = ?, done_at = ?, archived_at = NULL WHERE id = ?'
         ).run('hecho', archivePos, now, now, task.id)
@@ -950,9 +1107,9 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
 
   // Listado de series recurrentes para la vista Periódicas. Incluye la
   // instancia activa, la próxima fecha y el estado (open/paused/waiting).
-  app.get('/api/tasks/recurring', (c) => {
+  app.get('/api/tasks/recurring', (c: Context<AppEnv>) => {
     const db = c.get('db')
-    const user = c.get('user')
+    const user = currentUser(c)
     const today = todayLocal()
     const rows = db
       .prepare(
@@ -962,9 +1119,18 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
          JOIN projects p ON p.id = t.project_id
          WHERE pm.user_id = ? AND t.recurrence IS NOT NULL AND t.deleted_at IS NULL`
       )
-      .all(user.id)
+      .all(user.id) as Array<TaskRow & { project_name: string; project_color: string | null }>
 
-    const byGroup = new Map()
+    interface RecurrenceSeries {
+      group_id: string
+      title: string
+      project_id: string
+      project_name: string
+      project_color: string | null
+      rec: ReturnType<typeof normalizeRecurrence>
+      tasks: Array<TaskRow & { project_name: string; project_color: string | null }>
+    }
+    const byGroup = new Map<string, RecurrenceSeries>()
     for (const t of rows) {
       const rec = normalizeRecurrence(typeof t.recurrence === 'string' ? JSON.parse(t.recurrence) : t.recurrence)
       if (!rec) continue
@@ -1003,9 +1169,9 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
       else if (active) status = 'open'
 
       const intervalDays =
-        s.rec.mode === 'completion'
+        s.rec?.mode === 'completion'
           ? adaptiveInterval(completionDates(db, s.group_id), s.rec.interval)
-          : s.rec.interval * (s.rec.freq === 'daily' ? 1 : s.rec.freq === 'weekly' ? 7 : 30)
+          : (s.rec?.interval ?? 1) * (s.rec?.freq === 'daily' ? 1 : s.rec?.freq === 'weekly' ? 7 : 30)
 
       result.push({
         group_id: s.group_id,
@@ -1025,10 +1191,10 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
 
   // Pausar/reanudar una serie recurrente. Afecta a la instancia activa (o se
   // almacena en el grupo para futuras instancias si no hay activa ahora).
-  app.post('/api/tasks/recurring/:id/pause', zValidator('param', idParamSchema, validationHook), (c) => {
+  app.post('/api/tasks/recurring/:id/pause', zValidator('param', idParamSchema, validationHook), (c: Context<AppEnv>) => {
     const db = c.get('db')
-    const user = c.get('user')
-    const groupId = c.req.valid('param').id
+    const user = currentUser(c)
+    const groupId = (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id
     const rows = db
       .prepare(
         `SELECT t.* FROM tasks t
@@ -1042,10 +1208,10 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
     return c.body(null, 204)
   })
 
-  app.post('/api/tasks/recurring/:id/resume', zValidator('param', idParamSchema, validationHook), (c) => {
+  app.post('/api/tasks/recurring/:id/resume', zValidator('param', idParamSchema, validationHook), (c: Context<AppEnv>) => {
     const db = c.get('db')
-    const user = c.get('user')
-    const groupId = c.req.valid('param').id
+    const user = currentUser(c)
+    const groupId = (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id
     const rows = db
       .prepare(
         `SELECT t.* FROM tasks t
@@ -1061,20 +1227,20 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
 
   // Desarchivar: la tarea vuelve al final de 'hecho' con ventana fresca de
   // 3 días antes de que el auto-archivo la vuelva a archivar.
-  app.post('/api/tasks/:id/unarchive', zValidator('param', idParamSchema, validationHook), (c) => {
+  app.post('/api/tasks/:id/unarchive', zValidator('param', idParamSchema, validationHook), (c: Context<AppEnv>) => {
     const db = c.get('db')
-    const user = c.get('user')
-    const task = getTask(db, c.req.valid('param').id)
+    const user = currentUser(c)
+    const task = getTask(db, (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id)
     if (!task) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
     requireMember(db, user.id, task.project_id)
     if (!task.archived_at) return c.json({ task: hydrateTasks(db, 't.id = ?', [task.id])[0] })
     const now = Date.now()
     const unarchive = db.transaction(() => {
-      const pos = db
+      const pos = (db
         .prepare(
           'SELECT COALESCE(MAX(position) + 1, 0) AS p FROM tasks WHERE "column" = ? AND archived_at IS NULL AND deleted_at IS NULL'
         )
-        .get('hecho').p
+        .get('hecho') as { p: number }).p
       db.prepare(
         'UPDATE tasks SET archived_at = NULL, done_at = ?, "column" = ?, position = ? WHERE id = ?'
       ).run(now, 'hecho', pos, task.id)
@@ -1085,10 +1251,10 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
   })
 
   // Detalle completo: task + labels + attachments + comments + activity (paginado LIMIT 50)
-  app.get('/api/tasks/:id', zValidator('param', idParamSchema, validationHook), (c) => {
+  app.get('/api/tasks/:id', zValidator('param', idParamSchema, validationHook), (c: Context<AppEnv>) => {
     const db = c.get('db')
-    const user = c.get('user')
-    const hydrated = hydrateTasks(db, 't.id = ?', [c.req.valid('param').id])[0]
+    const user = currentUser(c)
+    const hydrated = hydrateTasks(db, 't.id = ?', [(c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id])[0]
     if (!hydrated) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
     // Sin membresía → 404 (no filtrar existencia para no revelarla).
     if (!isMember(db, user.id, hydrated.project_id)) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
@@ -1112,12 +1278,12 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
          FROM activity_events e LEFT JOIN users u ON u.id = e.user_id
          WHERE e.task_id = ? ORDER BY e.created_at DESC LIMIT 50`
       )
-      .all(hydrated.id)
-      .map((e) => ({ ...e, data: JSON.parse(e.data || '{}') }))
+      .all(hydrated.id) as Array<{ id: string; type: string; data: string | null; created_at: number; user_id: string | null; username: string | null }>
+    const shapedActivity = activity.map((e) => ({ ...e, data: JSON.parse(e.data || '{}') }))
     const subtasks = db
       .prepare('SELECT id, parent_id, title, done, position FROM task_subtasks WHERE task_id = ? ORDER BY position')
-      .all(hydrated.id)
-    return c.json({ task: hydrated, attachments, comments, activity, subtasks })
+      .all(hydrated.id) as Array<{ id: string; parent_id: string | null; title: string; done: number; position: number }>
+    return c.json({ task: hydrated, attachments, comments, activity: shapedActivity, subtasks })
   })
 
   // --- Subtareas ---
@@ -1125,22 +1291,22 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
     '/api/tasks/:id/subtasks',
     zValidator('param', idParamSchema, validationHook),
     zValidator('json', subtaskSchema, validationHook),
-    (c) => {
+    (c: Context<AppEnv>) => {
       const db = c.get('db')
-      const user = c.get('user')
-      const task = getTask(db, c.req.valid('param').id)
+      const user = currentUser(c)
+      const task = getTask(db, (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id)
       if (!task) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
       requireMember(db, user.id, task.project_id)
-      const data = c.req.valid('json')
+      const data = c.req.valid('json' as never) as z.infer<typeof subtaskSchema>
       if (data.parent_id) {
         const parent = db.prepare('SELECT id FROM task_subtasks WHERE id = ? AND task_id = ?').get(data.parent_id, task.id)
         if (!parent) httpError(404, ERROR_CODES.SUBTASK_NOT_FOUND)
       }
       const id = crypto.randomUUID()
       const now = Date.now()
-      const pos = db
+      const pos = (db
         .prepare('SELECT COALESCE(MAX(position) + 1, 0) AS p FROM task_subtasks WHERE task_id = ? AND parent_id IS ?')
-        .get(task.id, data.parent_id ?? null).p
+        .get(task.id, data.parent_id ?? null) as { p: number }).p
       db.prepare(
         'INSERT INTO task_subtasks (id, task_id, parent_id, title, done, position, created_at) VALUES (?, ?, ?, ?, 0, ?, ?)'
       ).run(id, task.id, data.parent_id ?? null, data.title, pos, now)
@@ -1154,15 +1320,15 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
     '/api/subtasks/:id',
     zValidator('param', idParamSchema, validationHook),
     zValidator('json', subtaskPatchSchema, validationHook),
-    (c) => {
+    (c: Context<AppEnv>) => {
       const db = c.get('db')
-      const user = c.get('user')
+      const user = currentUser(c)
       const sub = db.prepare(
         'SELECT s.*, t.project_id FROM task_subtasks s JOIN tasks t ON t.id = s.task_id WHERE s.id = ?'
-      ).get(c.req.valid('param').id)
+      ).get((c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id) as SubtaskRow | undefined
       if (!sub) httpError(404, ERROR_CODES.SUBTASK_NOT_FOUND)
       requireMember(db, user.id, sub.project_id)
-      const data = c.req.valid('json')
+      const data = c.req.valid('json' as never) as z.infer<typeof subtaskPatchSchema>
       const now = Date.now()
       if (data.title !== undefined) {
         db.prepare('UPDATE task_subtasks SET title = ? WHERE id = ?').run(data.title, sub.id)
@@ -1176,12 +1342,12 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
     }
   )
 
-  app.delete('/api/subtasks/:id', zValidator('param', idParamSchema, validationHook), (c) => {
+  app.delete('/api/subtasks/:id', zValidator('param', idParamSchema, validationHook), (c: Context<AppEnv>) => {
     const db = c.get('db')
-    const user = c.get('user')
+    const user = currentUser(c)
     const sub = db.prepare(
       'SELECT s.*, t.project_id FROM task_subtasks s JOIN tasks t ON t.id = s.task_id WHERE s.id = ?'
-    ).get(c.req.valid('param').id)
+    ).get((c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id) as SubtaskRow | undefined
     if (!sub) httpError(404, ERROR_CODES.SUBTASK_NOT_FOUND)
     requireMember(db, user.id, sub.project_id)
     const { changes } = db.prepare('DELETE FROM task_subtasks WHERE id = ?').run(sub.id)
@@ -1197,13 +1363,13 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
     '/api/tasks/:id/comments',
     zValidator('param', idParamSchema, validationHook),
     zValidator('json', commentSchema, validationHook),
-    (c) => {
+    (c: Context<AppEnv>) => {
       const db = c.get('db')
-      const user = c.get('user')
-      const task = getTask(db, c.req.valid('param').id)
+      const user = currentUser(c)
+      const task = getTask(db, (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id)
       if (!task) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
       requireMember(db, user.id, task.project_id)
-      const data = c.req.valid('json')
+      const data = c.req.valid('json' as never) as z.infer<typeof commentSchema>
       const id = crypto.randomUUID()
       const now = Date.now()
       db.prepare('INSERT INTO comments (id, task_id, user_id, body, created_at) VALUES (?, ?, ?, ?, ?)')
@@ -1242,16 +1408,16 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
   app.post(
     '/api/tasks/:id/attachments',
     zValidator('param', idParamSchema, validationHook),
-    async (c) => {
+    async (c: Context<AppEnv>) => {
       const db = c.get('db')
-      const user = c.get('user')
-      const task = getTask(db, c.req.valid('param').id)
+      const user = currentUser(c)
+      const task = getTask(db, (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id)
       if (!task) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
       requireMember(db, user.id, task.project_id)
       // Multipart: no va por zValidator('json'); se validan presencia y tamaño.
       const body = await c.req.parseBody().catch(() => null)
       const file = body?.file
-      if (!file || typeof file.arrayBuffer !== 'function') {
+      if (!file || typeof file === 'string' || typeof file.arrayBuffer !== 'function') {
         httpError(400, ERROR_CODES.UPLOAD_FILE_REQUIRED)
       }
       if (file.size > c.get('maxUploadBytes')) {
@@ -1261,8 +1427,8 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
       if (!ALLOWED_MIME_TYPES.has(mime)) {
         httpError(415, ERROR_CODES.UPLOAD_INVALID_MIME)
       }
-      const maxAttachments = parseInt(kvGet(prod, 'max_attachments_per_task', '50'), 10)
-      const currentCount = db.prepare('SELECT COUNT(*) AS n FROM attachments WHERE task_id = ?').get(task.id).n
+      const maxAttachments = parseInt(kvGet(prod, 'max_attachments_per_task', '50') ?? '50', 10)
+      const currentCount = (db.prepare('SELECT COUNT(*) AS n FROM attachments WHERE task_id = ?').get(task.id) as { n: number }).n
       if (currentCount >= maxAttachments) {
         httpError(409, ERROR_CODES.ATTACHMENTS_LIMIT_EXCEEDED)
       }
@@ -1294,14 +1460,18 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
     }
   )
 
-  app.get('/api/attachments/:id', zValidator('param', idParamSchema, validationHook), (c) => {
+  app.get('/api/attachments/:id', zValidator('param', idParamSchema, validationHook), (c: Context<AppEnv>) => {
     const db = c.get('db')
-    const user = c.get('user')
-    const att = db.prepare('SELECT * FROM attachments WHERE id = ?').get(c.req.valid('param').id)
+    const user = currentUser(c)
+    const att = db.prepare('SELECT * FROM attachments WHERE id = ?').get((c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id) as
+      | (AttachmentRow & { stored_name: string; filename: string; mime: string })
+      | undefined
     if (!att) httpError(404, ERROR_CODES.ATTACHMENT_NOT_FOUND)
     // Membresía: el adjunto pertenece a una tarea de un proyecto; solo los
     // miembros pueden descargarlo (issue #169). 404 para no revelar existencia.
-    const task = db.prepare('SELECT project_id FROM tasks WHERE id = ?').get(att.task_id)
+    const task = db.prepare('SELECT project_id FROM tasks WHERE id = ?').get(att.task_id) as
+      | { project_id: string }
+      | undefined
     if (!task || !isMember(db, user.id, task.project_id)) {
       httpError(404, ERROR_CODES.ATTACHMENT_NOT_FOUND)
     }
@@ -1316,25 +1486,29 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
   })
 
   // --- Export de datos (datos del usuario: solo proyectos visibles) ---
-  app.get('/api/export', (c) => {
+  app.get('/api/export', (c: Context<AppEnv>) => {
     const db = c.get('db')
-    const user = c.get('user')
-    const memberProjects = db
+    const user = currentUser(c)
+    const memberRows = db
       .prepare('SELECT project_id FROM project_members WHERE user_id = ?')
-      .all(user.id)
-      .map((r) => r.project_id)
+      .all(user.id) as Array<{ project_id: string }>
+    const memberProjects = memberRows.map((r) => r.project_id)
     // Helper: consulta sobre proyectos visibles (vacío si no hay ninguno).
-    const qByProject = (sql) =>
+    const qByProject = (sql: string): Array<Record<string, unknown>> =>
       memberProjects.length
-        ? db.prepare(sql.replace('__IDS__', memberProjects.map(() => '?').join(','))).all(...memberProjects)
+        ? (db.prepare(sql.replace('__IDS__', memberProjects.map(() => '?').join(','))).all(...memberProjects) as Array<
+            Record<string, unknown>
+          >)
         : []
     const projects = qByProject('SELECT * FROM projects WHERE id IN (__IDS__) ORDER BY position')
     const labels = db.prepare('SELECT * FROM labels ORDER BY name').all()
     const tasks = qByProject('SELECT * FROM tasks WHERE deleted_at IS NULL AND project_id IN (__IDS__) ORDER BY "column", position')
-    const taskIds = tasks.map((t) => t.id)
-    const qByTask = (sql) =>
+    const taskIds = tasks.map((t) => String(t.id))
+    const qByTask = (sql: string): Array<Record<string, unknown>> =>
       taskIds.length
-        ? db.prepare(sql.replace('__IDS__', taskIds.map(() => '?').join(','))).all(...taskIds)
+        ? (db.prepare(sql.replace('__IDS__', taskIds.map(() => '?').join(','))).all(...taskIds) as Array<
+            Record<string, unknown>
+          >)
         : []
     const comments = qByTask('SELECT * FROM comments WHERE task_id IN (__IDS__) ORDER BY created_at')
     const attachments = qByTask('SELECT id, task_id, filename, size, mime, created_at FROM attachments WHERE task_id IN (__IDS__) ORDER BY created_at')
@@ -1350,9 +1524,9 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
   })
 
   // --- Papelera: tareas borradas (soft-delete), solo de proyectos visibles ---
-  app.get('/api/trash', (c) => {
+  app.get('/api/trash', (c: Context<AppEnv>) => {
     const db = c.get('db')
-    const user = c.get('user')
+    const user = currentUser(c)
     const tasks = db
       .prepare(
         `SELECT t.*, p.name AS project_name
@@ -1361,7 +1535,7 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
            AND t.project_id IN (SELECT project_id FROM project_members WHERE user_id = ?)
          ORDER BY t.deleted_at DESC`
       )
-      .all(user.id)
+      .all(user.id) as Array<Record<string, unknown>>
     const expenses = db
       .prepare(
         `SELECT e.*, u.username AS created_by_username
@@ -1369,22 +1543,23 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
          WHERE e.deleted_at IS NOT NULL
          ORDER BY e.deleted_at DESC`
       )
-      .all()
-      .map((e) => ({ ...e }))
-    return c.json({ tasks, expenses })
+      .all() as Array<Record<string, unknown>>
+    return c.json({ tasks, expenses: expenses.map((e) => ({ ...e })) })
   })
 
-  app.post('/api/trash/:id/restore', zValidator('param', idParamSchema, validationHook), (c) => {
+  app.post('/api/trash/:id/restore', zValidator('param', idParamSchema, validationHook), (c: Context<AppEnv>) => {
     const db = c.get('db')
-    const user = c.get('user')
-    const task = db.prepare('SELECT * FROM tasks WHERE id = ? AND deleted_at IS NOT NULL').get(c.req.valid('param').id)
+    const user = currentUser(c)
+    const task = db.prepare('SELECT * FROM tasks WHERE id = ? AND deleted_at IS NOT NULL').get((c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id) as
+      | TaskRow
+      | undefined
     if (!task) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
     requireMember(db, user.id, task.project_id)
     // Restaurar reactiva siempre: si estaba archivada al borrarse, vuelve
     // activa al tablero (done_at fresco si vuelve a 'hecho').
-    const pos = db.prepare(
+    const pos = (db.prepare(
       'SELECT COALESCE(MAX(position) + 1, 0) AS p FROM tasks WHERE "column" = ? AND archived_at IS NULL AND deleted_at IS NULL'
-    ).get(task.column).p
+    ).get(task.column) as { p: number }).p
     const now = Date.now()
     db.prepare(
       'UPDATE tasks SET deleted_at = NULL, position = ?, updated_at = ?, archived_at = NULL, done_at = CASE WHEN "column" = \'hecho\' THEN ? ELSE NULL END WHERE id = ?'
@@ -1393,10 +1568,12 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
     return c.json({ task: hydrateTasks(db, 't.id = ?', [task.id])[0] })
   })
 
-  app.delete('/api/trash/:id', zValidator('param', idParamSchema, validationHook), (c) => {
+  app.delete('/api/trash/:id', zValidator('param', idParamSchema, validationHook), (c: Context<AppEnv>) => {
     const db = c.get('db')
-    const user = c.get('user')
-    const task = db.prepare('SELECT * FROM tasks WHERE id = ? AND deleted_at IS NOT NULL').get(c.req.valid('param').id)
+    const user = currentUser(c)
+    const task = db.prepare('SELECT * FROM tasks WHERE id = ? AND deleted_at IS NOT NULL').get((c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id) as
+      | TaskRow
+      | undefined
     if (!task) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
     requireMember(db, user.id, task.project_id)
     removeAttachmentFiles(db, uploadsDir, task.id)
@@ -1405,17 +1582,16 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
     return c.body(null, 204)
   })
 
-  app.delete('/api/trash', (c) => {
+  app.delete('/api/trash', (c: Context<AppEnv>) => {
     const db = c.get('db')
-    const user = c.get('user')
-    const taskIds = db
+    const user = currentUser(c)
+    const ids = db
       .prepare(
         `SELECT id FROM tasks WHERE deleted_at IS NOT NULL
          AND project_id IN (SELECT project_id FROM project_members WHERE user_id = ?)`
       )
-      .all(user.id)
-      .map((r) => r.id)
-    for (const tid of taskIds) removeAttachmentFiles(db, uploadsDir, tid)
+      .all(user.id) as Array<{ id: string }>
+    for (const { id: tid } of ids) removeAttachmentFiles(db, uploadsDir, tid)
     db.prepare(
       `DELETE FROM tasks WHERE deleted_at IS NOT NULL
        AND project_id IN (SELECT project_id FROM project_members WHERE user_id = ?)`
@@ -1425,21 +1601,23 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
   })
 
   // --- Papelera de gastos ---
-  app.post('/api/trash/expense/:id/restore', zValidator('param', idParamSchema, validationHook), (c) => {
+  app.post('/api/trash/expense/:id/restore', zValidator('param', idParamSchema, validationHook), (c: Context<AppEnv>) => {
     const db = c.get('db')
-    const id = c.req.valid('param').id
-    const exp = db.prepare('SELECT * FROM expenses WHERE id = ? AND deleted_at IS NOT NULL').get(id)
+    const id = (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id
+    const exp = db.prepare('SELECT * FROM expenses WHERE id = ? AND deleted_at IS NOT NULL').get(id) as
+      | { id: string; step: string; [key: string]: unknown }
+      | undefined
     if (!exp) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
-    const pos = db.prepare('SELECT COALESCE(MAX(position) + 1, 0) AS p FROM expenses WHERE step = ? AND deleted_at IS NULL')
-      .get(exp.step).p
+    const pos = (db.prepare('SELECT COALESCE(MAX(position) + 1, 0) AS p FROM expenses WHERE step = ? AND deleted_at IS NULL')
+      .get(exp.step) as { p: number }).p
     db.prepare('UPDATE expenses SET deleted_at = NULL, position = ?, updated_at = ? WHERE id = ?').run(pos, Date.now(), id)
     hub.broadcast('expenses')
     return c.json({ ok: true })
   })
 
-  app.delete('/api/trash/expense/:id', zValidator('param', idParamSchema, validationHook), (c) => {
+  app.delete('/api/trash/expense/:id', zValidator('param', idParamSchema, validationHook), (c: Context<AppEnv>) => {
     const db = c.get('db')
-    const id = c.req.valid('param').id
+    const id = (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id
     const exp = db.prepare('SELECT * FROM expenses WHERE id = ? AND deleted_at IS NOT NULL').get(id)
     if (!exp) httpError(404, ERROR_CODES.TASK_NOT_FOUND)
     db.prepare('DELETE FROM expenses WHERE id = ?').run(id)
@@ -1447,7 +1625,7 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
     return c.body(null, 204)
   })
 
-  app.delete('/api/trash/expenses', (c) => {
+  app.delete('/api/trash/expenses', (c: Context<AppEnv>) => {
     const db = c.get('db')
     db.prepare('DELETE FROM expenses WHERE deleted_at IS NOT NULL').run()
     hub.broadcast('expenses')
@@ -1457,10 +1635,10 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
   // --- Búsqueda global: tareas del usuario por texto (título, descripción,
   // persona asignada, proyecto o etiqueta). Solo proyectos de los que es
   // miembro. LIKE con ESCAPE para que % y _ del texto no sean comodines.
-  app.get('/api/search', zValidator('query', searchQuerySchema, validationHook), (c) => {
+  app.get('/api/search', zValidator('query', searchQuerySchema, validationHook), (c: Context<AppEnv>) => {
     const db = c.get('db')
-    const user = c.get('user')
-    const q = c.req.valid('query').q.trim()
+    const user = currentUser(c)
+    const q = (c.req.valid('query' as never) as z.infer<typeof searchQuerySchema>).q.trim()
     if (q.length < 2) return c.json({ tasks: [] })
     const escaped = q.replace(/[\\%_]/g, (ch) => `\\${ch}`)
     const like = `%${escaped}%`
@@ -1485,9 +1663,9 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
   // respuesta { items, nextCursor, hasMore }. Cursor malformado → 400
   // INVALID_CURSOR. (Antes: page/limit/total con OFFSET — cambio de contrato,
   // ver CONVENTIONS.md para la fase 2 del frontend.)
-  app.get('/api/activity', zValidator('query', activityQuerySchema, validationHook), (c) => {
+  app.get('/api/activity', zValidator('query', activityQuerySchema, validationHook), (c: Context<AppEnv>) => {
     const db = c.get('db')
-    const { cursor, limit } = c.req.valid('query')
+    const { cursor, limit } = c.req.valid('query' as never) as z.infer<typeof activityQuerySchema>
     const decoded = cursor ? decodeCursor(cursor) : null
     const keyset = decoded
       ? 'WHERE (e.created_at < @cts OR (e.created_at = @cts AND e.id < @cid))'
@@ -1510,16 +1688,16 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
       )
       .all({
         ...(decoded ? { cts: decoded.ts, cid: decoded.id } : {}),
-        uid: c.get('user').id,
+        uid: currentUser(c).id,
         limitPlusOne: limit + 1,
-      })
-      .map((e) => ({ ...e, data: JSON.parse(e.data || '{}') }))
-    const page = keysetPage(rows, limit)
+      }) as Array<{ created_at: number; id: string; data: string | null; [key: string]: unknown }>
+    const shapedRows = rows.map((e) => ({ ...e, data: JSON.parse(e.data || '{}') }))
+    const page = keysetPage(shapedRows, limit)
     return c.json({ items: page.items, nextCursor: page.nextCursor, hasMore: page.hasMore })
   })
 
   // --- Admin: usuarios ---
-  app.get('/api/users', (c) => {
+  app.get('/api/users', (c: Context<AppEnv>) => {
     requireAdmin(c)
     const db = c.get('db')
     const users = db
@@ -1528,11 +1706,11 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
     return c.json({ users })
   })
 
-  app.post('/api/users', zValidator('json', userCreateSchema, validationHook), async (c) => {
+  app.post('/api/users', zValidator('json', userCreateSchema, validationHook), async (c: Context<AppEnv>) => {
     requireAdmin(c)
     const db = c.get('db')
-    const me = c.get('user')
-    const data = c.req.valid('json')
+    const me = currentUser(c)
+    const data = c.req.valid('json' as never) as z.infer<typeof userCreateSchema>
     if (db.prepare('SELECT id FROM users WHERE username = ?').get(data.username)) {
       httpError(409, ERROR_CODES.USER_ALREADY_EXISTS)
     }
@@ -1564,14 +1742,14 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
     '/api/users/:id/role',
     zValidator('param', idParamSchema, validationHook),
     zValidator('json', userRoleSchema, validationHook),
-    (c) => {
+    (c: Context<AppEnv>) => {
       requireAdmin(c)
       const db = c.get('db')
-      const me = c.get('user')
-      const id = c.req.valid('param').id
+      const me = currentUser(c)
+      const id = (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id
       if (id === me.id) httpError(400, ERROR_CODES.USER_SELF_ROLE)
-      const data = c.req.valid('json')
-      const target = db.prepare(`SELECT ${USER_COLS} FROM users WHERE id = ?`).get(id)
+      const data = c.req.valid('json' as never) as z.infer<typeof userRoleSchema>
+      const target = db.prepare(`SELECT ${USER_COLS} FROM users WHERE id = ?`).get(id) as SessionUser | undefined as SessionUser | undefined
       if (!target) httpError(404, ERROR_CODES.USER_NOT_FOUND)
       if (target.role === 'admin' && data.role === 'user' && countAdmins(db) <= 1) {
         httpError(400, ERROR_CODES.USER_LAST_ADMIN)
@@ -1588,18 +1766,18 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
     '/api/users/:id/password',
     zValidator('param', idParamSchema, validationHook),
     zValidator('json', userPasswordSchema, validationHook),
-    async (c) => {
+    async (c: Context<AppEnv>) => {
       requireAdmin(c)
       const db = c.get('db')
-      const id = c.req.valid('param').id
-      const data = c.req.valid('json')
+      const id = (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id
+      const data = c.req.valid('json' as never) as z.infer<typeof userPasswordSchema>
       if (!db.prepare('SELECT id FROM users WHERE id = ?').get(id)) {
         httpError(404, ERROR_CODES.USER_NOT_FOUND)
       }
       const hash = await bcrypt.hash(data.password, 10)
       db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, id)
       db.prepare('DELETE FROM sessions WHERE user_id = ?').run(id)
-      auditLog(db, c.get('user').id, 'user_password_reset', 'user', id)
+      auditLog(db, currentUser(c).id, 'user_password_reset', 'user', id)
       hub.broadcast('users')
       return c.json({ ok: true })
     }
@@ -1610,16 +1788,16 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
     '/api/users/:id/language',
     zValidator('param', idParamSchema, validationHook),
     zValidator('json', userLanguageSchema, validationHook),
-    (c) => {
+    (c: Context<AppEnv>) => {
       requireAdmin(c)
       const db = c.get('db')
-      const id = c.req.valid('param').id
-      const data = c.req.valid('json')
+      const id = (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id
+      const data = c.req.valid('json' as never) as z.infer<typeof userLanguageSchema>
       if (!db.prepare('SELECT id FROM users WHERE id = ?').get(id)) {
         httpError(404, ERROR_CODES.USER_NOT_FOUND)
       }
       db.prepare('UPDATE users SET language = ? WHERE id = ?').run(data.language, id)
-      auditLog(db, c.get('user').id, 'user_language_changed', 'user', id, { to: data.language })
+      auditLog(db, currentUser(c).id, 'user_language_changed', 'user', id, { to: data.language })
       hub.broadcast('users')
       return c.json({ user: db.prepare(`SELECT ${USER_COLS} FROM users WHERE id = ?`).get(id) })
     }
@@ -1627,13 +1805,13 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
 
   // Borrado (admin). Salvaguardas: no auto-borrado, protección último admin;
   // destruye las sesiones del usuario eliminado.
-  app.delete('/api/users/:id', zValidator('param', idParamSchema, validationHook), (c) => {
+  app.delete('/api/users/:id', zValidator('param', idParamSchema, validationHook), (c: Context<AppEnv>) => {
     requireAdmin(c)
     const db = c.get('db')
-    const me = c.get('user')
-    const id = c.req.valid('param').id
+    const me = currentUser(c)
+    const id = (c.req.valid('param' as never) as z.infer<typeof idParamSchema>).id
     if (id === me.id) httpError(400, ERROR_CODES.USER_SELF_DELETE)
-    const target = db.prepare(`SELECT ${USER_COLS} FROM users WHERE id = ?`).get(id)
+    const target = db.prepare(`SELECT ${USER_COLS} FROM users WHERE id = ?`).get(id) as SessionUser | undefined
     if (!target) httpError(404, ERROR_CODES.USER_NOT_FOUND)
     if (target.role === 'admin' && countAdmins(db) <= 1) {
       httpError(400, ERROR_CODES.USER_LAST_ADMIN)
@@ -1647,31 +1825,31 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
 
   // --- Visibilidad del botón demo en el login (flag en kv de producción) ---
   // GET público (la pantalla de login lo consulta para mostrar/ocultar el botón).
-  app.get('/api/settings/demo', (c) => {
+  app.get('/api/settings/demo', (c: Context<AppEnv>) => {
     return c.json({ demo_enabled: kvGet(prod, 'demo_enabled', '1') === '1' })
   })
 
   // PUT solo admin de producción: muestra u oculta el botón demo del login.
-  app.put('/api/settings/demo', zValidator('json', demoToggleSchema, validationHook), (c) => {
+  app.put('/api/settings/demo', zValidator('json', demoToggleSchema, validationHook), (c: Context<AppEnv>) => {
     requireAdmin(c)
     if (c.get('demo')) httpError(403, ERROR_CODES.SETTINGS_PROD_ONLY)
-    const data = c.req.valid('json')
+    const data = c.req.valid('json' as never) as z.infer<typeof demoToggleSchema>
     kvSet(prod, 'demo_enabled', data.enabled ? '1' : '0')
-    auditLog(prod, c.get('user').id, 'demo_toggled', 'setting', 'demo_enabled', { enabled: data.enabled })
+    auditLog(prod, currentUser(c).id, 'demo_toggled', 'setting', 'demo_enabled', { enabled: data.enabled })
     hub.broadcast('settings')
     return c.json({ demo_enabled: data.enabled })
   })
 
   // --- Audit log (admin): histórico de acciones administrativas ---
-  app.get('/api/admin/audit', zValidator('query', activityQuerySchema, validationHook), (c) => {
+  app.get('/api/admin/audit', zValidator('query', activityQuerySchema, validationHook), (c: Context<AppEnv>) => {
     requireAdmin(c)
     const db = c.get('db')
-    const { cursor, limit } = c.req.valid('query')
+    const { cursor, limit } = c.req.valid('query' as never) as z.infer<typeof activityQuerySchema>
     const decoded = cursor ? decodeCursor(cursor) : null
     const keyset = decoded
       ? 'WHERE (a.created_at < @cts OR (a.created_at = @cts AND a.id < @cid))'
       : ''
-    const rows = db
+    const auditRows = db
       .prepare(
         `SELECT a.*, u.username AS actor_username
          FROM admin_audit a
@@ -1683,37 +1861,37 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
       .all({
         ...(decoded ? { cts: decoded.ts, cid: decoded.id } : {}),
         limitPlusOne: limit + 1,
-      })
-      .map((r) => ({ ...r, data: JSON.parse(r.data || '{}') }))
-    const page = keysetPage(rows, limit)
+      }) as Array<{ created_at: number; id: string; data: string | null; [key: string]: unknown }>
+    const shapedRows = auditRows.map((r) => ({ ...r, data: JSON.parse(r.data || '{}') }))
+    const page = keysetPage(shapedRows, limit)
     return c.json({ items: page.items, nextCursor: page.nextCursor, hasMore: page.hasMore })
   })
 
   // --- Ajustes del servidor (admin): backup y adjuntos ---
-  app.get('/api/settings/server', async (c) => {
+  app.get('/api/settings/server', async (c: Context<AppEnv>) => {
     requireAdmin(c)
     return c.json({
       backup_enabled: kvGet(prod, 'backup_enabled', '1') === '1',
-      backup_retention_days: parseInt(kvGet(prod, 'backup_retention_days', '3'), 10),
-      max_attachments_per_task: parseInt(kvGet(prod, 'max_attachments_per_task', '50'), 10),
+      backup_retention_days: parseInt(kvGet(prod, 'backup_retention_days', '3') ?? '3', 10),
+      max_attachments_per_task: parseInt(kvGet(prod, 'max_attachments_per_task', '50') ?? '50', 10),
       backup_last_run: kvGet(prod, 'backup_last_run'),
       backup_path: kvGet(prod, 'backup_path'),
       backup_timer_active: await isBackupTimerActive(),
       plugin_expenses_enabled: kvGet(prod, 'plugin_expenses_enabled', '0') === '1',
-      archive_after_days: parseInt(kvGet(prod, 'archive_after_days', '3'), 10),
+      archive_after_days: parseInt(kvGet(prod, 'archive_after_days', '3') ?? '3', 10),
     })
   })
 
-  app.put('/api/settings/server', zValidator('json', serverSettingsSchema, validationHook), (c) => {
+  app.put('/api/settings/server', zValidator('json', serverSettingsSchema, validationHook), (c: Context<AppEnv>) => {
     requireAdmin(c)
     if (c.get('demo')) httpError(403, ERROR_CODES.SETTINGS_PROD_ONLY)
-    const data = c.req.valid('json')
+    const data = c.req.valid('json' as never) as z.infer<typeof serverSettingsSchema>
     kvSet(prod, 'backup_enabled', data.backup_enabled ? '1' : '0')
     kvSet(prod, 'backup_retention_days', String(data.backup_retention_days))
     kvSet(prod, 'max_attachments_per_task', String(data.max_attachments_per_task))
     kvSet(prod, 'plugin_expenses_enabled', data.plugin_expenses_enabled ? '1' : '0')
     kvSet(prod, 'archive_after_days', String(data.archive_after_days))
-    auditLog(prod, c.get('user').id, 'server_settings_changed', 'setting', 'server', data)
+    auditLog(prod, currentUser(c).id, 'server_settings_changed', 'setting', 'server', data)
     hub.broadcast('settings')
     return c.json({
       backup_enabled: data.backup_enabled,
@@ -1725,7 +1903,7 @@ export function registerDomainRoutes(app, { hub, uploadsDir, prod, config, dataD
   })
 
   // Backup manual: ejecuta el script de backup y registra resultado
-  app.post('/api/settings/backup/run', async (c) => {
+  app.post('/api/settings/backup/run', async (c: Context<AppEnv>) => {
     requireAdmin(c)
     if (c.get('demo')) httpError(403, ERROR_CODES.SETTINGS_PROD_ONLY)
     const { execBackup } = await import('./backup.js')
