@@ -622,26 +622,26 @@ export default function Layout() {
             >
               <Search className="w-[18px] h-[18px]" aria-hidden="true" />
             </button>
-            <IconNavLink to="/" end label={t('nav.todo')}>
-              <LayoutGrid className="w-[18px] h-[18px]" aria-hidden="true" />
+            <IconNavLink to="/summary" label={t('nav.summary')}>
+              <ListTodo className="w-[18px] h-[18px]" aria-hidden="true" />
             </IconNavLink>
             <IconNavLink to="/today" label={t('nav.today')}>
               <CalendarCheck className="w-[18px] h-[18px]" aria-hidden="true" />
             </IconNavLink>
-            <IconNavLink to="/summary" label={t('nav.summary')}>
-              <ListTodo className="w-[18px] h-[18px]" aria-hidden="true" />
+            <IconNavLink to="/" end label={t('nav.todo')}>
+              <LayoutGrid className="w-[18px] h-[18px]" aria-hidden="true" />
             </IconNavLink>
             <IconNavLink to="/routines" label={t('nav.routines')}>
               <Repeat className="w-[18px] h-[18px]" aria-hidden="true" />
+            </IconNavLink>
+            <IconNavLink to="/decisions" label={t('nav.decisions')}>
+              <Scale className="w-[18px] h-[18px]" aria-hidden="true" />
             </IconNavLink>
             {showExpenses && (
               <IconNavLink to="/expenses" label={t('nav.expenses')}>
                 <Receipt className="w-[18px] h-[18px]" aria-hidden="true" />
               </IconNavLink>
             )}
-            <IconNavLink to="/decisions" label={t('nav.decisions')}>
-              <Scale className="w-[18px] h-[18px]" aria-hidden="true" />
-            </IconNavLink>
             <IconNavLink to="/trash" label={t('nav.trash')}>
               <Trash2 className="w-[18px] h-[18px]" aria-hidden="true" />
             </IconNavLink>
@@ -706,12 +706,11 @@ export default function Layout() {
             </button>
 
             <div className="space-y-0.5 mb-5">
-              <NavLink to="/" end className={sideItemCls}>
+              <NavLink to="/summary" className={sideItemCls}>
                 <span className="text-faint">
-                  <LayoutGrid className="w-4 h-4" aria-hidden="true" />
+                  <ListTodo className="w-4 h-4" aria-hidden="true" />
                 </span>
-                <span className="flex-1 text-left">{t('nav.todo')}</span>
-                <span className="tnum text-xs text-faint">{openAll}</span>
+                <span className="flex-1 text-left">{t('nav.summary')}</span>
               </NavLink>
               <NavLink to="/today" className={sideItemCls}>
                 <span className="text-faint">
@@ -720,17 +719,24 @@ export default function Layout() {
                 <span className="flex-1 text-left">{t('nav.today')}</span>
                 <span className="tnum text-xs text-faint">{todayCount}</span>
               </NavLink>
-              <NavLink to="/summary" className={sideItemCls}>
+              <NavLink to="/" end className={sideItemCls}>
                 <span className="text-faint">
-                  <ListTodo className="w-4 h-4" aria-hidden="true" />
+                  <LayoutGrid className="w-4 h-4" aria-hidden="true" />
                 </span>
-                <span className="flex-1 text-left">{t('nav.summary')}</span>
+                <span className="flex-1 text-left">{t('nav.todo')}</span>
+                <span className="tnum text-xs text-faint">{openAll}</span>
               </NavLink>
               <NavLink to="/routines" className={sideItemCls}>
                 <span className="text-faint">
                   <Repeat className="w-4 h-4" aria-hidden="true" />
                 </span>
                 <span className="flex-1 text-left">{t('nav.routines')}</span>
+              </NavLink>
+              <NavLink to="/decisions" className={sideItemCls}>
+                <span className="text-faint">
+                  <Scale className="w-4 h-4" aria-hidden="true" />
+                </span>
+                <span className="flex-1 text-left">{t('nav.decisions')}</span>
               </NavLink>
               {showExpenses && (
                 <NavLink to="/expenses" className={sideItemCls}>
@@ -740,12 +746,6 @@ export default function Layout() {
                   <span className="flex-1 text-left">{t('nav.expenses')}</span>
                 </NavLink>
               )}
-              <NavLink to="/decisions" className={sideItemCls}>
-                <span className="text-faint">
-                  <Scale className="w-4 h-4" aria-hidden="true" />
-                </span>
-                <span className="flex-1 text-left">{t('nav.decisions')}</span>
-              </NavLink>
               <NavLink to="/trash" className={sideItemCls}>
                 <span className="text-faint">
                   <Trash2 className="w-4 h-4" aria-hidden="true" />
@@ -837,26 +837,26 @@ export default function Layout() {
           >
             <Search className="w-[18px] h-[18px]" aria-hidden="true" />
           </button>
+          <IconNavLink to="/summary" label={t('nav.summary')}>
+            <ListTodo className="w-[18px] h-[18px]" aria-hidden="true" />
+          </IconNavLink>
           <IconNavLink to="/" end label={t('nav.todo')}>
             <LayoutGrid className="w-[18px] h-[18px]" aria-hidden="true" />
           </IconNavLink>
           <IconNavLink to="/projects" label={t('nav.projects')} active={isProjectsSection}>
             <Folder className="w-[18px] h-[18px]" aria-hidden="true" />
           </IconNavLink>
-          <IconNavLink to="/summary" label={t('nav.summary')}>
-            <ListTodo className="w-[18px] h-[18px]" aria-hidden="true" />
-          </IconNavLink>
           <IconNavLink to="/routines" label={t('nav.routines')}>
             <Repeat className="w-[18px] h-[18px]" aria-hidden="true" />
+          </IconNavLink>
+          <IconNavLink to="/decisions" label={t('nav.decisions')}>
+            <Scale className="w-[18px] h-[18px]" aria-hidden="true" />
           </IconNavLink>
           {showExpenses && (
             <IconNavLink to="/expenses" label={t('nav.expenses')}>
               <Receipt className="w-[18px] h-[18px]" aria-hidden="true" />
             </IconNavLink>
           )}
-          <IconNavLink to="/decisions" label={t('nav.decisions')}>
-            <Scale className="w-[18px] h-[18px]" aria-hidden="true" />
-          </IconNavLink>
           <IconNavLink to="/trash" label={t('nav.trash')}>
             <Trash2 className="w-[18px] h-[18px]" aria-hidden="true" />
           </IconNavLink>
