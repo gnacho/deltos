@@ -1,5 +1,5 @@
-// backup-cli.js — backup por línea de comandos para el timer de systemd
-// (lo invoca deploy/deltos-backup.sh). Reutiliza la lógica de backup.js:
+// backup-cli.ts — backup por línea de comandos para el timer de systemd
+// (lo invoca deploy/deltos-backup.sh). Reutiliza la lógica de backup.ts:
 // snapshot consistente por la API online de SQLite y verificación.
 // Abre la BD directamente, sin openDb, para no disparar migraciones desde un
 // segundo proceso mientras el servidor está en marcha.
@@ -25,6 +25,7 @@ try {
   }
   console.log(`backup-cli: ${result.path} (${result.size} bytes)`)
 } catch (err) {
-  console.error(`backup-cli: falló: ${err.message}`)
+  const message = err instanceof Error ? err.message : String(err)
+  console.error(`backup-cli: falló: ${message}`)
   process.exit(1)
 }

@@ -1,4 +1,4 @@
-// backup.js — copia de seguridad de la BD de producción con retención.
+// backup.ts — copia de seguridad de la BD de producción con retención.
 // Usa la API de backup online de SQLite (better-sqlite3 db.backup), que produce
 // un snapshot consistente aunque la BD esté en WAL y el server esté escribiendo.
 // No depende del CLI `sqlite3`. Antes se llamaba a `sqlite3 .backup` y, si
@@ -18,9 +18,16 @@ const execFileAsync = promisify(execFile)
 const log = logger.child({ component: 'backup' })
 
 // Tablas núcleo cuyo recuento se compara origen vs backup como sanity check.
-const CORE_TABLES = ['users', 'projects', 'tasks']
+const CORE_TABLES = ['users', 'projects', 'tasks'] as const
 
-export async function isBackupTimerActive() {
+export interface BackupResult {
+  ok: boolean
+  path?: string
+  size?: number
+  error?: string
+}
+
+export async function isBackupTimerActive(): Promise<boolean> {
   try {
     const { stdout } = await execFileAsync('systemctl', ['is-active', 'deltos-backup.timer'])
     return stdout.trim() === 'active'
@@ -29,10 +36,12 @@ export async function isBackupTimerActive() {
   }
 }
 
-function countsOf(db) {
-  const counts = {}
+type Counts = Record<string, number>
+
+function countsOf(db: Database.Database): Counts {
+  const counts: Counts = {}
   for (const table of CORE_TABLES) {
-    counts[table] = db.prepare(`SELECT count(*) AS n FROM ${table}`).get().n
+    counts[table] = (db.prepare(`SELECT count(*) AS n FROM ${table}`).get() as { n: number }).n
   }
   return counts
 }
@@ -46,7 +55,7 @@ function countsOf(db) {
  * por la API de SQLite) puede reflejar un instante legítimamente distinto, así
  * que se omite la comparación de filas en vez de tirar un backup válido.
  */
-function verifyBackup(sourceDb, backupPath, before) {
+function verifyBackup(sourceDb: Database.Database, backupPath: string, before: Counts): void {
   const check = new Database(backupPath, { readonly: true, fileMustExist: true })
   try {
     const integrity = check.pragma('integrity_check', { simple: true })
@@ -58,7 +67,7 @@ function verifyBackup(sourceDb, backupPath, before) {
       return
     }
     for (const table of CORE_TABLES) {
-      const backup = check.prepare(`SELECT count(*) AS n FROM ${table}`).get().n
+      const backup = (check.prepare(`SELECT count(*) AS n FROM ${table}`).get() as { n: number }).n
       if (after[table] !== backup) {
         throw new Error(`row count mismatch on ${table}: source ${after[table]}, backup ${backup}`)
       }
@@ -68,7 +77,10 @@ function verifyBackup(sourceDb, backupPath, before) {
   }
 }
 
-export async function execBackup(prodDb, config) {
+export async function execBackup(
+  prodDb: Database.Database,
+  config: { DATA_DIR: string }
+): Promise<BackupResult> {
   const dataDir = config.DATA_DIR
   const dbPath = path.join(dataDir, 'app.db')
   const backupsDir = path.join(dataDir, 'backups')
@@ -100,13 +112,14 @@ export async function execBackup(prodDb, config) {
     // Un backup que no pasa la verificación no se conserva: dejarlo ahí daría
     // por buena una copia que no lo es.
     fs.rmSync(backupPath, { force: true })
-    log.error('backup_failed', { error: err.message })
-    return { ok: false, error: err.message }
+    const message = err instanceof Error ? err.message : String(err)
+    log.error('backup_failed', { error: message })
+    return { ok: false, error: message }
   }
 }
 
-function pruneBackups(prodDb, backupsDir) {
-  const retentionDays = parseInt(kvGet(prodDb, 'backup_retention_days', '3'), 10)
+function pruneBackups(prodDb: Database.Database, backupsDir: string): void {
+  const retentionDays = parseInt(kvGet(prodDb, 'backup_retention_days', '3') ?? '3', 10)
   const cutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000
   const files = fs.readdirSync(backupsDir).filter((f) => f.startsWith('deltos-') && f.endsWith('.db'))
   let pruned = 0

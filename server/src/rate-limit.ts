@@ -1,13 +1,15 @@
-// rate-limit.js — rate-limit simple por usuario para mutaciones (POST/PUT/PATCH/DELETE).
+// rate-limit.ts — rate-limit simple por usuario para mutaciones (POST/PUT/PATCH/DELETE).
 // Ventana deslizante de 1 minuto, máximo 60 mutaciones por usuario.
 // In-memory (suficiente para app self-hosted single-instance).
+import type { MiddlewareHandler } from 'hono'
+import type { AppEnv } from './types.js'
 import { httpError } from './errors.js'
 import { ERROR_CODES } from './error-codes.js'
 
 const WINDOW_MS = 60 * 1000
 const MAX_REQUESTS = 60
 
-const buckets = new Map()
+const buckets = new Map<string, number[]>()
 
 setInterval(() => {
   const cutoff = Date.now() - WINDOW_MS
@@ -18,7 +20,7 @@ setInterval(() => {
   }
 }, WINDOW_MS).unref()
 
-export function mutationRateLimit() {
+export function mutationRateLimit(): MiddlewareHandler<AppEnv> {
   return async (c, next) => {
     const method = c.req.method
     if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return next()

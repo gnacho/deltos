@@ -1,20 +1,37 @@
 // ============================================================================
-// pagination.js — paginación keyset (seek) sobre better-sqlite3 (api-stack).
+// pagination.ts — paginación keyset (seek) sobre better-sqlite3 (api-stack).
 // Cursor opaco base64url { ts, id }: ts = created_at (epoch ms) de la última
 // fila entregada, id = desempate para timestamps iguales.
 // ============================================================================
 import { httpError } from './errors.js'
 import { ERROR_CODES } from './error-codes.js'
 
-export function encodeCursor(cursor) {
+export interface Cursor {
+  ts: number
+  id: string
+}
+
+/** Fila mínima que la paginación necesita para construir el cursor. */
+export interface CursorRow {
+  created_at: number
+  id: string
+}
+
+export interface KeysetPage<T> {
+  items: T[]
+  hasMore: boolean
+  nextCursor: string | null
+}
+
+export function encodeCursor(cursor: Cursor): string {
   return Buffer.from(JSON.stringify(cursor), 'utf8').toString('base64url')
 }
 
 // Cursor malformado → 400 INVALID_CURSOR (nunca ignorarlo: devolvería la
 // página 1 en silencio y la UI vería duplicados).
-export function decodeCursor(raw) {
+export function decodeCursor(raw: string): Cursor {
   try {
-    const parsed = JSON.parse(Buffer.from(String(raw), 'base64url').toString('utf8'))
+    const parsed = JSON.parse(Buffer.from(String(raw), 'base64url').toString('utf8')) as Partial<Cursor>
     if (
       typeof parsed !== 'object' || parsed === null ||
       typeof parsed.ts !== 'number' || !Number.isFinite(parsed.ts) ||
@@ -31,7 +48,7 @@ export function decodeCursor(raw) {
 // Ejecuta la consulta con LIMIT n+1 y recorta. `rows` debe venir ordenada por
 // (created_at DESC, id DESC) y filtrada por el keyset si hay cursor.
 // Devuelve { items, nextCursor, hasMore }.
-export function keysetPage(rows, limit) {
+export function keysetPage<T extends CursorRow>(rows: T[], limit: number): KeysetPage<T> {
   const hasMore = rows.length > limit
   const items = hasMore ? rows.slice(0, limit) : rows
   const last = items[items.length - 1]

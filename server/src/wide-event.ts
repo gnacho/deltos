@@ -1,5 +1,5 @@
 // ============================================================================
-// wide-event.js — middleware Hono: UN wide event JSON por request → stdout.
+// wide-event.ts — middleware Hono: UN wide event JSON por request → stdout.
 //
 // Patrón wide event (skill log-ops, Boris Tane): se acumula contexto durante
 // el request y se emite UNA línea JSON rica al final (en `finally`), con el
@@ -19,10 +19,12 @@
 // sin PII); user_id siempre hasheado; redacción por clave como red final.
 // ============================================================================
 import { randomUUID } from 'node:crypto'
-import { logger, hashUserId, redact } from './logger.js'
+import type { MiddlewareHandler } from 'hono'
+import type { AppEnv } from './types.js'
+import { logger, hashUserId, redact, type LogAttrs } from './logger.js'
 
 // ¿Este request queda excluido del wide event? (ruido operativo, no señal)
-function isExcluded(c) {
+function isExcluded(c: Parameters<MiddlewareHandler<AppEnv>>[0]): boolean {
   const method = c.req.method
   const path = c.req.path
   if (path === '/health') return true
@@ -35,22 +37,25 @@ function isExcluded(c) {
   return false
 }
 
-function errorCode(err) {
+function errorCode(err: unknown): string | undefined {
   if (err && typeof err === 'object') {
     // HTTPException con cause { code } (convención api-stack) o error con .code
-    const cause = err.cause
-    if (cause && typeof cause === 'object' && typeof cause.code === 'string') return cause.code
-    if (typeof err.code === 'string') return err.code
+    const cause = (err as { cause?: unknown }).cause
+    if (cause && typeof cause === 'object' && typeof (cause as { code?: unknown }).code === 'string') {
+      return (cause as { code: string }).code
+    }
+    const code = (err as { code?: unknown }).code
+    if (typeof code === 'string') return code
   }
   return undefined
 }
 
-function errorMessage(err) {
+function errorMessage(err: unknown): string {
   if (err instanceof Error) return err.message
   return String(err)
 }
 
-export function wideEvent() {
+export function wideEvent(): MiddlewareHandler<AppEnv> {
   return async (c, next) => {
     const requestId = randomUUID()
     const start = performance.now()
@@ -59,19 +64,19 @@ export function wideEvent() {
     c.header('x-request-id', requestId)
     c.set('requestId', requestId)
 
-    let thrown
+    let thrown: unknown
     try {
       await next()
     } catch (err) {
       thrown = err
-      throw err // re-lanzar: el onError de app.js decide la respuesta
+      throw err // re-lanzar: el onError de app.ts decide la respuesta
     } finally {
       if (!isExcluded(c)) {
         const durationMs = Math.round((performance.now() - start) * 10) / 10
         const status = thrown ? 500 : c.res.status
         const level = thrown || status >= 500 ? 'error' : 'info'
 
-        const event = {
+        const event: LogAttrs = {
           msg: 'http_request',
           request_id: requestId,
           method: c.req.method,
@@ -94,8 +99,9 @@ export function wideEvent() {
 
         // Una única línea NDJSON a stdout → journald. Redacción por clave como
         // defensa en profundidad aunque el evento se construye a mano.
-        if (level === 'error') logger.error(event.msg, redact(event))
-        else logger.info(event.msg, redact(event))
+        const msg = event.msg as string
+        if (level === 'error') logger.error(msg, redact(event) as LogAttrs)
+        else logger.info(msg, redact(event) as LogAttrs)
       }
     }
   }
