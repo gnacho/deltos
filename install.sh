@@ -131,11 +131,25 @@ if [ ! -d /run/systemd/system ] || ! command -v systemctl >/dev/null 2>&1; then
 fi
 info "detected: $OS_PRETTY · linux/$REL_ARCH · systemd"
 
-if command -v curl >/dev/null 2>&1; then FETCH="curl -fsSL --retry 3 --connect-timeout 10"
-elif command -v wget >/dev/null 2>&1; then FETCH="wget -q -O-"
+# Descarga HTTPS. Si existe GITHUB_TOKEN se envía como Authorization: los
+# runners de CI comparten IP y la cuota anónima de la API de GitHub (60/h)
+# devuelve 403 a mitad de un release. Un token (contents: read basta) evita el
+# límite; en instalaciones normales no hace falta.
+if command -v curl >/dev/null 2>&1; then
+    if [ -n "${GITHUB_TOKEN:-}" ]; then
+        FETCH() { curl -fsSL --retry 3 --connect-timeout 10 -H "Authorization: Bearer $GITHUB_TOKEN" "$1"; }
+    else
+        FETCH() { curl -fsSL --retry 3 --connect-timeout 10 "$1"; }
+    fi
+elif command -v wget >/dev/null 2>&1; then
+    if [ -n "${GITHUB_TOKEN:-}" ]; then
+        FETCH() { wget -q -O- --header="Authorization: Bearer $GITHUB_TOKEN" "$1"; }
+    else
+        FETCH() { wget -q -O- "$1"; }
+    fi
 else fatal 21 "I need curl or wget (install it with your package manager)"
 fi
-fetch_to() { $FETCH "$1" > "$2"; }
+fetch_to() { FETCH "$1" > "$2"; }
 for tool in sha256sum tar xz; do command -v "$tool" >/dev/null 2>&1 || fatal 21 "missing tool: $tool"; done
 
 # ------------------------------------------------- disk / memory pre-flight --
@@ -214,7 +228,7 @@ fi
 # --------------------------------------------------------- resolve version --
 if [ -z "$DELTOS_VERSION" ]; then
     info "resolving latest stable version"
-    DELTOS_VERSION=$($FETCH "https://api.github.com/repos/$GH_REPO/releases/latest" \
+    DELTOS_VERSION=$(FETCH "https://api.github.com/repos/$GH_REPO/releases/latest" \
         | grep '"tag_name"' | head -1 | cut -d'"' -f4) \
         || fatal 31 "could not resolve the latest version (GitHub rate-limit?). Use --version=X.Y.Z"
     [ -n "$DELTOS_VERSION" ] || fatal 31 "no stable release found yet. Use --version=X.Y.Z"
@@ -229,7 +243,7 @@ BASE_URL="https://github.com/$GH_REPO/releases/download/$DELTOS_TAG"
 info "version: $DELTOS_VERSION"
 
 # connectivity pre-flight BEFORE touching the system
-$FETCH "https://github.com/$GH_REPO" >/dev/null \
+FETCH "https://github.com/$GH_REPO" >/dev/null \
     || fatal 30 "no access to github.com (proxy? DNS? firewall?)"
 
 UPGRADING=0

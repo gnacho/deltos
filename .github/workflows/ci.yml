@@ -67,5 +67,9 @@ jobs:
 
       # Descarga la última release, verifica su checksum y recorre los pasos sin
       # tocar el sistema. Falla si el manifiesto, el checksum o los pasos rompen.
+      # Con token: la IP compartida del runner agota la cuota anónima de la API
+      # (60/h) y hace fallar el job con 403 (issue #299).
       - name: install.sh dry-run
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: sh install.sh --dry-run
