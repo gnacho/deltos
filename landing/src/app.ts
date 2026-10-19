@@ -1,5 +1,5 @@
 /* Deltos landing - tema, capturas por idioma/tema, lightbox, reveal, copiar, nav, parallax, versión */
-(function () {
+(function (): void {
   'use strict';
 
   const THEME_KEY = 'deltos-landing-theme';
@@ -24,7 +24,7 @@
     themeBtn.addEventListener('click', function () {
       const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
       root.setAttribute('data-theme', next);
-      try { localStorage.setItem(THEME_KEY, next); } catch (e) { /* noop */ }
+      try { localStorage.setItem(THEME_KEY, next); } catch { /* noop */ }
       paintTheme();
       applyShots();
     });
@@ -36,17 +36,17 @@
   /* ---------- Capturas: principal + carrusel, por idioma/tema ---------- */
   const SHOT_ORDER = ['board', 'casa', 'viaje', 'trabajo', 'expenses', 'rewards', 'invite', 'settings'];
   let shotIndex = 0;
-  const mainImg = document.getElementById('shotMain');
+  const mainImg = document.getElementById('shotMain') as HTMLImageElement | null;
   const capEl = document.getElementById('shotCap');
-  const thumbs = Array.prototype.slice.call(document.querySelectorAll('.thumb'));
+  const thumbs: HTMLElement[] = Array.prototype.slice.call(document.querySelectorAll<HTMLElement>('.thumb'));
   const prevBtn = document.getElementById('shotPrev');
   const nextBtn = document.getElementById('shotNext');
   const stage = document.getElementById('shotStage');
 
-  function shotUrl(id) { return 'assets/shot-' + id + '-' + langNow() + '-' + themeNow() + '.webp'; }
+  function shotUrl(id: string): string { return 'assets/shot-' + id + '-' + langNow() + '-' + themeNow() + '.webp'; }
 
-  const capKey = function (id) { return 'shot.' + id + '.cap'; };
-  const altKey = function (id) { return 'shot.' + id + '.alt'; };
+  const capKey = function (id: string): string { return 'shot.' + id + '.cap'; };
+  const altKey = function (id: string): string { return 'shot.' + id + '.alt'; };
 
   function renderMain() {
     if (!mainImg || !capEl) return;
@@ -64,18 +64,18 @@
   }
 
   function applyShots() {
-    thumbs.forEach(function (t) { t.querySelector('img').src = shotUrl(t.dataset.shot); });
+    thumbs.forEach(function (t) { (t.querySelector('img') as HTMLImageElement).src = shotUrl(t.dataset.shot as string); });
     renderMain();
   }
   document.addEventListener('deltos:lang', applyShots);
 
-  function goto(idx) {
+  function goto(idx: number): void {
     shotIndex = (idx + SHOT_ORDER.length) % SHOT_ORDER.length;
     renderMain();
   }
   if (thumbs.length) {
     thumbs.forEach(function (t) {
-      t.addEventListener('click', function () { goto(SHOT_ORDER.indexOf(t.dataset.shot)); });
+      t.addEventListener('click', function () { goto(SHOT_ORDER.indexOf(t.dataset.shot as string)); });
     });
   }
   if (prevBtn) prevBtn.addEventListener('click', function () { goto(shotIndex - 1); });
@@ -90,12 +90,12 @@
 
   /* ---------- Lightbox: zoom de la captura principal ---------- */
   const lightbox = document.getElementById('shotLightbox');
-  const lightboxImg = document.getElementById('lightboxImg');
+  const lightboxImg = document.getElementById('lightboxImg') as HTMLImageElement | null;
   const lightboxCaption = document.getElementById('lightboxCaption');
   const lightboxClose = document.getElementById('lightboxClose');
 
-  function openLightbox() {
-    if (!lightbox || !mainImg) return;
+  function openLightbox(): void {
+    if (!lightbox || !mainImg || !lightboxImg || !lightboxCaption) return;
     lightboxImg.src = mainImg.src;
     lightboxImg.alt = mainImg.alt || '';
     lightboxCaption.textContent = capEl ? capEl.textContent : '';
@@ -106,7 +106,7 @@
     document.body.style.overflow = 'hidden';
   }
 
-  function closeLightbox() {
+  function closeLightbox(): void {
     if (!lightbox) return;
     lightbox.classList.remove('open');
     setTimeout(function () {
@@ -137,7 +137,7 @@
   const installCmd = document.getElementById('installCmd');
   if (copyBtn && installCmd) {
     copyBtn.addEventListener('click', function () {
-      const text = installCmd.textContent.trim();
+      const text = (installCmd.textContent || '').trim();
       const span = copyBtn.querySelector('span');
       const prev = span ? span.textContent : '';
       const done = function () {
@@ -153,7 +153,7 @@
       } else {
         fallback();
       }
-      function fallback() {
+      function fallback(): void {
         const ta = document.createElement('textarea');
         ta.value = text;
         ta.setAttribute('readonly', '');
@@ -162,7 +162,7 @@
         document.body.appendChild(ta);
         ta.focus();
         ta.select();
-        try { document.execCommand('copy'); } catch (e) { /* noop */ }
+        try { document.execCommand('copy'); } catch { /* noop */ }
         document.body.removeChild(ta);
         done();
       }
@@ -179,16 +179,18 @@
 
   /* ---------- Nav con scroll ---------- */
   const nav = document.getElementById('nav');
-  addEventListener('scroll', function () {
-    nav.classList.toggle('scrolled', scrollY > 12);
-  }, { passive: true });
+  if (nav) {
+    addEventListener('scroll', function () {
+      nav.classList.toggle('scrolled', scrollY > 12);
+    }, { passive: true });
+  }
 
   /* ---------- Parallax del fondo (ratón, solo puntero fino y sin reduced-motion) ---------- */
   (function () {
     if (reduceMotion) return;
     if (!matchMedia('(pointer: fine)').matches) return;
-    const glow = document.querySelector('.bg-glow');
-    const grid = document.querySelector('.grid-lines');
+    const glow = document.querySelector<HTMLElement>('.bg-glow');
+    const grid = document.querySelector<HTMLElement>('.grid-lines');
     if (!glow || !grid) return;
     let tx = 0, ty = 0, cx = 0, cy = 0;
     addEventListener('pointermove', function (e) {
@@ -209,22 +211,22 @@
     const KEY = 'deltos-landing-release';
     const statVer = document.getElementById('statVer');
     const footVer = document.getElementById('footVer');
-    function paint(tag) {
+    function paint(tag: string): void {
       if (statVer) statVer.textContent = tag;
       if (footVer) { footVer.textContent = tag; footVer.hidden = false; }
     }
-    function fail() {
+    function fail(): void {
       if (statVer) statVer.style.display = 'none';
     }
     try {
-      const c = JSON.parse(localStorage.getItem(KEY) || 'null');
-      if (c && c.tag && Date.now() - c.ts < 36e5) { paint(c.tag); return; }
-    } catch (e) { /* noop */ }
+      const c = JSON.parse(localStorage.getItem(KEY) || 'null') as { tag?: string; ts?: number } | null;
+      if (c && c.tag && Date.now() - (c.ts || 0) < 36e5) { paint(c.tag); return; }
+    } catch { /* noop */ }
     fetch('https://api.github.com/repos/gnacho/deltos/releases/latest')
       .then(function (r) { if (!r.ok) throw new Error('http'); return r.json(); })
-      .then(function (j) {
+      .then(function (j: { tag_name?: string }) {
         if (!j.tag_name) throw new Error('shape');
-        try { localStorage.setItem(KEY, JSON.stringify({ tag: j.tag_name, ts: Date.now() })); } catch (e) { /* noop */ }
+        try { localStorage.setItem(KEY, JSON.stringify({ tag: j.tag_name, ts: Date.now() })); } catch { /* noop */ }
         paint(j.tag_name);
       })
       .catch(fail);

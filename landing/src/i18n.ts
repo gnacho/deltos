@@ -1,17 +1,17 @@
 /* Deltos landing - i18n ES/EN. ES vive inline en el HTML; este fichero captura
    el dict ES del DOM y aplica el EN. Expone window.LandingLang. */
-(function () {
+(function (): void {
   'use strict';
 
   const LANG_KEY = 'deltos-landing-lang';
 
   /* ES se captura del propio DOM (la página se escribe en ES) */
-  const esDict = {};
-  document.querySelectorAll('[data-i18n]').forEach(function (el) { esDict[el.dataset.i18n] = el.innerHTML; });
-  const esAlt = {};
-  document.querySelectorAll('[data-i18n-alt]').forEach(function (el) { esAlt[el.dataset.i18nAlt] = el.getAttribute('alt'); });
-  const esAria = {};
-  document.querySelectorAll('[data-i18n-aria]').forEach(function (el) { esAria[el.dataset.i18nAria] = el.getAttribute('aria-label'); });
+  const esDict: Record<string, string> = {};
+  document.querySelectorAll<HTMLElement>('[data-i18n]').forEach(function (el) { esDict[el.dataset.i18n as string] = el.innerHTML; });
+  const esAlt: Record<string, string> = {};
+  document.querySelectorAll<HTMLElement>('[data-i18n-alt]').forEach(function (el) { esAlt[el.dataset.i18nAlt as string] = el.getAttribute('alt') || ''; });
+  const esAria: Record<string, string> = {};
+  document.querySelectorAll<HTMLElement>('[data-i18n-aria]').forEach(function (el) { esAria[el.dataset.i18nAria as string] = el.getAttribute('aria-label') || ''; });
 
   /* Capturas: el DOM solo lleva la del tablero (la inicial), así que el resto
      del ES del carrusel vive aquí. Sin esto, el caption en ES quedaba vacío
@@ -37,7 +37,7 @@
     'shot.settings.alt': 'Ajustes de Deltos: tema claro, oscuro o auto, color de acento, densidad y editor de etiquetas'
   });
 
-  const enDict = {
+  const enDict: Record<string, string> = {
     "misc.skip": "Skip to content",
     "appearance.theme": "Toggle theme",
     "nav.scenes": "At home", "nav.shots": "Screenshots", "nav.features": "What's in it",
@@ -155,7 +155,7 @@
     "foot.copy": "AGPL-3.0 · Made at home, for home life.", "foot.live": "live"
   };
 
-  const enAlt = {
+  const enAlt: Record<string, string> = {
     "shot.board.alt": "Deltos board in demo mode with the New, In progress and Done stages, and cards for home, work and trip",
     "shot.casa.alt": "Deltos Home project board with cards like booking the car inspection or reviewing the renovation quote",
     "shot.viaje.alt": "Deltos Trip to Lisbon project board with hotel bookings, tickets and a restaurant list",
@@ -166,64 +166,64 @@
     "shot.settings.alt": "Deltos settings: light, dark or auto theme, accent color, density and label editor"
   };
 
-  const enAria = {
+  const enAria: Record<string, string> = {
     "appearance.theme": "Toggle theme",
     "shots.close": "Close",
     "shots.prev": "Previous",
     "shots.next": "Next"
   };
 
-  const titles = {
+  const titles: Record<string, string> = {
     es: "Deltos - tareas y gastos de casa en un tablero. Sin nube.",
     en: "Deltos - home tasks and expenses on one board. No cloud."
   };
 
-  function setLang(lang) {
+  function setLang(lang: 'es' | 'en'): void {
     const dict = lang === 'en' ? enDict : esDict;
-    document.querySelectorAll('[data-i18n]').forEach(function (el) {
-      const v = dict[el.dataset.i18n];
+    document.querySelectorAll<HTMLElement>('[data-i18n]').forEach(function (el) {
+      const v = dict[el.dataset.i18n as string];
       if (v !== undefined) el.innerHTML = v;
     });
     const altDict = lang === 'en' ? enAlt : esAlt;
-    document.querySelectorAll('[data-i18n-alt]').forEach(function (el) {
-      const v = altDict[el.dataset.i18nAlt];
+    document.querySelectorAll<HTMLElement>('[data-i18n-alt]').forEach(function (el) {
+      const v = altDict[el.dataset.i18nAlt as string];
       if (v !== undefined) el.setAttribute('alt', v);
     });
     const ariaDict = lang === 'en' ? enAria : esAria;
-    document.querySelectorAll('[data-i18n-aria]').forEach(function (el) {
-      const v = ariaDict[el.dataset.i18nAria];
+    document.querySelectorAll<HTMLElement>('[data-i18n-aria]').forEach(function (el) {
+      const v = ariaDict[el.dataset.i18nAria as string];
       if (v !== undefined) el.setAttribute('aria-label', v);
     });
     document.documentElement.lang = lang;
     document.title = titles[lang];
-    document.getElementById('langEs').classList.toggle('active', lang === 'es');
-    document.getElementById('langEn').classList.toggle('active', lang === 'en');
-    try { localStorage.setItem(LANG_KEY, lang); } catch (e) { /* noop */ }
+    document.getElementById('langEs')?.classList.toggle('active', lang === 'es');
+    document.getElementById('langEn')?.classList.toggle('active', lang === 'en');
+    try { localStorage.setItem(LANG_KEY, lang); } catch { /* noop */ }
     document.dispatchEvent(new CustomEvent('deltos:lang', { detail: lang }));
   }
 
-  function initialLang() {
+  function initialLang(): 'es' | 'en' {
     const urlLang = new URLSearchParams(window.location.search).get('hl');
     if (urlLang === 'en' || urlLang === 'es') return urlLang;
     try {
       const saved = localStorage.getItem(LANG_KEY);
       if (saved === 'en' || saved === 'es') return saved;
-    } catch (e) { /* noop */ }
+    } catch { /* noop */ }
     return (navigator.language || '').toLowerCase().indexOf('es') === 0 ? 'es' : 'en';
   }
 
-  document.getElementById('langEs').addEventListener('click', function () { setLang('es'); });
-  document.getElementById('langEn').addEventListener('click', function () { setLang('en'); });
+  document.getElementById('langEs')?.addEventListener('click', function () { setLang('es'); });
+  document.getElementById('langEn')?.addEventListener('click', function () { setLang('en'); });
 
   window.LandingLang = {
-    setLang: setLang,
-    get lang() { return document.documentElement.lang || 'es'; },
-    altFor: function (key) { return (this.lang === 'en' ? enAlt : esAlt)[key] || ''; },
-    textFor: function (key) {
-      const d = this.lang === 'en' ? enDict : esDict;
+    set: function (lang: string) { setLang(lang === 'en' ? 'en' : 'es'); },
+    lang: function () { return document.documentElement.lang || 'es'; },
+    altFor: function (key: string) { return (window.LandingLang.lang() === 'en' ? enAlt : esAlt as Record<string, string>)[key] || ''; },
+    textFor: function (key: string) {
+      const d = (window.LandingLang.lang() === 'en' ? enDict : esDict) as Record<string, string>;
       return d[key] !== undefined ? d[key] : '';
     },
-    ariaFor: function (key) { return (this.lang === 'en' ? enAria : esAria)[key] || ''; }
+    ariaFor: function (key: string) { return (window.LandingLang.lang() === 'en' ? enAria : esAria as Record<string, string>)[key] || ''; }
   };
 
   const boot = initialLang();

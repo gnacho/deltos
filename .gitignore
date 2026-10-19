@@ -11,6 +11,8 @@ server/node_modules/
 # Build output
 app/dist/
 server/dist/
+landing/dist/
+landing/node_modules/
 *.log
 
 # Data
