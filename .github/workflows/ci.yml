@@ -17,6 +17,21 @@ permissions:
   contents: read
 
 jobs:
+  landing:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: landing/package-lock.json
+
+      - name: Landing typecheck + build
+        working-directory: landing
+        run: npm ci --no-audit --no-fund && npm run typecheck && npm run build
+
   test:
     runs-on: ubuntu-latest
     steps:
