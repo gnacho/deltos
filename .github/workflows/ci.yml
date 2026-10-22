@@ -55,6 +55,35 @@ jobs:
         working-directory: server
         run: node scripts/ci-smoke.mjs
 
+  # Port a Go (fase 1 del go-port, epic #304): build estatico + tests con
+  # race detector + vet + staticcheck. Se mantiene en paralelo con el job
+  # `test` (Node) hasta el swap.
+  server-go:
+    name: server-go
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache-dependency-path: server-go/go.sum
+
+      - name: Build
+        working-directory: server-go
+        run: CGO_ENABLED=0 go build -trimpath -o deltos-go ./cmd/server
+
+      - name: Tests (race)
+        working-directory: server-go
+        run: go test ./... -race
+
+      - name: Vet + staticcheck
+        working-directory: server-go
+        run: |
+          go vet ./...
+          go install honnef.co/go/tools/cmd/staticcheck@2026.2.1
+          "$(go env GOPATH)/bin/staticcheck" ./...
+
   installer:
     runs-on: ubuntu-latest
     steps:
