@@ -196,7 +196,10 @@ func New(a *auth.Service, prod, demo *db.DB, cfg Config) *Server {
 		s.registerPushRoutes(&ar)
 	})
 
-	// Unmatched /api routes are 404 NOT_FOUND (never the SPA fallback).
+	// Unmatched /api routes are 404 NOT_FOUND (never the SPA fallback). chi
+	// answers 405 for known paths with a wrong method (GET /api/projects);
+	// the Node (Hono) answers the same 404 envelope, so both handlers are the
+	// same for parity.
 	r.NotFound(func(w http.ResponseWriter, req *http.Request) {
 		if s.serveStaticFile(w, req) {
 			return
@@ -207,6 +210,7 @@ func New(a *auth.Service, prod, demo *db.DB, cfg Config) *Server {
 		}
 		s.serveIndex(w, req)
 	})
+	r.MethodNotAllowed(r.NotFoundHandler())
 
 	// Health (outside /api, same as the Node server).
 	r.MethodFunc(http.MethodGet, "/health", s.handleHealth)
