@@ -239,7 +239,7 @@ func intField(d Datos, k string) int {
 	return 0
 }
 
-// pluralVencidas matches the Node's `${n} vencida${n>1?'s':''}`.
+// pluralVencidas matches the Node's `${n} vencida${n>1?'s':”}`.
 func vencidasES(n int) string {
 	if n > 1 {
 		return fmt.Sprintf("%d vencidas", n)

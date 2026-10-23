@@ -70,7 +70,11 @@ func SeedDemo(d *db.DB, uploadsDir string) bool {
 	}
 
 	// --- Projects (4, from the mockup). All three users are members of all 4. ---
-	projects := []struct{ id, name, emoji, color string; pos int; owner string }{
+	projects := []struct {
+		id, name, emoji, color string
+		pos                    int
+		owner                  string
+	}{
 		{"p-casa", "Casa", "home", "sky", 0, "mar"},
 		{"p-trabajo", "Trabajo", "briefcase", "blue", 1, "mar"},
 		{"p-viaje", "Viaje a Lisboa", "plane", "amber", 2, "jordi"},
@@ -121,12 +125,12 @@ func SeedDemo(d *db.DB, uploadsDir string) bool {
 
 	// --- 15 tasks across the 3 columns (mockup dataset) ---
 	type taskSeed struct {
-		id, project, title, col, pr  string
-		due                          *int
-		as                           *string
-		tags                         []string
-		by                           string
-		created                      int
+		id, project, title, col, pr string
+		due                         *int
+		as                          *string
+		tags                        []string
+		by                          string
+		created                     int
 	}
 	sp := func(s string) *string { return &s }
 	ip := func(i int) *int { return &i }
@@ -185,11 +189,11 @@ func SeedDemo(d *db.DB, uploadsDir string) bool {
 		return false
 	}
 	seedFiles := map[string]struct{ mime, content string }{
-		"presupuesto-empresa-a.pdf":   {"application/pdf", "%PDF-1.4\n% Deltos (demo) - archivo ficticio\n% Presupuesto empresa A: reforma de baño.\n"},
-		"presupuesto-empresa-b.pdf":   {"application/pdf", "%PDF-1.4\n% Deltos (demo) - archivo ficticio\n% Presupuesto empresa B: reforma de baño.\n"},
-		"ventas-q3.xlsx":              {"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Deltos (demo) - archivo ficticio. Ventas Q3 por canal.\n"},
-		"plantilla-presentacion.key":  {"application/vnd.apple.keynote", "Deltos (demo) - archivo ficticio. Plantilla de presentación.\n"},
-		"opciones-hotel.ods":          {"application/vnd.oasis.opendocument.spreadsheet", "Deltos (demo) - archivo ficticio. Cuatro opciones de hotel en Lisboa.\n"},
+		"presupuesto-empresa-a.pdf":  {"application/pdf", "%PDF-1.4\n% Deltos (demo) - archivo ficticio\n% Presupuesto empresa A: reforma de baño.\n"},
+		"presupuesto-empresa-b.pdf":  {"application/pdf", "%PDF-1.4\n% Deltos (demo) - archivo ficticio\n% Presupuesto empresa B: reforma de baño.\n"},
+		"ventas-q3.xlsx":             {"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Deltos (demo) - archivo ficticio. Ventas Q3 por canal.\n"},
+		"plantilla-presentacion.key": {"application/vnd.apple.keynote", "Deltos (demo) - archivo ficticio. Plantilla de presentación.\n"},
+		"opciones-hotel.ods":         {"application/vnd.oasis.opendocument.spreadsheet", "Deltos (demo) - archivo ficticio. Cuatro opciones de hotel en Lisboa.\n"},
 	}
 
 	seq := 0
