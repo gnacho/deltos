@@ -1,14 +1,15 @@
 name: release
 
-# Release estable por tag v*: empaqueta la webapp completa (frontend build +
-# server + node_modules de producción PRE-BUILT por arch) + checksums.txt.
-# install.sh consume estos assets (perfil Node del skill installer-one-liner:
-# el servidor no necesita gcc/python/make — crítico para better-sqlite3).
+# Release estable por tag v*: empaqueta la webapp completa en formato Go —
+# binario estatico (pure Go sqlite, CGO_ENABLED=0) + frontend pre-built —
+# junto con deploy/ e install.sh + checksums.txt.
 #
-# Dos fases: la matriz build compila cada arch en paralelo y sube el tarball
-# como artifact; el job release descarga TODOS los arch, genera UN único
-# checksums.txt con todos ellos y los publica en la release. Así se evita la
-# carrera en la que cada arch pisaba el checksums.txt del otro (issue #36).
+# Dos fases: la matriz build compila cada arch en paralelo (runner nativo por
+# arch, sin cross-compile) y sube el tarball como artifact; el job release
+# descarga TODOS los arch, genera UN unico checksums.txt con todos ellos y
+# los publica en la release (issue #36). Los patterns de checksums y files
+# cubren deltos_* y deltos-web_* si se anaden assets web separados (leccion
+# #166 de helios: helios_* no matcheaba helios-web_*).
 
 on:
   push:
@@ -26,35 +27,43 @@ jobs:
         include:
           - arch: amd64
             runs-on: ubuntu-latest
+            goarch: amd64
           - arch: arm64
             runs-on: ubuntu-24.04-arm
+            goarch: arm64
     runs-on: ${{ matrix.runs-on }}
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache-dependency-path: server-go/go.sum
 
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: |
-            app/package-lock.json
-            server/package-lock.json
+          cache-dependency-path: app/package-lock.json
 
-      - name: Tests del server (vitest)
-        working-directory: server
-        run: npm ci --no-audit --no-fund && npm test
+      - name: Tests del server Go (race)
+        working-directory: server-go
+        run: go test ./... -race
 
       - name: Build frontend
         working-directory: app
         run: npm ci --no-audit --no-fund && npm run build
 
-      - name: Compila TypeScript del server (src -> dist)
-        working-directory: server
-        run: npm run build
-
-      - name: node_modules de producción (sin dev, compila prebuilds del arch)
-        working-directory: server
-        run: rm -rf node_modules && npm ci --omit=dev --no-audit --no-fund
+      - name: Build binario Go estatico
+        working-directory: server-go
+        env:
+          REF: ${{ github.ref_name }}
+        run: |
+          VERSION="${REF#v}"
+          [ "${{ github.ref_type }}" = "tag" ] || VERSION="0.0.0-SNAPSHOT-${GITHUB_SHA::7}"
+          CGO_ENABLED=0 GOOS=linux GOARCH=${{ matrix.goarch }} \
+            go build -trimpath -ldflags "-s -w -X github.com/gnacho/deltos/server-go/internal/version.Version=$VERSION" \
+            -o deltos-go ./cmd/server
 
       - name: Empaqueta release
         env:
@@ -62,11 +71,10 @@ jobs:
         run: |
           VERSION="${REF#v}"
           [ "${{ github.ref_type }}" = "tag" ] || VERSION="0.0.0-SNAPSHOT-${GITHUB_SHA::7}"
-          mkdir -p stage/server stage/deploy
+          mkdir -p stage
           cp -r app/dist stage/dist
-          cp -r server/dist server/package.json stage/server/
-          cp -r server/node_modules stage/server/node_modules
-          cp -r deploy/* stage/deploy/
+          cp server-go/deltos-go stage/deltos-go
+          cp -r deploy stage/deploy
           cp install.sh stage/install.sh
           tar -czf "deltos_${VERSION}_linux_${{ matrix.arch }}.tar.gz" -C stage .
 
