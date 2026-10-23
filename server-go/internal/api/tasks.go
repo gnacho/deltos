@@ -1354,31 +1354,35 @@ func (s *Server) handleAttachmentGet(w http.ResponseWriter, r *http.Request) {
 
 // --- recurring pause / resume -------------------------------------------------
 
-func (s *Server) recurringGroupTaskIDs(w http.ResponseWriter, r *http.Request) ([]string, string) {
+// recurringGroupTaskIDs loads the visible task ids of a recurrence group.
+// ok=false means a response was already written.
+func (s *Server) recurringGroupTaskIDs(w http.ResponseWriter, r *http.Request) (ids []string, groupID string, ok bool) {
 	d := auth.DBFrom(r)
 	user := auth.UserFrom(r)
-	groupID := param(r, "id")
+	groupID = param(r, "id")
 	rows, err := d.Query(
 		`SELECT t.id FROM tasks t
 		 JOIN project_members pm ON pm.project_id = t.project_id
 		 WHERE t.recurrence_group_id = ? AND pm.user_id = ? AND t.deleted_at IS NULL`, groupID, user.ID)
 	if err != nil {
 		internalErr(w)
-		return nil, groupID
+		return nil, groupID, false
 	}
 	defer rows.Close()
-	var ids []string
 	for rows.Next() {
 		var id string
 		if rows.Scan(&id) == nil {
 			ids = append(ids, id)
 		}
 	}
-	return ids, groupID
+	return ids, groupID, true
 }
 
 func (s *Server) handleRecurringPause(w http.ResponseWriter, r *http.Request) {
-	ids, groupID := s.recurringGroupTaskIDs(w, r)
+	ids, groupID, ok := s.recurringGroupTaskIDs(w, r)
+	if !ok {
+		return
+	}
 	if len(ids) == 0 {
 		errors.Write(w, errors.New(http.StatusNotFound, errors.TaskNotFound))
 		return
@@ -1392,7 +1396,10 @@ func (s *Server) handleRecurringPause(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleRecurringResume(w http.ResponseWriter, r *http.Request) {
-	ids, groupID := s.recurringGroupTaskIDs(w, r)
+	ids, groupID, ok := s.recurringGroupTaskIDs(w, r)
+	if !ok {
+		return
+	}
 	if len(ids) == 0 {
 		errors.Write(w, errors.New(http.StatusNotFound, errors.TaskNotFound))
 		return
