@@ -1,9 +1,8 @@
-// Verify the Go router registers exactly the phase-4 route set of the
-// TypeScript server (all route files, minus the routes deferred to later
-// phases).
+// Verify the Go router registers exactly the phase-5 route set of the
+// TypeScript server (all route files, minus routes deferred to phase 6).
 import { readFileSync } from 'node:fs';
 
-const root = '/home/nacho/temp/opencode-work/deltos-fase4';
+const root = '/home/nacho/temp/opencode-work/deltos-fase5';
 const tsFiles = [
   `${root}/server/src/routes-domain.ts`,
   `${root}/server/src/routes-ha.ts`,
@@ -23,10 +22,8 @@ const goFiles = [
   `${root}/server-go/internal/api/server.go`,
 ];
 
-// Deferred to later phases (must NOT be in the Go set).
+// Deferred to phase 6 (must NOT be in the Go set).
 const deferred = new Set([
-  '/api/tasks/parse', // phase 5 (NLP)
-  '/api/tasks/recurring', // phase 5 (adaptive listing)
   '/api/settings/backup/run', // phase 6
 ]);
 
@@ -69,4 +66,4 @@ if (unexpected.length) {
   process.exit(1);
 }
 const expected = [...tsSet].filter(r => !deferred.has(r.split(' ')[1])).length;
-console.log(`routes verification passed (${expected} routes in phase-4 scope)`);
+console.log(`routes verification passed (${expected} routes in phase-5 scope)`);

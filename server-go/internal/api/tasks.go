@@ -10,10 +10,12 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 
 	"github.com/gnacho/deltos/server-go/internal/auth"
 	"github.com/gnacho/deltos/server-go/internal/errors"
 	"github.com/gnacho/deltos/server-go/internal/ids"
+	"github.com/gnacho/deltos/server-go/internal/nlp"
 	"github.com/gnacho/deltos/server-go/internal/recurrence"
 )
 
@@ -22,6 +24,8 @@ import (
 func (s *Server) registerTaskRoutes(r *rtr) {
 	r.Post("/api/tasks", s.handleTaskCreate)
 	r.Patch("/api/tasks/:id", s.handleTaskPatch)
+	r.Post("/api/tasks/parse", s.handleTaskParse)
+	r.Get("/api/tasks/recurring", s.handleTaskRecurring)
 	r.Post("/api/tasks/:id/move", s.handleTaskMove)
 	r.Delete("/api/tasks/:id", s.handleTaskDelete)
 	r.Post("/api/tasks/:id/do-today", s.handleTaskDoToday)
@@ -1426,4 +1430,223 @@ func (s *Server) handleRecurringResume(w http.ResponseWriter, r *http.Request) {
 	}
 	s.Hub.Broadcast("tasks")
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// --- natural-language parse (server/src/routes-domain.ts POST /api/tasks/parse) --
+
+// handleTaskParse suggests due_date/recurrence/cleanedTitle from prose. Pure
+// computation, no DB write; the reference date is Europe/Madrid (todayLocal).
+func (s *Server) handleTaskParse(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Text string `json:"text"`
+		Lang string `json:"lang"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		validationFailed(w, []issue{{Path: []string{"body"}, Message: "invalid JSON"}})
+		return
+	}
+	if body.Lang == "" {
+		body.Lang = "es"
+	}
+	if len(body.Text) < 1 || len(body.Text) > 200 {
+		validationFailed(w, []issue{{Path: []string{"text"}, Message: "text must be 1-200 characters"}})
+		return
+	}
+	if body.Lang != "es" && body.Lang != "en" {
+		validationFailed(w, []issue{{Path: []string{"lang"}, Message: "invalid lang"}})
+		return
+	}
+	result := nlp.ParseTaskText(body.Text, body.Lang, recurrence.TodayLocal())
+	if result == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"parsed": false})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"parsed":       true,
+		"due_date":     result.DueDate,
+		"recurrence":   result.Recurrence,
+		"cleanedTitle": result.CleanedTitle,
+	})
+}
+
+// --- recurring listing (server/src/routes-domain.ts GET /api/tasks/recurring) ---
+
+func freqIntervalMultiplier(freq string) int {
+	switch freq {
+	case "daily":
+		return 1
+	case "weekly":
+		return 7
+	default: // monthly (normalizeRecurrence only admits daily/weekly/monthly)
+		return 30
+	}
+}
+
+// handleTaskRecurring groups recurrent tasks by recurrence_group_id and returns
+// the Periódicas listing: active instance, next due date, pause state and the
+// effective interval in days, matching the Node JSON shape field for field.
+func (s *Server) handleTaskRecurring(w http.ResponseWriter, r *http.Request) {
+	d := auth.DBFrom(r)
+	user := auth.UserFrom(r)
+	today := recurrence.TodayLocal()
+
+	rows, err := d.Query(
+		`SELECT t.id, t.project_id, t.title, t."column", t.due_date, t.updated_at,
+		        t.recurrence, t.recurrence_group_id, t.recurrence_paused, t.archived_at,
+		        p.name AS project_name, p.color AS project_color
+		 FROM tasks t
+		 JOIN project_members pm ON pm.project_id = t.project_id
+		 JOIN projects p ON p.id = t.project_id
+		 WHERE pm.user_id = ? AND t.recurrence IS NOT NULL AND t.deleted_at IS NULL`, user.ID)
+	if err != nil {
+		internalErr(w)
+		return
+	}
+	type recTask struct {
+		id, projectID, title, column string
+		dueDate                      sql.NullString
+		updatedAt                    int64
+		recurrence                   string
+		recurrenceGroupID            sql.NullString
+		recurrencePaused             int64
+		archivedAt                   sql.NullInt64
+		projectName                  string
+		projectColor                 sql.NullString
+	}
+	var tasks []recTask
+	for rows.Next() {
+		var t recTask
+		if err := rows.Scan(&t.id, &t.projectID, &t.title, &t.column, &t.dueDate, &t.updatedAt,
+			&t.recurrence, &t.recurrenceGroupID, &t.recurrencePaused, &t.archivedAt,
+			&t.projectName, &t.projectColor); err != nil {
+			rows.Close()
+			internalErr(w)
+			return
+		}
+		tasks = append(tasks, t)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		internalErr(w)
+		return
+	}
+
+	// Group by group id (recurrence_group_id || id), preserving first-seen
+	// order like the Node's Map insertion order.
+	type series struct {
+		groupID, title, projectID, projectName string
+		projectColor                           *string
+		rec                                    *recurrence.Recurrence
+		tasks                                  []recTask
+	}
+	order := []string{}
+	byGroup := map[string]*series{}
+	for _, t := range tasks {
+		rec := recurrence.ParseRecurrence(t.recurrence)
+		if rec == nil {
+			continue
+		}
+		groupID := t.id
+		if t.recurrenceGroupID.Valid && t.recurrenceGroupID.String != "" {
+			groupID = t.recurrenceGroupID.String
+		}
+		s, ok := byGroup[groupID]
+		if !ok {
+			s = &series{groupID: groupID, title: t.title, projectID: t.projectID,
+				projectName: t.projectName, projectColor: nstr(t.projectColor), rec: rec}
+			byGroup[groupID] = s
+			order = append(order, groupID)
+		}
+		s.tasks = append(s.tasks, t)
+	}
+
+	result := []map[string]any{}
+	for _, gid := range order {
+		s := byGroup[gid]
+
+		var active *recTask
+		for i := range s.tasks {
+			t := &s.tasks[i]
+			if t.column != "hecho" && !t.archivedAt.Valid {
+				active = t
+				break
+			}
+		}
+
+		var completed []recTask
+		for _, t := range s.tasks {
+			if t.column == "hecho" || t.archivedAt.Valid {
+				completed = append(completed, t)
+			}
+		}
+		sort.SliceStable(completed, func(i, j int) bool { return completed[i].updatedAt > completed[j].updatedAt })
+		var lastCompleted *recTask
+		if len(completed) > 0 {
+			lastCompleted = &completed[0]
+		}
+
+		isPaused := false
+		if active != nil {
+			isPaused = active.recurrencePaused != 0
+		} else {
+			for _, t := range s.tasks {
+				if t.recurrencePaused != 0 {
+					isPaused = true
+					break
+				}
+			}
+		}
+
+		var nextDue any
+		if active != nil {
+			if active.dueDate.Valid {
+				nextDue = active.dueDate.String
+			}
+		} else if lastCompleted != nil {
+			nd := recurrence.ComputeNextDue(d, recurrence.RecurrentTask{
+				ID:                lastCompleted.id,
+				DueDate:           nstr(lastCompleted.dueDate),
+				Recurrence:        &lastCompleted.recurrence,
+				RecurrenceGroupID: nstr(lastCompleted.recurrenceGroupID),
+			}, today)
+			if nd != nil {
+				nextDue = *nd
+			}
+		}
+
+		status := "waiting"
+		if isPaused {
+			status = "paused"
+		} else if active != nil {
+			status = "open"
+		}
+
+		intervalDays := s.rec.Interval * freqIntervalMultiplier(s.rec.Freq)
+		if s.rec.Mode == "completion" {
+			intervalDays = recurrence.AdaptiveInterval(recurrence.CompletionDates(d, s.groupID), s.rec.Interval)
+		}
+
+		var activeID any
+		if active != nil {
+			activeID = active.id
+		}
+		var lastCompletedAt any
+		if lastCompleted != nil {
+			lastCompletedAt = lastCompleted.updatedAt
+		}
+
+		result = append(result, map[string]any{
+			"group_id":                s.groupID,
+			"title":                   s.title,
+			"project":                 map[string]any{"id": s.projectID, "name": s.projectName, "color": s.projectColor},
+			"recurrence":              s.rec,
+			"active_task_id":          activeID,
+			"next_due":                nextDue,
+			"status":                  status,
+			"effective_interval_days": intervalDays,
+			"last_completed_at":       lastCompletedAt,
+		})
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"series": result})
 }
