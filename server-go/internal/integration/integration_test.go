@@ -329,6 +329,83 @@ func TestMethodNotAllowedMatchesHono(t *testing.T) {
 	}
 }
 
+func TestProfileAndPasswordRoundTrip(t *testing.T) {
+	ts, _, _, _ := boot(t)
+	client := &http.Client{Timeout: 10 * time.Second}
+
+	// login
+	res, body := postJSON(t, ts.URL+"/api/auth/login",
+		map[string]string{"username": adminUser, "password": adminPassword}, nil)
+	if res.StatusCode != 200 {
+		t.Fatalf("login must 200, got %d", res.StatusCode)
+	}
+	csrf, _ := body["csrfToken"].(string)
+	cookies := res.Cookies()
+
+	put := func(path string, payload any, sendCSRF bool) (int, map[string]any) {
+		b, _ := json.Marshal(payload)
+		req, _ := http.NewRequest(http.MethodPut, ts.URL+path, bytes.NewReader(b))
+		req.Header.Set("Content-Type", "application/json")
+		for _, c := range cookies {
+			req.AddCookie(c)
+		}
+		if sendCSRF {
+			req.Header.Set("X-Csrf-Token", csrf)
+		}
+		res, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out map[string]any
+		_ = json.NewDecoder(res.Body).Decode(&out)
+		res.Body.Close()
+		return res.StatusCode, out
+	}
+
+	// profile: language change (the reported bug)
+	code, out := put("/api/auth/profile", map[string]any{"language": "en"}, true)
+	if code != 200 {
+		t.Fatalf("profile language change must 200, got %d: %v", code, out)
+	}
+	u, _ := out["user"].(map[string]any)
+	if u == nil || u["language"] != "en" || out["ok"] != true {
+		t.Fatalf("profile must return ok + updated user: %v", out)
+	}
+
+	// profile: invalid language rejected with 422 + issues
+	code, _ = put("/api/auth/profile", map[string]any{"language": "fr"}, true)
+	if code != 422 {
+		t.Fatalf("invalid language must 422, got %d", code)
+	}
+
+	// profile: empty display_name becomes null
+	code, out = put("/api/auth/profile", map[string]any{"display_name": ""}, true)
+	if code != 200 {
+		t.Fatalf("empty display_name must 200, got %d", code)
+	}
+	u, _ = out["user"].(map[string]any)
+	if _, present := u["display_name"]; !present {
+		t.Fatalf("display_name key must be present (null)")
+	}
+
+	// password: wrong current -> 400 AUTH_WRONG_CURRENT_PASSWORD
+	code, _ = put("/api/auth/password", map[string]string{"current": "nope", "next": "newpassword-10"}, true)
+	if code != 400 {
+		t.Fatalf("wrong current must 400, got %d", code)
+	}
+
+	// password: correct current -> ok, then re-login with the new one
+	code, _ = put("/api/auth/password", map[string]string{"current": adminPassword, "next": "newpassword-10"}, true)
+	if code != 200 {
+		t.Fatalf("password change must 200, got %d", code)
+	}
+	res, _ = postJSON(t, ts.URL+"/api/auth/login",
+		map[string]string{"username": adminUser, "password": "newpassword-10"}, nil)
+	if res.StatusCode != 200 {
+		t.Fatalf("login with new password must 200, got %d", res.StatusCode)
+	}
+}
+
 func TestLoginLockoutEndToEnd(t *testing.T) {
 	ts, _, _, _ := boot(t)
 	for i := 0; i < 5; i++ {
