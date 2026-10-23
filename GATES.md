@@ -1,11 +1,11 @@
-# Gates: deltos go-port phase 5 (NLP + full recurrence + digest)
+# Gates: deltos go-port phase 6 (push + demo + backup + update + recover)
 
 OWNS: server-go/**
 
-Scope: port the natural-language task parser, the complete adaptive recurrence engine and the daily due digest to Go, unlock POST /api/tasks/parse and GET /api/tasks/recurring, with tests replicating the TypeScript engine behavior case by case and CI green.
+Scope: port the external boundaries and ops to Go (Web Push with VAPID, i18n, quiet hours and queue; demo seed and login; backup run/restore; self-update status/progress/apply; recover admin localhost-only) and connect the digest delivery, with tests and CI green.
 
-- [ ] G1: phase-5 router registers exactly the TypeScript route set (minus deferred)
-  CHECK: node /home/nacho/temp/opencode-work/deltos-fase5/scripts/verify-routes.mjs
+- [ ] G1: router achieves full route parity with the TypeScript server (nothing deferred)
+  CHECK: node /home/nacho/temp/opencode-work/deltos-fase6/scripts/verify-routes.mjs
   EXPECT: routes verification passed
   EVIDENCE: pending
 
@@ -21,32 +21,44 @@ Scope: port the natural-language task parser, the complete adaptive recurrence e
   EXPECT: LINT_OK
   EVIDENCE: pending
 
-- [ ] G4: NLP parser extracts due dates and recurrence from Spanish and English text (table tests from the Node cases)
-  CHECK: go test ./internal/nlp -race -count=1 -v && echo NLP_OK
+- [ ] G4: push subscribe/unsubscribe, send with test VAPID keys, quiet-hours queue consolidation and 404/410 purge
+  CHECK: go test ./internal/push -race -count=1 -v && echo PUSH_OK
   CWD: server-go
-  EXPECT: NLP_OK
+  EXPECT: PUSH_OK
   EVIDENCE: pending
 
-- [ ] G5: recurrence engine matches the TypeScript for monthly/yearly/weekly/weekdays, end-of-month and adaptive-by-median cases
-  CHECK: go test ./internal/recurrence -race -count=1 -v && echo RECURRENCE_OK
+- [ ] G5: push routes (prefs, quiet hours, test push, vapid public key) behave like the Node
+  CHECK: go test ./internal/api -run TestPushRoutes -race -count=1 -v && echo PUSHROUTES_OK
   CWD: server-go
-  EXPECT: RECURRENCE_OK
+  EXPECT: PUSHROUTES_OK
   EVIDENCE: pending
 
-- [ ] G6: GET /api/tasks/recurring returns the listing with next occurrence and pause state like the Node
-  CHECK: go test ./internal/api -run TestRecurringListing -race -count=1 -v && echo RECURRING_OK
+- [ ] G6: demo seed is idempotent, demo login works and demo sessions are read-only
+  CHECK: go test ./internal/api -run TestDemo -race -count=1 -v && echo DEMO_OK
   CWD: server-go
-  EXPECT: RECURRING_OK
+  EXPECT: DEMO_OK
   EVIDENCE: pending
 
-- [ ] G7: digest due-tomorrow/today/overdue calculation matches the Node
-  CHECK: go test ./internal/digest -race -count=1 -v && echo DIGEST_OK
+- [ ] G7: backup creates a dump and restores into a clean database with the same schema and row counts
+  CHECK: go test ./internal/backup -race -count=1 -v && echo BACKUP_OK
   CWD: server-go
-  EXPECT: DIGEST_OK
+  EXPECT: BACKUP_OK
   EVIDENCE: pending
 
-- [ ] G8: binary smoke: parse natural text -> create recurring task -> recurring listing shows next occurrence
-  CHECK: go test ./internal/integration -run TestPhase5Smoke -race -count=1 -v && echo SMOKE5_OK
+- [ ] G8: update status against a fake GitHub API, progress file read and apply flag written with admin audit
+  CHECK: go test ./internal/api -run TestUpdate -race -count=1 -v && echo UPDATE_OK
   CWD: server-go
-  EXPECT: SMOKE5_OK
+  EXPECT: UPDATE_OK
+  EVIDENCE: pending
+
+- [ ] G9: recover admin endpoint works from localhost only and resets admin passwords
+  CHECK: go test ./internal/api -run TestRecover -race -count=1 -v && echo RECOVER_OK
+  CWD: server-go
+  EXPECT: RECOVER_OK
+  EVIDENCE: pending
+
+- [ ] G10: binary smoke: demo login, push prefs saved, backup run via endpoint, digest delivery wired to real push
+  CHECK: go test ./internal/integration -run TestPhase6Smoke -race -count=1 -v && echo SMOKE6_OK
+  CWD: server-go
+  EXPECT: SMOKE6_OK
   EVIDENCE: pending
