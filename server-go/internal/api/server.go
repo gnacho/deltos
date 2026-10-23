@@ -25,8 +25,10 @@ import (
 	"github.com/gnacho/deltos/server-go/internal/idempotency"
 	"github.com/gnacho/deltos/server-go/internal/ids"
 	"github.com/gnacho/deltos/server-go/internal/logger"
+	"github.com/gnacho/deltos/server-go/internal/push"
 	"github.com/gnacho/deltos/server-go/internal/ratelimit"
 	"github.com/gnacho/deltos/server-go/internal/sse"
+	"github.com/gnacho/deltos/server-go/internal/update"
 )
 
 var log = logger.L().Child(map[string]any{"component": "api"})
@@ -39,9 +41,12 @@ type Config struct {
 	MaxSSEClients int
 	StaticDir     string
 	UploadsDir    string
+	DataDir       string
 	Version       string
 	Build         string
 	TrustedProxy  string
+	Push          *push.Service
+	Update        update.Config
 }
 
 // Server is the HTTP application (equivalent of createApp context).
@@ -51,6 +56,7 @@ type Server struct {
 	Demo           *db.DB
 	Cfg            Config
 	Hub            *sse.Hub
+	Push           *push.Service
 	UploadsDir     string
 	MaxUploadBytes int64
 	started        time.Time
@@ -73,6 +79,7 @@ func New(a *auth.Service, prod, demo *db.DB, cfg Config) *Server {
 		Demo:           demo,
 		Cfg:            cfg,
 		Hub:            sse.NewHub(maxSSE),
+		Push:           cfg.Push,
 		UploadsDir:     uploadsDir,
 		MaxUploadBytes: int64(cfg.MaxUploadMB) * 1024 * 1024,
 		started:        time.Now(),
@@ -164,8 +171,13 @@ func New(a *auth.Service, prod, demo *db.DB, cfg Config) *Server {
 		ar.MethodFunc(http.MethodPost, "/api/auth/logout", s.handleLogout)
 		ar.MethodFunc(http.MethodGet, "/api/auth/me", s.handleMe)
 		ar.MethodFunc(http.MethodPost, "/api/auth/register", s.handleRegister)
+		ar.MethodFunc(http.MethodPost, "/api/auth/demo", s.handleDemoLogin)
+		ar.MethodFunc(http.MethodPost, "/api/auth/recover", s.handleRecover)
 		ar.MethodFunc(http.MethodGet, "/api/version", s.handleVersion)
 		ar.MethodFunc(http.MethodGet, "/api/events", s.handleEvents)
+
+		// --- Self-update (admin) ---
+		s.registerUpdateRoutes(&ar)
 
 		// --- Phase 2 domain routes ---
 		s.registerDomainRoutes(&ar)
@@ -179,6 +191,9 @@ func New(a *auth.Service, prod, demo *db.DB, cfg Config) *Server {
 		// --- Phase 4: decisions + gamification ---
 		s.registerDecisionRoutes(&ar)
 		s.registerGamificationRoutes(&ar)
+
+		// --- Phase 6: Web Push ---
+		s.registerPushRoutes(&ar)
 	})
 
 	// Unmatched /api routes are 404 NOT_FOUND (never the SPA fallback).

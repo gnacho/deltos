@@ -205,6 +205,11 @@ func getUserPublic(d *db.DB, where string, args ...any) (*User, error) {
 	return scanUser(row)
 }
 
+// GetUserByUsername loads the public user shape by username (nil when absent).
+func GetUserByUsername(d *db.DB, username string) (*User, error) {
+	return getUserPublic(d, "WHERE username = ?", username)
+}
+
 func scanUser(row *sql.Row) (*User, error) {
 	var u User
 	var displayName, email, phone sql.NullString
@@ -233,9 +238,10 @@ func scanUser(row *sql.Row) (*User, error) {
 
 // Public paths under /api (everything else requires a session).
 var publicPaths = map[string]bool{
-	"/api/auth/login":  true,
-	"/api/auth/demo":   true,
-	"/api/auth/logout": true,
+	"/api/auth/login":   true,
+	"/api/auth/demo":    true,
+	"/api/auth/logout":  true,
+	"/api/auth/recover": true,
 }
 
 // IsPublicPath mirrors the isPublic check of requireAuth.

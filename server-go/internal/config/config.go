@@ -24,7 +24,9 @@ type Config struct {
 	MaxUploadMB     int
 	VAPIDPublicKey  string
 	VAPIDPrivateKey string
-	VAPIDSubject    string
+	// VAPIDSubject MUST be a mailto: URI (e.g. mailto:admin@example.com): an
+	// https://localhost subject breaks Safari with BadJwtToken.
+	VAPIDSubject string
 }
 
 // placeholderMarkers are rejected in secrets: they mean someone kept a value

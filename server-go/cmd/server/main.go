@@ -19,8 +19,11 @@ import (
 	"github.com/gnacho/deltos/server-go/internal/auth"
 	"github.com/gnacho/deltos/server-go/internal/config"
 	"github.com/gnacho/deltos/server-go/internal/db"
+	demopkg "github.com/gnacho/deltos/server-go/internal/demo"
 	"github.com/gnacho/deltos/server-go/internal/digest"
 	"github.com/gnacho/deltos/server-go/internal/logger"
+	"github.com/gnacho/deltos/server-go/internal/push"
+	"github.com/gnacho/deltos/server-go/internal/update"
 	"github.com/gnacho/deltos/server-go/internal/version"
 )
 
@@ -76,6 +79,12 @@ func run() error {
 	if _, err := demo.EnsureInbox(); err != nil {
 		return err
 	}
+	// Demo seed (idempotent: only when the demo DB is empty).
+	demopkg.SeedDemo(demo, filepath.Join(cfg.DataDir, "uploads"))
+
+	// Web Push: active only when the 3 VAPID values are present (otherwise the
+	// app boots fine and push stays dormant, see internal/push).
+	pushSvc := push.New(cfg.VAPIDPublicKey, cfg.VAPIDPrivateKey, cfg.VAPIDSubject)
 
 	// Auto-archive tasks/expenses done more than N days ago (boot + hourly).
 	for _, d := range []*db.DB{prod, demo} {
@@ -99,21 +108,26 @@ func run() error {
 		MaxSSEClients: cfg.MaxSSEClients,
 		StaticDir:     cfg.StaticDir,
 		UploadsDir:    filepath.Join(cfg.DataDir, "uploads"),
+		DataDir:       cfg.DataDir,
 		Version:       version.Version,
 		Build:         build,
 		TrustedProxy:  cfg.TrustedProxy,
+		Push:          pushSvc,
+		Update:        update.DefaultConfig(),
 	})
 
-	// Daily due digest at 09:00 local (Europe/Madrid). Delivery is a no-op
-	// until phase 6 wires the Web Push sender (server/src/push.ts notifyUsers);
-	// the timer cadence mirrors scheduleDigestVencimiento in the Node server.
-	// TODO(phase-6): replace this no-op logger with the real push sender.
-	noopDelivery := digest.DeliveryFunc(func(userID string, counts digest.Counts, opts digest.Options) error {
-		log.Info("digest_delivery_noop", "user_id", userID,
-			"vencidas", counts.Vencidas, "hoy", counts.Hoy, "pronto", counts.Pronto)
+	// Daily due digest at 09:00 local (Europe/Madrid), delivered through the
+	// Web Push sender (server/src/push.ts notifyUsers).
+	delivery := digest.DeliveryFunc(func(userID string, counts digest.Counts, opts digest.Options) error {
+		pushSvc.NotifyUsers(prod, []string{userID}, "vencimiento", map[string]any{
+			"vencidas": counts.Vencidas,
+			"hoy":      counts.Hoy,
+			"pronto":   counts.Pronto,
+			"total":    counts.Total,
+		}, push.Options{Demo: opts.Demo, Severity: push.Severity(opts.Severity), URL: opts.URL})
 		return nil
 	})
-	digest.ScheduleDigestVencimiento(prod, noopDelivery, false)
+	digest.ScheduleDigestVencimiento(prod, delivery, false)
 
 	httpServer := &http.Server{
 		Addr:              ":" + strconv.Itoa(cfg.Port),
@@ -152,6 +166,9 @@ func run() error {
 				if _, err := demo.ArchiveStaleDoneExpenses(); err != nil {
 					log.Error("hourly_maintenance_failed", "error", err.Error())
 				}
+				// Consolidate the quiet-hours notification queue (one summary per
+				// user+tipo) now that the window may have ended.
+				pushSvc.FlushNotificationQueue(prod, false)
 			case <-stop:
 				return
 			}

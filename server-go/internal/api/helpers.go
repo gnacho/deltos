@@ -15,6 +15,7 @@ import (
 	"github.com/gnacho/deltos/server-go/internal/db"
 	"github.com/gnacho/deltos/server-go/internal/errors"
 	"github.com/gnacho/deltos/server-go/internal/ids"
+	"github.com/gnacho/deltos/server-go/internal/push"
 	"github.com/gnacho/deltos/server-go/internal/recurrence"
 )
 
@@ -310,6 +311,34 @@ func auditLog(q querier, actorID, action, targetType string, targetID any, data 
 
 func nowMs() int64 {
 	return time.Now().UnixMilli()
+}
+
+// usernameOf resolves a user's username ("" when unknown).
+func usernameOf(q querier, userID string) string {
+	var u string
+	if err := q.QueryRow("SELECT username FROM users WHERE id = ?", userID).Scan(&u); err != nil {
+		return ""
+	}
+	return u
+}
+
+// fireNotify sends a fire-and-forget push notification (never blocks the HTTP
+// response). Dormant when push is not configured, matching notifyUsers' omit.
+func (s *Server) fireNotify(d *db.DB, demo bool, userIDs []string, tipo string, datos push.Datos, opts push.Options) {
+	if s.Push == nil || !s.Push.Configured() {
+		return
+	}
+	opts.Demo = demo
+	go s.Push.NotifyUsers(d, userIDs, tipo, datos, opts)
+}
+
+// notifyInterested notifies a task's interested parties (assignee + creator)
+// except the actor (used for tarea_movida / comentario).
+func (s *Server) notifyInterested(d *db.DB, demo bool, task *taskRow, actorID, tipo string, datos push.Datos, opts push.Options) {
+	if s.Push == nil {
+		return
+	}
+	s.Push.NotifyInterested(d, demo, push.TaskRef{AssigneeID: nstr(task.AssigneeID), CreatedBy: nstr(task.CreatedBy)}, actorID, tipo, datos, opts)
 }
 
 // --- task labels ----------------------------------------------------------------
