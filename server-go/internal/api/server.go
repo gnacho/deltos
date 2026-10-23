@@ -139,12 +139,17 @@ func New(a *auth.Service, prod, demo *db.DB, cfg Config) *Server {
 	})
 
 	// Unmatched /api routes are 404 NOT_FOUND (never the SPA fallback).
+	// Static files that exist on disk are served FIRST (this handler is the
+	// only no-match path: there is no serveStatic middleware before it).
 	r.NotFound(func(w http.ResponseWriter, req *http.Request) {
+		if s.serveStaticFile(w, req) {
+			return
+		}
 		if strings.HasPrefix(req.URL.Path, "/api/") || strings.HasPrefix(req.URL.Path, "/assets/") {
 			errors.Write(w, errors.New(http.StatusNotFound, errors.NotFound))
 			return
 		}
-		s.serveSPA(w, req)
+		s.serveIndex(w, req)
 	})
 
 	// Health (outside /api, same as the Node server).
@@ -412,29 +417,40 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 
 // --- Statics + SPA fallback ---------------------------------------------------
 
-func (s *Server) serveSPA(w http.ResponseWriter, r *http.Request) {
+// serveStaticFile serves a file from STATIC_DIR when it exists on disk.
+// Returns false when the path has no file (caller decides 404 vs index).
+func (s *Server) serveStaticFile(w http.ResponseWriter, r *http.Request) bool {
 	p := r.URL.Path
-	if strings.HasPrefix(p, "/assets/") {
-		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-	} else if p == "/sw.js" || strings.HasSuffix(p, ".html") || p == "/" {
-		w.Header().Set("Cache-Control", "no-cache")
+	if strings.Contains(p, "\x00") {
+		return false
 	}
 	full := filepath.Join(s.Cfg.StaticDir, filepath.Clean("/"+p))
-	if info, err := os.Stat(full); err == nil && !info.IsDir() {
-		http.ServeFile(w, r, full)
-		return
+	info, err := os.Stat(full)
+	if err != nil || info.IsDir() {
+		return false
 	}
-	// index.html is read on EVERY request (deploys by rsync without restart).
+	switch {
+	case strings.HasPrefix(p, "/assets/"):
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	case p == "/sw.js":
+		w.Header().Set("Cache-Control", "no-cache")
+	}
+	http.ServeFile(w, r, full)
+	return true
+}
+
+// serveIndex answers with index.html, read on EVERY request (deploys by
+// rsync without restart), or with the fallback page when app/dist is absent.
+func (s *Server) serveIndex(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Cache-Control", "no-cache")
 	html, err := os.ReadFile(filepath.Join(s.Cfg.StaticDir, "index.html"))
 	if err != nil {
-		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_, _ = w.Write([]byte("<!doctype html><html lang=\"es\"><meta charset=\"utf-8\"><title>Deltos</title>" +
 			"<body><h1>Deltos - API</h1><p>El frontend a&uacute;n no est&aacute; compilado (app/dist). " +
 			"La API responde en /api/* y /health.</p></body></html>"))
 		return
 	}
-	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = w.Write(html)
 }

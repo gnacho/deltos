@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -24,7 +25,7 @@ const (
 	adminPassword = "supersecretpass"
 )
 
-func boot(t *testing.T) (*httptest.Server, *auth.Service, *db.DB) {
+func boot(t *testing.T) (*httptest.Server, *auth.Service, *db.DB, string) {
 	t.Helper()
 	dir := t.TempDir()
 	prod, err := db.Open(filepath.Join(dir, "app.db"))
@@ -72,7 +73,7 @@ func boot(t *testing.T) (*httptest.Server, *auth.Service, *db.DB) {
 	})
 	ts := httptest.NewServer(srv)
 	t.Cleanup(ts.Close)
-	return ts, svc, prod
+	return ts, svc, prod, dir
 }
 
 func postJSON(t *testing.T, url string, body any, headers map[string]string) (*http.Response, map[string]any) {
@@ -102,7 +103,7 @@ func postJSON(t *testing.T, url string, body any, headers map[string]string) (*h
 }
 
 func TestLoginRoundTrip(t *testing.T) {
-	ts, _, _ := boot(t)
+	ts, _, _, _ := boot(t)
 	client := &http.Client{Timeout: 10 * time.Second}
 
 	// 1. Health.
@@ -257,8 +258,60 @@ func TestLoginRoundTrip(t *testing.T) {
 	}
 }
 
+func TestStaticAssetsServedAndMissing404(t *testing.T) {
+	ts, _, _, dir := boot(t)
+
+	// The boot temp dir is the STATIC_DIR: create the asset on disk.
+	if err := os.MkdirAll(filepath.Join(dir, "assets"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "assets", "index-CvfNCXj_.js"), []byte("console.log('x')"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Existing file under /assets must be served (the blank-screen bug: the
+	// NotFound handler used to reject /assets/* before looking at disk).
+	res, err := http.Get(ts.URL + "/assets/index-CvfNCXj_.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != 200 {
+		t.Fatalf("existing asset must 200, got %d", res.StatusCode)
+	}
+	if cc := res.Header.Get("Cache-Control"); !strings.Contains(cc, "immutable") {
+		t.Fatalf("assets must be immutable, got %q", cc)
+	}
+
+	// Missing asset: 404 with the envelope (not an HTML page).
+	res, err = http.Get(ts.URL + "/assets/nope.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var body map[string]any
+	_ = json.NewDecoder(res.Body).Decode(&body)
+	res.Body.Close()
+	if res.StatusCode != 404 {
+		t.Fatalf("missing asset must 404, got %d", res.StatusCode)
+	}
+	if e, _ := body["error"].(map[string]any); e == nil || e["code"] != "NOT_FOUND" {
+		t.Fatalf("envelope must carry NOT_FOUND: %v", body)
+	}
+
+	// SPA fallback for a client route serves index.html.
+	res, err = http.Get(ts.URL + "/tasks")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ct := res.Header.Get("Content-Type")
+	res.Body.Close()
+	if res.StatusCode != 200 || !strings.Contains(ct, "text/html") {
+		t.Fatalf("SPA fallback must serve html, got %d %q", res.StatusCode, ct)
+	}
+}
+
 func TestLoginLockoutEndToEnd(t *testing.T) {
-	ts, _, _ := boot(t)
+	ts, _, _, _ := boot(t)
 	for i := 0; i < 5; i++ {
 		res, _ := postJSON(t, ts.URL+"/api/auth/login",
 			map[string]string{"username": adminUser, "password": "wrong"}, nil)
@@ -279,7 +332,7 @@ func TestLoginLockoutEndToEnd(t *testing.T) {
 }
 
 func TestVersionAndNotFound(t *testing.T) {
-	ts, _, _ := boot(t)
+	ts, _, _, _ := boot(t)
 
 	// Without a session /api/version is 401 (it lives behind requireAuth,
 	// same as app.ts in the Node server).
