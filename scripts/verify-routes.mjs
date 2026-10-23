@@ -1,0 +1,71 @@
+// Verify the Go router registers exactly the phase-2 route set of the
+// TypeScript server (canonical list from routes-domain.ts + routes-ha.ts,
+// minus the routes explicitly deferred to later phases).
+import { readFileSync } from 'node:fs';
+
+const root = '/home/nacho/temp/opencode-work/deltos-fase2';
+const tsFiles = [
+  `${root}/server/src/routes-domain.ts`,
+  `${root}/server/src/routes-ha.ts`,
+];
+const goFiles = [
+  `${root}/server-go/internal/api/domain.go`,
+  `${root}/server-go/internal/api/tasks.go`,
+  `${root}/server-go/internal/api/ha.go`,
+  `${root}/server-go/internal/api/server.go`,
+];
+
+// Deferred to later phases (must NOT be in the Go set).
+const deferred = new Set([
+  '/api/tasks/parse',
+  '/api/tasks/recurring', // GET listado adaptativo (fase 5)
+  '/api/settings/backup/run',
+  '/api/trash/expense/:id/restore',
+  '/api/trash/expense/:id',
+  '/api/trash/expenses',
+]);
+
+// TS: hono registrations, allow multiline: app.patch(\n '/api/x'
+const tsRe = /\.(get|post|put|delete|patch)\(\s*['"`](\/api\/[^'"`\s?]+)['"`]/g;
+// Go: chi registrations registered with full /api/ paths (same prefix
+// requirement as the TS side, so stdlib calls like r.Header.Get("...") or
+// r.URL.Query().Get("...") are not treated as routes).
+const goRe = /\.(Get|Post|Put|Delete|Patch)\(\s*"(\/api\/[^"]+)"/g;
+
+function collect(text, re, lower) {
+  const set = new Set();
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    const method = lower ? m[1].toLowerCase() : m[1].toLowerCase();
+    set.add(method.toUpperCase() + ' ' + m[2]);
+  }
+  return set;
+}
+
+const tsSet = new Set();
+for (const f of tsFiles) {
+  for (const item of collect(readFileSync(f, 'utf8'), tsRe, true)) tsSet.add(item);
+}
+const goSet = new Set();
+for (const f of goFiles) {
+  try {
+    for (const item of collect(readFileSync(f, 'utf8'), goRe, false)) goSet.add(item);
+  } catch {
+    // file not present yet: counts as missing routes
+  }
+}
+
+const missingInGo = [...tsSet].filter(r => !deferred.has(r.split(' ')[1]) && !goSet.has(r));
+const unexpected = [...goSet].filter(r => !tsSet.has(r));
+
+if (missingInGo.length) {
+  console.error('FAIL: missing in Go:');
+  for (const r of missingInGo.sort()) console.error('  ' + r);
+  process.exit(1);
+}
+if (unexpected.length) {
+  console.error('FAIL: registered in Go but not in TS:');
+  for (const r of unexpected.sort()) console.error('  ' + r);
+  process.exit(1);
+}
+console.log(`routes verification passed (${tsSet.size - [...tsSet].filter(r => deferred.has(r.split(' ')[1])).length} routes in phase-2 scope)`);
