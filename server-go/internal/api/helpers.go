@@ -592,7 +592,7 @@ func queryMaps(q querier, query string, args ...any) []map[string]any {
 	if err != nil {
 		return nil
 	}
-	var out []map[string]any
+	out := []map[string]any{}
 	for rows.Next() {
 		vals := make([]any, len(cols))
 		ptrs := make([]any, len(cols))

@@ -51,6 +51,9 @@ func (s *Server) registerDomainRoutes(r *rtr) {
 	r.Post("/api/trash/:id/restore", s.handleTrashRestore)
 	r.Delete("/api/trash/:id", s.handleTrashDelete)
 	r.Delete("/api/trash", s.handleTrashEmpty)
+	r.Post("/api/trash/expense/:id/restore", s.handleExpenseTrashRestore)
+	r.Delete("/api/trash/expense/:id", s.handleExpenseTrashDelete)
+	r.Delete("/api/trash/expenses", s.handleExpenseTrashEmpty)
 }
 
 // --- validation helpers -------------------------------------------------------
@@ -1426,5 +1429,52 @@ func (s *Server) handleTrashEmpty(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.Hub.Broadcast("tasks")
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// --- expense trash (mirrors routes-domain.ts trash handlers) -------------------
+
+func (s *Server) handleExpenseTrashRestore(w http.ResponseWriter, r *http.Request) {
+	d := auth.DBFrom(r)
+	id := param(r, "id")
+	var step string
+	if err := d.QueryRow("SELECT step FROM expenses WHERE id = ? AND deleted_at IS NOT NULL", id).Scan(&step); err != nil {
+		// The Node reuses TASK_NOT_FOUND here (not EXPENSE_NOT_FOUND).
+		errors.Write(w, errors.New(http.StatusNotFound, errors.TaskNotFound))
+		return
+	}
+	var pos int64
+	_ = d.QueryRow("SELECT COALESCE(MAX(position) + 1, 0) FROM expenses WHERE step = ? AND deleted_at IS NULL", step).Scan(&pos)
+	if _, err := d.Exec("UPDATE expenses SET deleted_at = NULL, position = ?, updated_at = ? WHERE id = ?", pos, nowMs(), id); err != nil {
+		internalErr(w)
+		return
+	}
+	s.Hub.Broadcast("expenses")
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (s *Server) handleExpenseTrashDelete(w http.ResponseWriter, r *http.Request) {
+	d := auth.DBFrom(r)
+	id := param(r, "id")
+	var exists string
+	if err := d.QueryRow("SELECT id FROM expenses WHERE id = ? AND deleted_at IS NOT NULL", id).Scan(&exists); err != nil {
+		errors.Write(w, errors.New(http.StatusNotFound, errors.TaskNotFound))
+		return
+	}
+	if _, err := d.Exec("DELETE FROM expenses WHERE id = ?", id); err != nil {
+		internalErr(w)
+		return
+	}
+	s.Hub.Broadcast("expenses")
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleExpenseTrashEmpty(w http.ResponseWriter, r *http.Request) {
+	d := auth.DBFrom(r)
+	if _, err := d.Exec("DELETE FROM expenses WHERE deleted_at IS NOT NULL"); err != nil {
+		internalErr(w)
+		return
+	}
+	s.Hub.Broadcast("expenses")
 	w.WriteHeader(http.StatusNoContent)
 }
