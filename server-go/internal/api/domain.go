@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gnacho/deltos/server-go/internal/auth"
+	"github.com/gnacho/deltos/server-go/internal/backup"
 	"github.com/gnacho/deltos/server-go/internal/errors"
 	"github.com/gnacho/deltos/server-go/internal/ids"
 	"github.com/gnacho/deltos/server-go/internal/keyset"
@@ -42,6 +43,7 @@ func (s *Server) registerDomainRoutes(r *rtr) {
 	r.Put("/api/settings/demo", s.handleSettingsDemoPut)
 	r.Get("/api/settings/server", s.handleSettingsServerGet)
 	r.Put("/api/settings/server", s.handleSettingsServerPut)
+	r.Post("/api/settings/backup/run", s.handleSettingsBackupRun)
 
 	r.Get("/api/admin/audit", s.handleAdminAudit)
 	r.Get("/api/search", s.handleSearch)
@@ -1055,6 +1057,24 @@ func bool01(b bool) string {
 		return "1"
 	}
 	return "0"
+}
+
+// handleSettingsBackupRun executes a manual backup (admin, prod only) and
+// reports the result.
+func (s *Server) handleSettingsBackupRun(w http.ResponseWriter, r *http.Request) {
+	if !requireAdmin(w, r) {
+		return
+	}
+	if auth.DemoFrom(r) {
+		errors.Write(w, errors.New(http.StatusForbidden, errors.SettingsProdOnly))
+		return
+	}
+	result := backup.ExecBackup(s.Prod, s.Cfg.DataDir)
+	if !result.OK {
+		errors.Write(w, errors.New(http.StatusInternalServerError, errors.SettingsBackupFail))
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "path": result.Path, "size": result.Size})
 }
 
 func isBackupTimerActive() bool {

@@ -11,11 +11,13 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strings"
 
 	"github.com/gnacho/deltos/server-go/internal/auth"
 	"github.com/gnacho/deltos/server-go/internal/errors"
 	"github.com/gnacho/deltos/server-go/internal/ids"
 	"github.com/gnacho/deltos/server-go/internal/nlp"
+	"github.com/gnacho/deltos/server-go/internal/push"
 	"github.com/gnacho/deltos/server-go/internal/recurrence"
 )
 
@@ -223,6 +225,11 @@ func (s *Server) handleTaskCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.Hub.Broadcast("tasks")
+	// asignacion push: a new task with an assignee notifies that assignee.
+	if body.AssigneeID != nil && *body.AssigneeID != "" && *body.AssigneeID != user.ID {
+		s.fireNotify(d, auth.DemoFrom(r), []string{*body.AssigneeID}, "asignacion",
+			push.Datos{"usuario": user.Username, "titulo": body.Title}, push.Options{})
+	}
 	w.Header().Set("Location", "/api/tasks/"+id)
 	list := hydrateTasks(d, "t.id = ?", id)
 	if len(list) == 0 {
@@ -416,6 +423,11 @@ func (s *Server) handleTaskPatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.Hub.Broadcast("tasks")
+	// asignacion push: reassignment notifies the new assignee.
+	if assigneeSet && assigneeVal != nil && !strPtrEq(assigneeVal, task.AssigneeID) && *assigneeVal != user.ID {
+		s.fireNotify(d, auth.DemoFrom(r), []string{*assigneeVal}, "asignacion",
+			push.Datos{"usuario": user.Username, "titulo": task.Title}, push.Options{})
+	}
 	list := hydrateTasks(d, "t.id = ?", task.ID)
 	if len(list) == 0 {
 		internalErr(w)
@@ -621,6 +633,9 @@ func (s *Server) handleTaskMove(w http.ResponseWriter, r *http.Request) {
 		s.Hub.Broadcast("gamification")
 	}
 	s.Hub.Broadcast("tasks")
+	// tarea_movida push to interested parties (assignee + creator) minus actor.
+	s.notifyInterested(d, auth.DemoFrom(r), task, user.ID, "tarea_movida",
+		push.Datos{"usuario": user.Username, "titulo": task.Title, "columna": toCol}, push.Options{})
 	list := hydrateTasks(d, "t.id = ?", task.ID)
 	if len(list) == 0 {
 		internalErr(w)
@@ -1200,6 +1215,14 @@ func (s *Server) handleCommentCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.Hub.Broadcast("comments")
+	// comentario push to interested parties + @menciones to cited users.
+	s.notifyInterested(d, auth.DemoFrom(r), task, user.ID, "comentario",
+		push.Datos{"usuario": user.Username, "titulo": task.Title}, push.Options{})
+	mencionados := extraerMenciones(d, body.Body, user.ID)
+	if len(mencionados) > 0 {
+		s.fireNotify(d, auth.DemoFrom(r), mencionados, "mencion",
+			push.Datos{"usuario": user.Username, "titulo": task.Title}, push.Options{})
+	}
 	w.Header().Set("Location", "/api/tasks/"+task.ID)
 	writeJSON(w, http.StatusCreated, map[string]any{
 		"comment": map[string]any{
@@ -1649,4 +1672,46 @@ func (s *Server) handleTaskRecurring(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"series": result})
+}
+
+// extraerMenciones extracts @username mentions from a comment body and resolves
+// them to existing user ids (case-insensitive), excluding the actor. Ports
+// extraerMenciones in routes-domain.ts.
+var mentionRe = regexp.MustCompile(`@([A-Za-z0-9_]+)`)
+
+func extraerMenciones(q querier, text, actorID string) []string {
+	matches := mentionRe.FindAllStringSubmatch(text, -1)
+	seen := map[string]bool{}
+	var nicks []string
+	for _, m := range matches {
+		nick := strings.ToLower(m[1])
+		if !seen[nick] {
+			seen[nick] = true
+			nicks = append(nicks, nick)
+		}
+	}
+	if len(nicks) == 0 {
+		return nil
+	}
+	ph := strings.Repeat("?,", len(nicks))
+	ph = ph[:len(ph)-1]
+	args := make([]any, len(nicks))
+	for i, n := range nicks {
+		args[i] = n
+	}
+	rows, err := q.Query("SELECT id FROM users WHERE LOWER(username) IN ("+ph+")", args...)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out []string
+	outSeen := map[string]bool{}
+	for rows.Next() {
+		var id string
+		if rows.Scan(&id) == nil && id != actorID && !outSeen[id] {
+			outSeen[id] = true
+			out = append(out, id)
+		}
+	}
+	return out
 }
