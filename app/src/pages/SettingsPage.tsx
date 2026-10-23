@@ -4,6 +4,7 @@ import * as React from 'react';
 import { Link } from 'react-router';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
+import { LanguageSelect, type LanguageValue } from '../components/LanguageSelect';
 import {
   User,
   Sun,
@@ -11,7 +12,6 @@ import {
   Monitor,
   Download,
   KeyRound,
-  Languages,
   LogOut,
   Check,
   X,
@@ -282,19 +282,11 @@ function MiPerfilCard() {
           )}
 
           {/* Idioma — icono en móvil, select completo en desktop */}
-          <label htmlFor="mp-lang" className="sm:hidden inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-app text-faint cursor-pointer hover:bg-surface hover:text-text-primary" title={t('settings.language')}>
-            <Languages className="h-4 w-4" />
-          </label>
-          <select
-            id="mp-lang"
-            value={user.language ?? 'auto'}
-            onChange={(e) => void changeLanguage(e.target.value as Language)}
-            className="hidden sm:inline h-9 w-[120px] shrink-0 rounded-lg border border-app bg-elevated px-2 text-[13px] text-text-primary outline-none focus:border-brand"
-          >
-            <option value="auto">🌐 {t('settings.langAuto')}</option>
-            <option value="es">🇪🇸 Español</option>
-            <option value="en">🇺🇸 English</option>
-          </select>
+          <LanguageSelect
+            value={(user.language ?? 'auto') as LanguageValue}
+            onChange={(l) => void changeLanguage(l)}
+            ariaLabel={t('settings.language')}
+          />
 
           {/* Contraseña */}
           {!demo && (

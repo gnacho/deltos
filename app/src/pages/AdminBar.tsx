@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { LanguageSelect, type LanguageValue } from '../components/LanguageSelect';
 import {
   Archive,
   ChevronDown,
@@ -508,16 +509,13 @@ function UsersPanel() {
                   {u.role === 'admin' ? t('settings.users.roleAdmin') : t('settings.users.roleUser')}
                 </p>
               </div>
-              <select
-                aria-label={t('settings.users.language')}
-                value={u.language ?? 'auto'}
-                onChange={(e) => void changeLanguage(u.id, e.target.value)}
-                className={selectCls}
-              >
-                <option value="auto">🌐 Auto</option>
-                <option value="es">🇪🇸 Español</option>
-                <option value="en">🇺🇸 English</option>
-              </select>
+              <LanguageSelect
+                value={(u.language ?? 'auto') as LanguageValue}
+                onChange={(l) => void changeLanguage(u.id, l)}
+                ariaLabel={t('settings.users.language')}
+                buttonClassName={selectCls}
+                align="right"
+              />
               {u.id !== me.id && (
                 <>
                   <select
@@ -623,11 +621,7 @@ function UsersPanel() {
               placeholder={t('settings.users.password')}
               className="h-10 rounded-lg border border-app bg-surface px-3 text-[14px] outline-none focus:border-brand"
             />
-            <select value={language} onChange={(e) => setLanguage(e.target.value)} className={selectCls}>
-              <option value="auto">🌐 Auto</option>
-              <option value="es">🇪🇸 Español</option>
-              <option value="en">🇺🇸 English</option>
-            </select>
+            <LanguageSelect value={language as LanguageValue} onChange={setLanguage} buttonClassName={selectCls} />
             <select value={role} onChange={(e) => setRole(e.target.value as 'user' | 'admin')} className={selectCls}>
               <option value="user">{t('settings.users.roleUser')}</option>
               <option value="admin">{t('settings.users.roleAdmin')}</option>
