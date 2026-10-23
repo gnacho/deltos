@@ -39,8 +39,15 @@ log() { logger -t "$APP-update" "$@"; }
 
 echo "STEP:detect"
 prog detect 5
-VER="$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" \
-  | sed -n 's/.*"tag_name": *"\(v\?[0-9][^"]*\)".*/\1/p' | head -n1)"
+# Resolver la última release por el redirect de releases/latest: no consume
+# la cuota de la API de GitHub (la IP del servidor es compartida/datacenter y
+# GitHub la rate-limita con 403 al momento, visto en el swap a v2.8.0).
+VER="$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$REPO/releases/latest" \
+  | sed -n 's|.*/tag/||p')"
+if [ -z "$VER" ] && [ -n "${GITHUB_TOKEN:-}" ]; then
+  VER="$(curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" "https://api.github.com/repos/$REPO/releases/latest" \
+    | sed -n 's/.*"tag_name": *"\(v\?[0-9][^"]*\)".*/\1/p' | head -n1)"
+fi
 [ -n "$VER" ] || { log "no se pudo resolver release latest"; exit 4; }
 VER_NO_V="$(printf '%s' "$VER" | sed 's/^v//')"
 
