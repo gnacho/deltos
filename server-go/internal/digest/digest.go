@@ -1,8 +1,8 @@
 // Package digest ports server/src/digest.ts: the daily due reminder. It groups
 // each assignee's non-done tasks into overdue / due-today / due-soon buckets
 // and delivers one 'vencimiento' digest per user per day (idempotent via a kv
-// key). Delivery goes through an injectable Delivery hook: Web Push is phase 6,
-// so cmd/server wires a no-op logger until then.
+// key). Delivery goes through an injectable Delivery hook, wired by cmd/server
+// to the Web Push sender (internal/push).
 package digest
 
 import (
@@ -37,8 +37,8 @@ type Options struct {
 	URL      string
 }
 
-// Delivery is the injectable push hook. Phase 6 replaces the no-op with the
-// Web Push sender (server/src/push.ts notifyUsers).
+// Delivery is the injectable push hook, wired by cmd/server to the Web Push
+// sender (server/src/push.ts notifyUsers).
 type Delivery interface {
 	Send(userID string, counts Counts, opts Options) error
 }
