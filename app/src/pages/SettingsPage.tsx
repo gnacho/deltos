@@ -942,7 +942,7 @@ function AboutCard({ installState, install }: { installState?: string; install?:
     'flex items-center gap-2 rounded-lg border border-app px-2.5 py-1 text-[12px] font-medium text-muted transition-colors duration-150 hover:border-brand/50 hover:text-brand';
 
   const releaseLine = `v${pkg.version} · ${LICENSE}`;
-  const runtimeLine = `Node ${serverInfo?.node ?? '—'} · React v${React.version} · ${
+  const runtimeLine = `Go ${serverInfo?.node ?? '—'} · React v${React.version} · ${
     t('settings.about.uptime')
   } ${serverInfo ? formatUptime(serverInfo.uptime) : '—'}`;
 
