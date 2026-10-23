@@ -19,6 +19,7 @@ import (
 	"github.com/gnacho/deltos/server-go/internal/auth"
 	"github.com/gnacho/deltos/server-go/internal/config"
 	"github.com/gnacho/deltos/server-go/internal/db"
+	"github.com/gnacho/deltos/server-go/internal/digest"
 	"github.com/gnacho/deltos/server-go/internal/logger"
 	"github.com/gnacho/deltos/server-go/internal/version"
 )
@@ -102,6 +103,17 @@ func run() error {
 		Build:         build,
 		TrustedProxy:  cfg.TrustedProxy,
 	})
+
+	// Daily due digest at 09:00 local (Europe/Madrid). Delivery is a no-op
+	// until phase 6 wires the Web Push sender (server/src/push.ts notifyUsers);
+	// the timer cadence mirrors scheduleDigestVencimiento in the Node server.
+	// TODO(phase-6): replace this no-op logger with the real push sender.
+	noopDelivery := digest.DeliveryFunc(func(userID string, counts digest.Counts, opts digest.Options) error {
+		log.Info("digest_delivery_noop", "user_id", userID,
+			"vencidas", counts.Vencidas, "hoy", counts.Hoy, "pronto", counts.Pronto)
+		return nil
+	})
+	digest.ScheduleDigestVencimiento(prod, noopDelivery, false)
 
 	httpServer := &http.Server{
 		Addr:              ":" + strconv.Itoa(cfg.Port),
