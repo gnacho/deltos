@@ -23,6 +23,7 @@ import (
 	"github.com/gnacho/deltos/server-go/internal/auth"
 	"github.com/gnacho/deltos/server-go/internal/errors"
 	"github.com/gnacho/deltos/server-go/internal/ids"
+	"github.com/gnacho/deltos/server-go/internal/push"
 )
 
 // --- JSON shapes (match the Node shapeRow / sharesFor field-for-field) --------
@@ -569,8 +570,15 @@ func (s *Server) handleExpenseSettle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.Hub.Broadcast("expenses")
-	// TODO(phase-6): notifyUsers(db, [otherId], 'pago_completado', ...) push
-	// notification (fire-and-forget in the Node; phase 3 drops it).
+	// pago_completado push to the other party (fire-and-forget, like the Node).
+	titulo := ""
+	if len(pending) == 1 {
+		titulo = pending[0].title
+	} else {
+		titulo = strconv.Itoa(len(pending)) + "×"
+	}
+	s.fireNotify(d, auth.DemoFrom(r), []string{targetID}, "pago_completado",
+		push.Datos{"usuario": usernameOf(d, user.ID), "titulo": titulo}, push.Options{URL: "/expenses"})
 
 	writeJSON(w, http.StatusOK, map[string]any{"settled": len(pending), "total_cents": total})
 }
@@ -833,8 +841,18 @@ func (s *Server) handleExpenseCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.Hub.Broadcast("expenses")
-	// TODO(phase-6): notifyUsers(db, debtors, 'pago_requerido', ...) push
-	// notification (fire-and-forget in the Node; phase 3 drops it).
+	// pago_requerido push to each debtor (all parties except payer and actor).
+	var debtors []string
+	for _, sh := range body.Shares {
+		if sh.UserID != payerID && sh.UserID != user.ID {
+			debtors = append(debtors, sh.UserID)
+		}
+	}
+	if len(debtors) > 0 {
+		s.fireNotify(d, auth.DemoFrom(r), debtors, "pago_requerido",
+			push.Datos{"usuario": usernameOf(d, user.ID), "titulo": body.Title, "importe": body.AmountCents},
+			push.Options{URL: "/expenses"})
+	}
 
 	expense, err := hydrateExpense(d, id)
 	if err != nil || expense == nil {
@@ -1089,8 +1107,11 @@ func (s *Server) handleExpenseMyShare(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.Hub.Broadcast("expenses")
-	// TODO(phase-6): notifyUsers(db, [payer], 'pago_completado', ...) push
-	// notification when the payer is not the actor (phase 3 drops it).
+	// pago_completado push to the payer when someone else marks a share paid.
+	if body.Paid && current.PayerID != user.ID {
+		s.fireNotify(d, auth.DemoFrom(r), []string{current.PayerID}, "pago_completado",
+			push.Datos{"usuario": usernameOf(d, user.ID), "titulo": current.Title}, push.Options{URL: "/expenses"})
+	}
 
 	expense, err := hydrateExpense(d, id)
 	if err != nil || expense == nil {
@@ -1403,8 +1424,31 @@ func (s *Server) handleExpenseCommentCreate(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	s.Hub.Broadcast("expenses")
-	// TODO(phase-6): notifyUsers(db, interested, 'comentario', ...) push
-	// notification (fire-and-forget in the Node; phase 3 drops it).
+	// comentario push to interested parties (creator, payer, share participants).
+	shareRows, serr := d.Query("SELECT user_id FROM expense_shares WHERE expense_id = ?", id)
+	if serr == nil {
+		var ids []string
+		seen := map[string]bool{}
+		add := func(uid string) {
+			if uid != "" && uid != user.ID && !seen[uid] {
+				seen[uid] = true
+				ids = append(ids, uid)
+			}
+		}
+		add(expense.CreatedBy)
+		add(expense.PayerID)
+		for shareRows.Next() {
+			var uid string
+			if shareRows.Scan(&uid) == nil {
+				add(uid)
+			}
+		}
+		shareRows.Close()
+		if len(ids) > 0 {
+			s.fireNotify(d, auth.DemoFrom(r), ids, "comentario",
+				push.Datos{"usuario": usernameOf(d, user.ID), "titulo": expense.Title}, push.Options{URL: "/expenses"})
+		}
+	}
 
 	w.Header().Set("Location", "/api/expenses/"+id+"/comments/"+commentID)
 	writeJSON(w, http.StatusCreated, map[string]any{"ok": true, "id": commentID})
