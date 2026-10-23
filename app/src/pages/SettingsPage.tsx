@@ -292,8 +292,8 @@ function MiPerfilCard() {
             className="hidden sm:inline h-9 w-[120px] shrink-0 rounded-lg border border-app bg-elevated px-2 text-[13px] text-text-primary outline-none focus:border-brand"
           >
             <option value="auto">🌐 {t('settings.langAuto')}</option>
-            <option value="es">ES - Español</option>
-            <option value="en">US - English</option>
+            <option value="es">🇪🇸 Español</option>
+            <option value="en">🇺🇸 English</option>
           </select>
 
           {/* Contraseña */}
