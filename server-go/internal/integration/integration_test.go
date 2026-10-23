@@ -310,6 +310,25 @@ func TestStaticAssetsServedAndMissing404(t *testing.T) {
 	}
 }
 
+func TestMethodNotAllowedMatchesHono(t *testing.T) {
+	// GET on a POST-only route: Hono answers the 404 envelope (no route
+	// match); chi would answer an empty 405. Parity requires the envelope.
+	ts, _, _, _ := boot(t)
+	res, err := http.Get(ts.URL + "/api/projects")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var body map[string]any
+	_ = json.NewDecoder(res.Body).Decode(&body)
+	res.Body.Close()
+	if res.StatusCode != 404 {
+		t.Fatalf("GET on POST-only route must be 404 (Hono parity), got %d", res.StatusCode)
+	}
+	if e, _ := body["error"].(map[string]any); e == nil || e["code"] != "NOT_FOUND" {
+		t.Fatalf("envelope must carry NOT_FOUND: %v", body)
+	}
+}
+
 func TestLoginLockoutEndToEnd(t *testing.T) {
 	ts, _, _, _ := boot(t)
 	for i := 0; i < 5; i++ {
