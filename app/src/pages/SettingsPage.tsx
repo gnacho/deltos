@@ -293,7 +293,7 @@ function MiPerfilCard() {
           >
             <option value="auto">🌐 {t('settings.langAuto')}</option>
             <option value="es">🇪🇸 Español</option>
-            <option value="en">🇬🇧 English</option>
+            <option value="en">🇺🇸 English</option>
           </select>
 
           {/* Contraseña */}

@@ -516,7 +516,7 @@ function UsersPanel() {
               >
                 <option value="auto">🌐 Auto</option>
                 <option value="es">🇪🇸 Español</option>
-                <option value="en">🇬🇧 English</option>
+                <option value="en">🇺🇸 English</option>
               </select>
               {u.id !== me.id && (
                 <>
@@ -626,7 +626,7 @@ function UsersPanel() {
             <select value={language} onChange={(e) => setLanguage(e.target.value)} className={selectCls}>
               <option value="auto">🌐 Auto</option>
               <option value="es">🇪🇸 Español</option>
-              <option value="en">🇬🇧 English</option>
+              <option value="en">🇺🇸 English</option>
             </select>
             <select value={role} onChange={(e) => setRole(e.target.value as 'user' | 'admin')} className={selectCls}>
               <option value="user">{t('settings.users.roleUser')}</option>
