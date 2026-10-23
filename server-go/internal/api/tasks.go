@@ -548,6 +548,8 @@ func (s *Server) handleTaskMove(w http.ResponseWriter, r *http.Request) {
 	}
 
 	noChange := !task.ArchivedAt.Valid && fromCol == toCol && toPos == fromPos
+	granted := 0
+	reverted := 0
 	if !noChange {
 		tx, err := d.Begin()
 		if err != nil {
@@ -597,6 +599,11 @@ func (s *Server) handleTaskMove(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		addEvent(tx, task.ID, user.ID, "moved", map[string]any{"from": fromCol, "to": toCol})
+		if fromCol != "hecho" && toCol == "hecho" {
+			granted = grantCompletionPoints(tx, task.ID, task.Priority, user.ID)
+		} else if fromCol == "hecho" && toCol != "hecho" {
+			reverted = revertCompletionPoints(tx, task.ID)
+		}
 		if err := tx.Commit(); err != nil {
 			internalErr(w)
 			return
@@ -605,6 +612,9 @@ func (s *Server) handleTaskMove(w http.ResponseWriter, r *http.Request) {
 
 	if fromCol != "hecho" && toCol == "hecho" && task.Recurrence.Valid {
 		s.createRecurringInstance(d, task, user.ID)
+	}
+	if granted > 0 || reverted > 0 {
+		s.Hub.Broadcast("gamification")
 	}
 	s.Hub.Broadcast("tasks")
 	list := hydrateTasks(d, "t.id = ?", task.ID)
@@ -771,6 +781,7 @@ func (s *Server) handleTaskDoneAndArchive(w http.ResponseWriter, r *http.Request
 	}
 	now := nowMs()
 	archivePos := task.Position
+	granted := 0
 	tx, err := d.Begin()
 	if err != nil {
 		internalErr(w)
@@ -790,6 +801,7 @@ func (s *Server) handleTaskDoneAndArchive(w http.ResponseWriter, r *http.Request
 			return
 		}
 		addEvent(tx, task.ID, user.ID, "moved", map[string]any{"from": task.Column, "to": "hecho"})
+		granted = grantCompletionPoints(tx, task.ID, task.Priority, user.ID)
 	}
 	if _, err := tx.Exec("UPDATE tasks SET archived_at = ? WHERE id = ?", now, task.ID); err != nil {
 		_ = tx.Rollback()
@@ -808,6 +820,10 @@ func (s *Server) handleTaskDoneAndArchive(w http.ResponseWriter, r *http.Request
 
 	if task.Column != "hecho" && task.Recurrence.Valid {
 		s.createRecurringInstance(d, task, user.ID)
+	}
+
+	if granted > 0 {
+		s.Hub.Broadcast("gamification")
 	}
 	s.Hub.Broadcast("tasks")
 	list := hydrateTasks(d, "t.id = ?", task.ID)

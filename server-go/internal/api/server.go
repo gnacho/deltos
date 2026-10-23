@@ -175,6 +175,10 @@ func New(a *auth.Service, prod, demo *db.DB, cfg Config) *Server {
 		// --- Phase 3: expenses + invites ---
 		s.registerExpenseRoutes(&ar)
 		s.registerInviteRoutes(&ar)
+
+		// --- Phase 4: decisions + gamification ---
+		s.registerDecisionRoutes(&ar)
+		s.registerGamificationRoutes(&ar)
 	})
 
 	// Unmatched /api routes are 404 NOT_FOUND (never the SPA fallback).
