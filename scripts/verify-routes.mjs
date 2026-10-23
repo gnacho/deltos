@@ -1,14 +1,16 @@
-// Verify the Go router registers exactly the phase-3 route set of the
-// TypeScript server (routes-domain.ts + routes-ha.ts + routes-expenses.ts +
-// routes-invite.ts, minus the routes deferred to later phases).
+// Verify the Go router registers exactly the phase-4 route set of the
+// TypeScript server (all route files, minus the routes deferred to later
+// phases).
 import { readFileSync } from 'node:fs';
 
-const root = '/home/nacho/temp/opencode-work/deltos-fase3';
+const root = '/home/nacho/temp/opencode-work/deltos-fase4';
 const tsFiles = [
   `${root}/server/src/routes-domain.ts`,
   `${root}/server/src/routes-ha.ts`,
   `${root}/server/src/routes-expenses.ts`,
   `${root}/server/src/routes-invite.ts`,
+  `${root}/server/src/routes-decisions.ts`,
+  `${root}/server/src/routes-gamification.ts`,
 ];
 const goFiles = [
   `${root}/server-go/internal/api/domain.go`,
@@ -16,6 +18,8 @@ const goFiles = [
   `${root}/server-go/internal/api/ha.go`,
   `${root}/server-go/internal/api/expenses.go`,
   `${root}/server-go/internal/api/invite.go`,
+  `${root}/server-go/internal/api/decisions.go`,
+  `${root}/server-go/internal/api/gamification.go`,
   `${root}/server-go/internal/api/server.go`,
 ];
 
@@ -65,4 +69,4 @@ if (unexpected.length) {
   process.exit(1);
 }
 const expected = [...tsSet].filter(r => !deferred.has(r.split(' ')[1])).length;
-console.log(`routes verification passed (${expected} routes in phase-3 scope)`);
+console.log(`routes verification passed (${expected} routes in phase-4 scope)`);
