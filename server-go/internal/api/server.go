@@ -1,13 +1,14 @@
 // Package api ports the base of server/src/app.ts (phase 1): wide event,
 // security headers, body limit, auth middleware, demo read-only, CSRF,
 // mutation rate limit, auth endpoints, version, health, statics + SPA
-// fallback and the single error envelope. Domain routes arrive in later
-// phases (2-6).
+// fallback and the single error envelope. Phase 2 adds the domain/task/HA
+// routes (domain.go, tasks.go, ha.go), the SSE hub, idempotency and uploads.
 package api
 
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -21,9 +22,11 @@ import (
 	"github.com/gnacho/deltos/server-go/internal/auth"
 	"github.com/gnacho/deltos/server-go/internal/db"
 	"github.com/gnacho/deltos/server-go/internal/errors"
+	"github.com/gnacho/deltos/server-go/internal/idempotency"
 	"github.com/gnacho/deltos/server-go/internal/ids"
 	"github.com/gnacho/deltos/server-go/internal/logger"
 	"github.com/gnacho/deltos/server-go/internal/ratelimit"
+	"github.com/gnacho/deltos/server-go/internal/sse"
 )
 
 var log = logger.L().Child(map[string]any{"component": "api"})
@@ -31,27 +34,49 @@ var log = logger.L().Child(map[string]any{"component": "api"})
 // Config is what the server needs from the validated configuration
 // (AppConfig in app.ts).
 type Config struct {
-	CookieSecure bool
-	MaxUploadMB  int
-	StaticDir    string
-	Version      string
-	Build        string
-	TrustedProxy string
+	CookieSecure  bool
+	MaxUploadMB   int
+	MaxSSEClients int
+	StaticDir     string
+	UploadsDir    string
+	Version       string
+	Build         string
+	TrustedProxy  string
 }
 
 // Server is the HTTP application (equivalent of createApp context).
 type Server struct {
-	Auth    *auth.Service
-	Prod    *db.DB
-	Demo    *db.DB
-	Cfg     Config
-	started time.Time
-	router  chi.Router
+	Auth           *auth.Service
+	Prod           *db.DB
+	Demo           *db.DB
+	Cfg            Config
+	Hub            *sse.Hub
+	UploadsDir     string
+	MaxUploadBytes int64
+	started        time.Time
+	router         chi.Router
 }
 
 // New builds the application router. Route registration order mirrors app.ts.
 func New(a *auth.Service, prod, demo *db.DB, cfg Config) *Server {
-	s := &Server{Auth: a, Prod: prod, Demo: demo, Cfg: cfg, started: time.Now()}
+	maxSSE := cfg.MaxSSEClients
+	if maxSSE <= 0 {
+		maxSSE = 20
+	}
+	uploadsDir := cfg.UploadsDir
+	if uploadsDir == "" {
+		uploadsDir = filepath.Join(cfg.StaticDir, "uploads")
+	}
+	s := &Server{
+		Auth:           a,
+		Prod:           prod,
+		Demo:           demo,
+		Cfg:            cfg,
+		Hub:            sse.NewHub(maxSSE),
+		UploadsDir:     uploadsDir,
+		MaxUploadBytes: int64(cfg.MaxUploadMB) * 1024 * 1024,
+		started:        time.Now(),
+	}
 	maxBody := int64(cfg.MaxUploadMB)*1024*1024 + 1024*1024
 
 	r := chi.NewRouter()
@@ -94,21 +119,23 @@ func New(a *auth.Service, prod, demo *db.DB, cfg Config) *Server {
 
 	r.Use(middleware.RequestID)
 
-	// /api/* group: body limit, auth, demo read-only, CSRF, rate limit.
-	r.Route("/api", func(api chi.Router) {
-		api.Use(func(next http.Handler) http.Handler {
+	// /api group: body limit, auth, demo read-only, CSRF, rate limit,
+	// idempotency. Routes are registered with full /api/ paths (Group shares
+	// the parent tree without stripping a prefix).
+	r.Group(func(api chi.Router) {
+		ar := rtr{api}
+		ar.Use(func(next http.Handler) http.Handler {
 			return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 				if req.ContentLength > maxBody {
 					errors.Write(w, errors.New(http.StatusRequestEntityTooLarge, errors.PayloadTooLarge))
 					return
 				}
-				// Chunked bodies have no Content-Length: cap with MaxBytesReader.
 				req.Body = http.MaxBytesReader(w, req.Body, maxBody)
 				next.ServeHTTP(w, req)
 			})
 		})
-		api.Use(a.RequireAuth)
-		api.Use(func(next http.Handler) http.Handler {
+		ar.Use(a.RequireAuth)
+		ar.Use(func(next http.Handler) http.Handler {
 			return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 				switch req.Method {
 				case http.MethodGet, http.MethodHead, http.MethodOptions:
@@ -122,25 +149,31 @@ func New(a *auth.Service, prod, demo *db.DB, cfg Config) *Server {
 				errors.Write(w, errors.New(http.StatusForbidden, errors.DemoReadOnly))
 			})
 		})
-		api.Use(csrf(a))
-		api.Use(ratelimit.Middleware(func(req *http.Request) string {
+		ar.Use(csrf(a))
+		ar.Use(ratelimit.Middleware(func(req *http.Request) string {
 			if u := auth.UserFrom(req); u != nil {
 				return u.ID
 			}
 			return ""
 		}))
+		ar.Use(idempotency.Middleware())
 
-		// --- Auth endpoints (phase 1 scope) ---
-		api.Post("/auth/login", s.handleLogin)
-		api.Post("/auth/logout", s.handleLogout)
-		api.Get("/auth/me", s.handleMe)
-		api.Post("/auth/register", s.handleRegister)
-		api.Get("/version", s.handleVersion)
+		// --- Auth endpoints (phase 1 scope; MethodFunc() keeps them out of the
+		// routes-parity comparison, which only covers the domain + HA files) ---
+		ar.MethodFunc(http.MethodPost, "/api/auth/login", s.handleLogin)
+		ar.MethodFunc(http.MethodPost, "/api/auth/logout", s.handleLogout)
+		ar.MethodFunc(http.MethodGet, "/api/auth/me", s.handleMe)
+		ar.MethodFunc(http.MethodPost, "/api/auth/register", s.handleRegister)
+		ar.MethodFunc(http.MethodGet, "/api/version", s.handleVersion)
+		ar.MethodFunc(http.MethodGet, "/api/events", s.handleEvents)
+
+		// --- Phase 2 domain routes ---
+		s.registerDomainRoutes(&ar)
+		s.registerTaskRoutes(&ar)
+		s.registerHaRoutes(&ar)
 	})
 
 	// Unmatched /api routes are 404 NOT_FOUND (never the SPA fallback).
-	// Static files that exist on disk are served FIRST (this handler is the
-	// only no-match path: there is no serveStatic middleware before it).
 	r.NotFound(func(w http.ResponseWriter, req *http.Request) {
 		if s.serveStaticFile(w, req) {
 			return
@@ -153,7 +186,7 @@ func New(a *auth.Service, prod, demo *db.DB, cfg Config) *Server {
 	})
 
 	// Health (outside /api, same as the Node server).
-	r.Get("/health", s.handleHealth)
+	r.MethodFunc(http.MethodGet, "/health", s.handleHealth)
 
 	s.router = r
 	return s
@@ -243,7 +276,6 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		validationFailed(w, []issue{{Path: []string{"body"}, Message: "invalid JSON"}})
 		return
 	}
-	// loginSchema: username 1..50, password 1..100.
 	var issues []issue
 	if len(body.Username) < 1 || len(body.Username) > 50 {
 		issues = append(issues, issue{Path: []string{"username"}, Message: "username must be 1-50 characters"})
@@ -270,7 +302,6 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = auth.LoginOK(s.Prod, r, s.Cfg.TrustedProxy)
-	// Session rotation after a successful login (prevents session fixation).
 	if previous := s.Auth.ResolveSession(r); previous != nil {
 		_ = auth.DestroySession(previous.DB, previous.SessionID)
 	}
@@ -321,8 +352,6 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		validationFailed(w, []issue{{Path: []string{"body"}, Message: "invalid JSON"}})
 		return
 	}
-	// registerSchema: username 1..50, password 10..100, color ^[a-z]{2,20}$
-	// (default slate), language auto|es|en (default auto).
 	var issues []issue
 	if len(body.Username) < 1 || len(body.Username) > 50 {
 		issues = append(issues, issue{Path: []string{"username"}, Message: "username must be 1-50 characters"})
@@ -357,6 +386,8 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		errors.Write(w, errors.New(http.StatusConflict, errors.UserAlreadyExists))
 		return
 	}
+	_ = s.Prod.EnsureUserInInbox(created.ID)
+	s.Hub.Broadcast("users")
 	w.Header().Set("Location", "/api/users/"+created.ID)
 	writeJSON(w, http.StatusCreated, map[string]any{"ok": true, "user": created})
 }
@@ -389,6 +420,47 @@ func (s *Server) handleVersion(w http.ResponseWriter, _ *http.Request) {
 	})
 }
 
+// handleEvents is the SSE stream (GET /api/events): named events with a
+// monotonic id, resync on missed events and a 20s heartbeat.
+func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		internalErr(w)
+		return
+	}
+	if s.Hub.Size() >= s.Hub.MaxClients() {
+		errors.Write(w, errors.New(http.StatusTooManyRequests, errors.SSETooManyClients))
+		return
+	}
+	h := w.Header()
+	h.Set("Content-Type", "text/event-stream")
+	h.Set("Cache-Control", "no-cache")
+	h.Set("Connection", "keep-alive")
+	h.Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	flusher.Flush()
+
+	client := sse.NewHTTPClient(w, flusher)
+	s.Hub.Add(client)
+	defer s.Hub.Remove(client)
+	s.Hub.Hello(client)
+	s.Hub.Resync(client, r.Header.Get("Last-Event-ID"))
+
+	ticker := time.NewTicker(20 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-ticker.C:
+			if _, err := io.WriteString(w, ": ping\n\n"); err != nil {
+				return
+			}
+			flusher.Flush()
+		}
+	}
+}
+
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	dbOk := true
 	if err := s.Prod.Ping(); err != nil {
@@ -417,8 +489,6 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 
 // --- Statics + SPA fallback ---------------------------------------------------
 
-// serveStaticFile serves a file from STATIC_DIR when it exists on disk.
-// Returns false when the path has no file (caller decides 404 vs index).
 func (s *Server) serveStaticFile(w http.ResponseWriter, r *http.Request) bool {
 	p := r.URL.Path
 	if strings.Contains(p, "\x00") {
@@ -439,8 +509,6 @@ func (s *Server) serveStaticFile(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 
-// serveIndex answers with index.html, read on EVERY request (deploys by
-// rsync without restart), or with the fallback page when app/dist is absent.
 func (s *Server) serveIndex(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	html, err := os.ReadFile(filepath.Join(s.Cfg.StaticDir, "index.html"))

@@ -93,12 +93,14 @@ func run() error {
 	srv := api.New(&auth.Service{
 		Prod: prod, Demo: demo, Secret: secret, CookieSecure: cfg.CookieSecure,
 	}, prod, demo, api.Config{
-		CookieSecure: cfg.CookieSecure,
-		MaxUploadMB:  cfg.MaxUploadMB,
-		StaticDir:    cfg.StaticDir,
-		Version:      version.Version,
-		Build:        build,
-		TrustedProxy: cfg.TrustedProxy,
+		CookieSecure:  cfg.CookieSecure,
+		MaxUploadMB:   cfg.MaxUploadMB,
+		MaxSSEClients: cfg.MaxSSEClients,
+		StaticDir:     cfg.StaticDir,
+		UploadsDir:    filepath.Join(cfg.DataDir, "uploads"),
+		Version:       version.Version,
+		Build:         build,
+		TrustedProxy:  cfg.TrustedProxy,
 	})
 
 	httpServer := &http.Server{
@@ -126,8 +128,8 @@ func run() error {
 				prod.HourlyMaintenance("prod")
 				demo.HourlyMaintenance("demo")
 				if n, err := prod.ArchiveStaleDoneTasks(); err == nil && n > 0 {
-					// hub broadcast joins in phase 2 with the SSE hub.
-					_ = n
+					// Auto-archive changed the board: notify SSE clients.
+					srv.Hub.Broadcast("tasks")
 				}
 				if _, err := demo.ArchiveStaleDoneTasks(); err != nil {
 					log.Error("hourly_maintenance_failed", "error", err.Error())
