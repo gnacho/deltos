@@ -1,55 +1,51 @@
-// Verify the Go router registers exactly the phase-2 route set of the
-// TypeScript server (canonical list from routes-domain.ts + routes-ha.ts,
-// minus the routes explicitly deferred to later phases).
+// Verify the Go router registers exactly the phase-3 route set of the
+// TypeScript server (routes-domain.ts + routes-ha.ts + routes-expenses.ts +
+// routes-invite.ts, minus the routes deferred to later phases).
 import { readFileSync } from 'node:fs';
 
-const root = '/home/nacho/temp/opencode-work/deltos-fase2';
+const root = '/home/nacho/temp/opencode-work/deltos-fase3';
 const tsFiles = [
   `${root}/server/src/routes-domain.ts`,
   `${root}/server/src/routes-ha.ts`,
+  `${root}/server/src/routes-expenses.ts`,
+  `${root}/server/src/routes-invite.ts`,
 ];
 const goFiles = [
   `${root}/server-go/internal/api/domain.go`,
   `${root}/server-go/internal/api/tasks.go`,
   `${root}/server-go/internal/api/ha.go`,
+  `${root}/server-go/internal/api/expenses.go`,
+  `${root}/server-go/internal/api/invite.go`,
   `${root}/server-go/internal/api/server.go`,
 ];
 
 // Deferred to later phases (must NOT be in the Go set).
 const deferred = new Set([
-  '/api/tasks/parse',
-  '/api/tasks/recurring', // GET listado adaptativo (fase 5)
-  '/api/settings/backup/run',
-  '/api/trash/expense/:id/restore',
-  '/api/trash/expense/:id',
-  '/api/trash/expenses',
+  '/api/tasks/parse', // phase 5 (NLP)
+  '/api/tasks/recurring', // phase 5 (adaptive listing)
+  '/api/settings/backup/run', // phase 6
 ]);
 
-// TS: hono registrations, allow multiline: app.patch(\n '/api/x'
 const tsRe = /\.(get|post|put|delete|patch)\(\s*['"`](\/api\/[^'"`\s?]+)['"`]/g;
-// Go: chi registrations registered with full /api/ paths (same prefix
-// requirement as the TS side, so stdlib calls like r.Header.Get("...") or
-// r.URL.Query().Get("...") are not treated as routes).
 const goRe = /\.(Get|Post|Put|Delete|Patch)\(\s*"(\/api\/[^"]+)"/g;
 
-function collect(text, re, lower) {
+function collect(text, re) {
   const set = new Set();
   let m;
   while ((m = re.exec(text)) !== null) {
-    const method = lower ? m[1].toLowerCase() : m[1].toLowerCase();
-    set.add(method.toUpperCase() + ' ' + m[2]);
+    set.add(m[1].toUpperCase() + ' ' + m[2]);
   }
   return set;
 }
 
 const tsSet = new Set();
 for (const f of tsFiles) {
-  for (const item of collect(readFileSync(f, 'utf8'), tsRe, true)) tsSet.add(item);
+  for (const item of collect(readFileSync(f, 'utf8'), tsRe)) tsSet.add(item);
 }
 const goSet = new Set();
 for (const f of goFiles) {
   try {
-    for (const item of collect(readFileSync(f, 'utf8'), goRe, false)) goSet.add(item);
+    for (const item of collect(readFileSync(f, 'utf8'), goRe)) goSet.add(item);
   } catch {
     // file not present yet: counts as missing routes
   }
@@ -68,4 +64,5 @@ if (unexpected.length) {
   for (const r of unexpected.sort()) console.error('  ' + r);
   process.exit(1);
 }
-console.log(`routes verification passed (${tsSet.size - [...tsSet].filter(r => deferred.has(r.split(' ')[1])).length} routes in phase-2 scope)`);
+const expected = [...tsSet].filter(r => !deferred.has(r.split(' ')[1])).length;
+console.log(`routes verification passed (${expected} routes in phase-3 scope)`);
