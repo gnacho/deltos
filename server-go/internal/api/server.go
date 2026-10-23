@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -171,6 +172,8 @@ func New(a *auth.Service, prod, demo *db.DB, cfg Config) *Server {
 		ar.MethodFunc(http.MethodPost, "/api/auth/logout", s.handleLogout)
 		ar.MethodFunc(http.MethodGet, "/api/auth/me", s.handleMe)
 		ar.MethodFunc(http.MethodPost, "/api/auth/register", s.handleRegister)
+		ar.MethodFunc(http.MethodPut, "/api/auth/profile", s.handleProfile)
+		ar.MethodFunc(http.MethodPut, "/api/auth/password", s.handlePassword)
 		ar.MethodFunc(http.MethodPost, "/api/auth/demo", s.handleDemoLogin)
 		ar.MethodFunc(http.MethodPost, "/api/auth/recover", s.handleRecover)
 		ar.MethodFunc(http.MethodGet, "/api/version", s.handleVersion)
@@ -347,6 +350,156 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	}
 	s.Auth.ClearCookie(w)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
+	var body map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		validationFailed(w, []issue{{Path: []string{"body"}, Message: "invalid JSON"}})
+		return
+	}
+	var issues []issue
+	updates := map[string]any{}
+
+	if v, ok := body["display_name"]; ok {
+		if v == nil {
+			updates["display_name"] = nil
+		} else if s, isStr := v.(string); isStr {
+			trimmed := strings.TrimSpace(s)
+			if len(trimmed) > 50 {
+				issues = append(issues, issue{Path: []string{"display_name"}, Message: "max 50 characters"})
+			} else if trimmed == "" {
+				updates["display_name"] = nil
+			} else {
+				updates["display_name"] = trimmed
+			}
+		} else {
+			issues = append(issues, issue{Path: []string{"display_name"}, Message: "string or null expected"})
+		}
+	}
+	if v, ok := body["email"]; ok {
+		if v == nil {
+			updates["email"] = nil
+		} else if s, isStr := v.(string); isStr {
+			if len(s) > 120 {
+				issues = append(issues, issue{Path: []string{"email"}, Message: "max 120 characters"})
+			} else if !emailRe.MatchString(s) {
+				issues = append(issues, issue{Path: []string{"email"}, Message: "invalid email"})
+			} else {
+				updates["email"] = s
+			}
+		} else {
+			issues = append(issues, issue{Path: []string{"email"}, Message: "string or null expected"})
+		}
+	}
+	if v, ok := body["phone"]; ok {
+		if v == nil {
+			updates["phone"] = nil
+		} else if s, isStr := v.(string); isStr {
+			if len(s) > 30 {
+				issues = append(issues, issue{Path: []string{"phone"}, Message: "max 30 characters"})
+			} else {
+				updates["phone"] = s
+			}
+		} else {
+			issues = append(issues, issue{Path: []string{"phone"}, Message: "string or null expected"})
+		}
+	}
+	if v, ok := body["language"]; ok {
+		s, isStr := v.(string)
+		if !isStr || (s != "auto" && s != "es" && s != "en") {
+			issues = append(issues, issue{Path: []string{"language"}, Message: "invalid language"})
+		} else {
+			updates["language"] = s
+		}
+	}
+	if v, ok := body["color"]; ok {
+		s, isStr := v.(string)
+		if !isStr || len(s) < 2 || len(s) > 20 || !isLowerAlpha(s) {
+			issues = append(issues, issue{Path: []string{"color"}, Message: "invalid color"})
+		} else {
+			updates["color"] = s
+		}
+	}
+	if v, ok := body["expenses_enabled"]; ok {
+		b, isBool := v.(bool)
+		if !isBool {
+			issues = append(issues, issue{Path: []string{"expenses_enabled"}, Message: "boolean expected"})
+		} else {
+			updates["expenses_enabled"] = b
+		}
+	}
+	if v, ok := body["anti_slip_threshold"]; ok {
+		f, isNum := v.(float64)
+		if !isNum || f != float64(int64(f)) || f < 0 || f > 10 {
+			issues = append(issues, issue{Path: []string{"anti_slip_threshold"}, Message: "integer 0-10 expected"})
+		} else {
+			updates["anti_slip_threshold"] = int64(f)
+		}
+	}
+	if len(issues) > 0 {
+		validationFailed(w, issues)
+		return
+	}
+
+	user := auth.UserFrom(r)
+	updated, err := auth.UpdateUser(auth.DBFrom(r), user.ID, updates)
+	if err != nil {
+		errors.Write(w, errors.New(http.StatusInternalServerError, errors.InternalError))
+		return
+	}
+	if updated == nil {
+		errors.Write(w, errors.New(http.StatusBadRequest, errors.BadRequest))
+		return
+	}
+	s.Hub.Broadcast("users")
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "user": updated})
+}
+
+var emailRe = regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`)
+
+type passwordRequest struct {
+	Current string `json:"current"`
+	Next    string `json:"next"`
+}
+
+func (s *Server) handlePassword(w http.ResponseWriter, r *http.Request) {
+	var body passwordRequest
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		validationFailed(w, []issue{{Path: []string{"body"}, Message: "invalid JSON"}})
+		return
+	}
+	var issues []issue
+	if len(body.Current) < 1 {
+		issues = append(issues, issue{Path: []string{"current"}, Message: "indica la contraseña actual"})
+	}
+	if len(body.Next) < 10 || len(body.Next) > 100 {
+		issues = append(issues, issue{Path: []string{"next"}, Message: "la nueva contraseña debe tener al menos 10 caracteres"})
+	}
+	if len(issues) > 0 {
+		validationFailed(w, issues)
+		return
+	}
+	user := auth.UserFrom(r)
+	res, err := auth.ChangePassword(auth.DBFrom(r), user.ID, body.Current, body.Next)
+	if err != nil {
+		errors.Write(w, errors.New(http.StatusInternalServerError, errors.InternalError))
+		return
+	}
+	switch res {
+	case "wrong-current":
+		errors.Write(w, errors.New(http.StatusBadRequest, errors.AuthWrongPassword))
+		return
+	case "ok":
+		// Invalidate every other session of the user; the current one survives.
+		if err := auth.DestroyOtherSessions(auth.DBFrom(r), user.ID, auth.SessionIDFrom(r)); err != nil {
+			errors.Write(w, errors.New(http.StatusInternalServerError, errors.InternalError))
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	default:
+		errors.Write(w, errors.New(http.StatusInternalServerError, errors.InternalError))
+	}
 }
 
 func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
