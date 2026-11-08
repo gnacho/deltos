@@ -1,6 +1,6 @@
 /**
  * Genera los iconos PWA de Deltos (PNG) sin dependencias nativas:
- * cuadrado redondeado emerald con un check blanco.
+ * cuadrado redondeado emerald con un calendar-check blanco (lucide).
  * - icon-192.png / icon-512.png: fondo transparente, squircle con margen
  * - icon-maskable-512.png: fondo emerald completo (safe zone 80%)
  */
@@ -75,18 +75,32 @@ function roundedRectSD(px, py, x, y, w, h, r) {
 
 function render(size, { maskable }) {
   const px = Buffer.alloc(size * size * 4);
-  // Geometría (en coords normalizadas del viewBox 24 del check del logo)
+  // Geometría (en coords normalizadas del viewBox 24 de calendar-check)
   const pad = maskable ? size * 0.0 : size * 0.04; // maskable: sangrado completo
   const rect = { x: pad, y: pad, w: size - pad * 2, h: size - pad * 2 };
   const radius = size * (maskable ? 0.0 : 0.22);
-  // Check: path "m4.5 12.5 5 5 10-11" escalado al safe zone
   const safe = maskable
     ? { x: size * 0.2, y: size * 0.2, s: size * 0.6 }
     : { x: size * 0.14, y: size * 0.14, s: size * 0.72 };
   const P = (vx, vy) => [safe.x + (vx / 24) * safe.s, safe.y + (vy / 24) * safe.s];
-  const [ax, ay] = P(4.5, 12.5);
-  const [bx, by] = P(9.5, 17.5);
-  const [cx2, cy2] = P(19.5, 6.5);
+  // Cuerpo del calendario: rect redondeado (x=3..21, y=4..22, rx=2)
+  const [bx0, by0] = P(3, 4);
+  const [bx1, by1] = P(21, 22);
+  const bodyW = bx1 - bx0;
+  const bodyH = by1 - by0;
+  const bodyR = (2 / 24) * safe.s;
+  // Encuadernación: (8,2)-(8,6) y (16,2)-(16,6)
+  const [b1x0, b1y0] = P(8, 2);
+  const [b1x1, b1y1] = P(8, 6);
+  const [b2x0, b2y0] = P(16, 2);
+  const [b2x1, b2y1] = P(16, 6);
+  // Cabecera: (3,10)-(21,10)
+  const [hx0, hy0] = P(3, 10);
+  const [hx1, hy1] = P(21, 10);
+  // Check interior: (9,16)-(11,18)-(15,14)
+  const [c0x, c0y] = P(9, 16);
+  const [c1x, c1y] = P(11, 18);
+  const [c2x, c2y] = P(15, 14);
   const stroke = size * 0.075;
 
   for (let y = 0; y < size; y++) {
@@ -99,11 +113,15 @@ function render(size, { maskable }) {
       let g = EMERALD[1];
       let b = EMERALD[2];
       let a = alphaRect;
-      // check blanco (AA por distancia al trazo)
+      // calendar-check blanco (AA por distancia al trazo)
       const dStroke =
         Math.min(
-          segDist(x + 0.5, y + 0.5, ax, ay, bx, by),
-          segDist(x + 0.5, y + 0.5, bx, by, cx2, cy2),
+          Math.abs(roundedRectSD(x + 0.5, y + 0.5, bx0, by0, bodyW, bodyH, bodyR)),
+          segDist(x + 0.5, y + 0.5, b1x0, b1y0, b1x1, b1y1),
+          segDist(x + 0.5, y + 0.5, b2x0, b2y0, b2x1, b2y1),
+          segDist(x + 0.5, y + 0.5, hx0, hy0, hx1, hy1),
+          segDist(x + 0.5, y + 0.5, c0x, c0y, c1x, c1y),
+          segDist(x + 0.5, y + 0.5, c1x, c1y, c2x, c2y),
         ) -
         stroke / 2;
       if (dStroke < 0.5) {
