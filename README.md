@@ -23,9 +23,9 @@
 
 Deltos is a task-management PWA for everyday life: a shared kanban board with
 live sync, comments, attachments and push notifications, served by a single
-small Node + SQLite service. It works for a couple, a family, a group of
-friends planning a trip, or a small team, without the complexity of the big
-tools and without your data on somebody else's cloud.
+static Go binary with SQLite alongside it. It works for a couple, a family, a
+group of friends planning a trip, or a small team, without the complexity of
+the big tools and without your data on somebody else's cloud.
 
 ## The name
 
@@ -47,16 +47,19 @@ Trello or Jira, and for us that was the point.
 
 ## Why this stack?
 
-- **Node 22 + Hono + better-sqlite3**: the app is mostly I/O: SSE live
-  sync, uploads, a handful of concurrent users. Node's event loop fits that
-  shape and Hono adds routing without framework tax.
+- **Go 1.25 + chi + modernc.org/sqlite**: one static binary, no CGO, no
+  runtime to install. The server is mostly I/O (SSE live sync, uploads, a
+  handful of concurrent users), and the standard library plus a tiny router
+  covers that without framework tax.
 - **SQLite, no external database**: one file under `/var/lib/deltos`, WAL
   mode; a backup is a file copy. Nothing to administer for a few users.
 - **systemd behind Nginx Proxy Manager, no Docker**: it runs in a small LXC
-  at home; fewer layers, logs in journald, an upgrade is a symlink swap
-  (Docker is still available as an alternative, see Installation).
+  at home; fewer layers, logs in journald, and a release is a directory plus
+  a `current` symlink. Docker in production is not supported: the intended
+  deployment is a small LXC or VM with systemd.
 - **React 19 + Vite + Tailwind**: the UI shell (sidebar, themes, i18n,
   settings) is shared with my other apps, so a fix lands everywhere at once.
+  It is built once and served as static files by the Go binary.
 
 ## Features
 
@@ -67,6 +70,14 @@ Trello or Jira, and for us that was the point.
   plain HTTP; turns itself on once the app is served over HTTPS.
 - **Cards with everything**: comments, attachments with an in-app image
   viewer, labels, priority, due dates and a per-card activity feed.
+- **Recurring tasks**: "cada dos semanas", "every Monday", typed in the task
+  box; the parser understands ES/EN dates and the recurrence adapts to when
+  you actually complete things.
+- **Shared expenses**: who paid, per-person shares, invitations by public
+  link for people without an account, settle-up and the new / shared / paid
+  flow. Behind a flag you enable per install.
+- **Decisions**: an advice process next to the board. Propose options, vote,
+  choose one (or close without choosing) and keep the reasoning written down.
 - **Points and rewards**: completing a task earns points. A weekly karma
   board, streaks and a catalog of real-life rewards you define yourselves.
   Ignore it and the board works exactly the same.
@@ -104,6 +115,14 @@ Trello or Jira, and for us that was the point.
   <img alt="Points and rewards panel showing each person's weekly karma with their streak, a catalog of redeemable rewards and a recent activity list" src="assets/screenshot-rewards-en-light.png" width="800">
 </picture>
 
+**Shared expenses:** who paid, per-person shares, invite by link and settle up**
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/screenshot-expenses-en-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="assets/screenshot-expenses-en-light.png">
+  <img alt="Expenses board with the new, shared and paid columns, who owes whom and a settle action" src="assets/screenshot-expenses-en-light.png" width="800">
+</picture>
+
 ## Installation
 
 Requirements: Linux (x86_64 or arm64) with systemd, root or sudo access.
@@ -115,39 +134,34 @@ curl -fsSL https://raw.githubusercontent.com/gnacho/deltos/main/install.sh | sud
 The installer is a readable, dependency-free POSIX shell script.
 [Inspect it before running](install.sh): that's the point of keeping it
 plain. It detects your distro/arch, downloads the latest release and
-**verifies its SHA-256 checksum**, installs a versioned Node runtime and the
-app under `/opt/deltos`, creates a sandboxed `deltos` systemd service and
-prints the initial admin password once.
+**verifies its SHA-256 checksum**, installs the release (`deltos-go` plus the
+built frontend) under `/opt/deltos/releases` behind a `current` symlink,
+creates a sandboxed `deltos` systemd service and prints the initial admin
+password once.
 
-Running the same command again later upgrades to the latest release.
+Running the same command again later upgrades to the latest release. You can
+also update from Settings in the app, or let the weekly `deltos-update.timer`
+do it; both go through the same checksum-verified updater. Rollback is
+flipping `current` back to the previous release directory and restarting.
 To uninstall: `curl -fsSL https://raw.githubusercontent.com/gnacho/deltos/main/install.sh | sudo sh -s -- --uninstall`.
-
-<details>
-<summary><strong>Docker</strong></summary>
-
-```bash
-docker build -t deltos .
-docker run -d --name deltos -p 3000:3000 \
-  -e AUTH_USER=admin -e AUTH_PASS='use-a-strong-password' \
-  -v deltos-data:/app/data \
-  deltos
-```
-
-Multi-stage `node:24-slim` image: `npm ci --omit=dev` for the server +
-`server/` + `app/dist/`. Mount a volume at `/app/data` (SQLite + uploads).
-The `.env` file is not copied into the image: everything comes from
-defaults + container environment.
-
-</details>
 
 <details>
 <summary><strong>Manual installation (from a release tarball)</strong></summary>
 
 Download the artifact for your architecture from
 [Releases](https://github.com/gnacho/deltos/releases/latest) and verify it
-against `checksums.txt` (`sha256sum -c checksums.txt --ignore-missing`).
-Releases are published per `v*` tag with `node_modules` pre-built per arch
-(`.github/workflows/release.yml`); no compiler needed on the server.
+against `checksums.txt` (`sha256sum -c checksums.txt --ignore-missing`). The
+tarball contains `deltos-go`, `dist/` (the built frontend), `deploy/` (systemd
+units, update and backup scripts) and this installer. To run it by hand:
+
+```sh
+tar xzf deltos_<version>_linux_amd64.tar.gz -C /opt/deltos
+cd /opt/deltos
+PORT=3000 DATA_DIR=/var/lib/deltos STATIC_DIR=/opt/deltos/dist ./deltos-go
+```
+
+No compiler and no runtime are needed on the server: it is a static binary.
+For a service, use the units in `deploy/` (or just run the installer).
 
 </details>
 
@@ -159,9 +173,10 @@ The service reads its environment (installer: `/etc/deltos/env`):
 | ------------------- | ----------------------- | ----------- |
 | `PORT`              | `3000`                  | Listen port (behind Nginx Proxy Manager). |
 | `DATA_DIR`          | `/var/lib/deltos`       | SQLite files + uploads. |
-| `STATIC_DIR`        | `app/dist`              | Built frontend to serve. |
+| `STATIC_DIR`        | `./static` (installer: `/opt/deltos/current/dist`) | Built frontend to serve. |
 | `AUTH_USER`/`AUTH_PASS` | - | Bootstrap admin on first boot (idempotent). |
 | `COOKIE_SECURE`     | `false`                 | `true` only behind HTTPS. |
+| `TRUSTED_PROXY`     | - | Reverse proxy address(es) allowed to set `X-Forwarded-For`. |
 | `SESSION_SECRET`    | auto-generated          | HMAC secret; persisted in the DB if unset. |
 | `MAX_SSE_CLIENTS`   | `20`                    | Concurrent live-sync clients. |
 | `MAX_UPLOAD_MB`     | `10`                    | Attachment size limit. |
@@ -179,32 +194,36 @@ Restart after changes: `sudo systemctl restart deltos`.
 
 ## Development
 
-Stack: **Node 24 + Hono + better-sqlite3 (backend) · React 19 + Vite +
-Tailwind (frontend)**.
+Stack: **Go 1.25 + chi + modernc.org/sqlite (server) · React 19 + Vite +
+Tailwind (frontend) · plain HTML/CSS/TS (landing)**.
 
 ```bash
-# Backend (port 3000 by default; see server/.env.example)
-cd server
-npm ci
-cp .env.example .env   # adjust AUTH_USER / AUTH_PASS
-npm run dev
+# Server (port 3000; reads env vars or /etc/deltos/env)
+cd server-go
+go run ./cmd/server
 
-# Frontend (another terminal, proxied to the backend in dev)
+# Frontend (another terminal, proxied to the server in dev)
 cd app
 npm ci
 npm run dev
 
-# Production frontend build (served by the backend itself)
+# Production frontend build (served by the Go binary from STATIC_DIR)
+npm run build
+
+# Landing (deltos.cloudless.club)
+cd landing
+npm ci
 npm run build
 ```
 
-With `npm run build` done, the backend alone is enough: it serves the SPA
-from `app/dist` with SPA fallback.
+With the frontend built and `STATIC_DIR` pointing at its output, the Go
+binary alone is enough: it serves the SPA with fallback to `index.html`.
 
 ## Tests
 
 ```bash
-cd server && npm test          # vitest: 76 API/auth/push/label tests
+cd server-go && go test ./...   # Go API, auth, SSE, NLP and recurrence
+cd server && npm test           # 297 tests: the reference contract the Go server implements
 ```
 
 ## License

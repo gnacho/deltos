@@ -48,7 +48,7 @@
       "operatingSystem": "Linux",
       "url": "https://github.com/gnacho/deltos",
       "license": "https://www.gnu.org/licenses/agpl-3.0.html",
-      "description": "PWA kanban self-hosted para tareas de cada día y gastos compartidos: sincronización en vivo, notificaciones push, comentarios, adjuntos, etiquetas, prioridad, fechas y división de pagos con invitaciones públicas. Un servicio Node + SQLite. Sin nube.",
+      "description": "PWA kanban self-hosted para tareas de cada día y gastos compartidos: sincronización en vivo, notificaciones push, comentarios, adjuntos, etiquetas, prioridad, fechas y división de pagos con invitaciones públicas. Un binario estático en Go con SQLite. Sin nube.",
       "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" },
       "isAccessibleForFree": true
     },
@@ -63,7 +63,7 @@
         {
           "@type": "Question",
           "name": "¿Qué requisitos tiene Deltos?",
-          "acceptedAnswer": { "@type": "Answer", "text": "Linux con systemd (x86_64 o arm64). El instalador descarga y verifica Node; no hace falta Docker." }
+          "acceptedAnswer": { "@type": "Answer", "text": "Linux con systemd (x86_64 o arm64). El instalador descarga y verifica el binario; no hace falta Node ni Docker." }
         },
         {
           "@type": "Question",
@@ -376,8 +376,8 @@
           <tbody>
             <tr><td>Self-hosted</td><td class="hl"><span class="ok">✓</span></td><td><span class="no">✗</span> <span class="note" data-i18n="cmp.cloud">(solo nube)</span></td><td><span class="mid">◐</span> <span class="note">(DC, fin 2029)</span></td><td><span class="ok">✓</span></td><td><span class="ok">✓</span> <span class="note" data-i18n="cmp.unmaint">(sin mantenim.)</span></td><td><span class="ok">✓</span></td></tr>
             <tr><td data-i18n="cmp.r.account">Cuenta / suscripción</td><td class="hl" data-i18n="cmp.none">ninguna</td><td data-i18n="cmp.freelim">gratis con límites</td><td data-i18n="cmp.peruser">por usuario</td><td data-i18n="cmp.optional">opcional</td><td data-i18n="cmp.none2">ninguna</td><td data-i18n="cmp.none3">ninguna</td></tr>
-            <tr><td data-i18n="cmp.r.ram">RAM realista</td><td class="hl">~55 MB</td><td data-i18n="cmp.cloud2">nube</td><td data-i18n="cmp.cloud3">nube</td><td class="note" data-i18n="cmp.nopub">no publicada</td><td class="note" data-i18n="cmp.nopub2">no publicada</td><td>1 GB <span class="note" data-i18n="cmp.min">mín.</span></td></tr>
-            <tr><td data-i18n="cmp.r.deps">Dependencias</td><td class="hl">Node + SQLite</td><td><span class="na">-</span></td><td><span class="na">-</span></td><td>Go + Vue</td><td>Go + React</td><td>MongoDB</td></tr>
+            <tr><td data-i18n="cmp.r.ram">RAM realista</td><td class="hl">~15 MB</td><td data-i18n="cmp.cloud2">nube</td><td data-i18n="cmp.cloud3">nube</td><td class="note" data-i18n="cmp.nopub">no publicada</td><td class="note" data-i18n="cmp.nopub2">no publicada</td><td>1 GB <span class="note" data-i18n="cmp.min">mín.</span></td></tr>
+            <tr><td data-i18n="cmp.r.deps">Dependencias</td><td class="hl">Go + SQLite</td><td><span class="na">-</span></td><td><span class="na">-</span></td><td>Go + Vue</td><td>Go + React</td><td>MongoDB</td></tr>
             <tr><td data-i18n="cmp.r.license">Licencia</td><td class="hl">AGPL-3.0</td><td data-i18n="cmp.prop">propietaria</td><td data-i18n="cmp.prop2">propietaria</td><td>AGPL-3.0</td><td>MIT/AGPL</td><td>MIT</td></tr>
             <tr><td data-i18n="cmp.r.maint">Mantenimiento activo</td><td class="hl"><span data-i18n="cmp.yes">sí</span></td><td><span data-i18n="cmp.yes2">sí</span></td><td><span data-i18n="cmp.yes3">sí</span></td><td><span data-i18n="cmp.yes4">sí</span></td><td><span class="no">✗</span> <span class="note" data-i18n="cmp.disc">(discontinuado)</span></td><td><span data-i18n="cmp.yes5">sí</span></td></tr>
           </tbody>
@@ -423,7 +423,7 @@
     <div class="section-head reveal">
       <span class="h-eyebrow"><span class="num">05</span><span data-i18n="inst.eyebrow">Instalar</span></span>
       <h2 data-i18n="inst.title">Monta tu propio tablero</h2>
-      <p class="lede" data-i18n="inst.lede">El instalador descarga la última release, verifica su checksum e instala Node y el servicio systemd. Sin Docker, sin dependencias manuales.</p>
+      <p class="lede" data-i18n="inst.lede">El instalador descarga la última release, verifica su checksum e instala el binario y el servicio systemd. Sin Docker, sin dependencias manuales.</p>
     </div>
     <div class="install-grid">
       <div class="reveal">
@@ -432,7 +432,7 @@
           <div class="term-body">
             <div><span class="p">$</span> <span class="cmd" id="installCmd">curl -fsSL https://raw.githubusercontent.com/gnacho/deltos/main/install.sh | sudo sh</span></div>
             <div class="cm" data-i18n="inst.tl1"># descarga la release · verifica el checksum</div>
-            <div class="cm" data-i18n="inst.tl2"># instala Node · crea el servicio systemd · listo</div>
+            <div class="cm" data-i18n="inst.tl2"># instala el binario · crea el servicio systemd · listo</div>
           </div>
           <div style="padding:0 20px 20px">
             <button class="copy-btn" id="copyBtn">
@@ -445,7 +445,7 @@
       </div>
       <div class="req-list reveal d1">
         <div class="req"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><span><b>Linux + systemd</b> <span data-i18n="inst.r1">(x86_64 o arm64): Debian, Ubuntu, Fedora, Arch…</span></span></div>
-        <div class="req"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><span><b>Node</b> <span data-i18n="inst.r2">se instala por ti, con versión verificada</span></span></div>
+        <div class="req"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><span><b>Binario estático</b> <span data-i18n="inst.r2">verificado por checksum, sin runtime</span></span></div>
         <div class="req"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><span><b data-i18n="inst.r3b">Sin Docker</b> <span data-i18n="inst.r3">(aunque hay opción Docker si la prefieres)</span></span></div>
         <div class="req"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><span><b>Web Push</b> <span data-i18n="inst.r4">necesita HTTPS (Nginx Proxy Manager, Caddy…)</span></span></div>
       </div>
