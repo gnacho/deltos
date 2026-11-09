@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/gnacho/deltos/server-go/internal/auth"
 	"github.com/gnacho/deltos/server-go/internal/errors"
 	"github.com/gnacho/deltos/server-go/internal/ids"
 )
@@ -74,6 +75,18 @@ func inviteByToken(q querier, rawToken string) (*inviteRow, error) {
 func (s *Server) handleInviteList(w http.ResponseWriter, r *http.Request) {
 	d := s.Prod
 	expenseID := param(r, "id")
+	exp, err := getExpense(d, expenseID)
+	if err != nil {
+		internalErr(w)
+		return
+	}
+	if exp == nil {
+		errors.Write(w, errors.New(http.StatusNotFound, errors.ExpenseNotFound))
+		return
+	}
+	if !requireExpenseManager(w, exp, auth.UserFrom(r)) {
+		return
+	}
 	rows, err := d.Query(
 		"SELECT id, invite_name, share_cents, paid, payment_method, notes, created_at FROM expense_invites WHERE expense_id = ? ORDER BY created_at",
 		expenseID)
@@ -125,13 +138,19 @@ func (s *Server) handleInviteCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var expenseID, createdBy string
-	var amountCents int64
-	if err := d.QueryRow("SELECT id, created_by, amount_cents FROM expenses WHERE id = ? AND deleted_at IS NULL", body.ExpenseID).
-		Scan(&expenseID, &createdBy, &amountCents); err != nil {
+	exp, err := getExpense(d, body.ExpenseID)
+	if err != nil {
+		internalErr(w)
+		return
+	}
+	if exp == nil {
 		errors.Write(w, errors.New(http.StatusNotFound, errors.ExpenseNotFound))
 		return
 	}
+	if !requireExpenseManager(w, exp, auth.UserFrom(r)) {
+		return
+	}
+	expenseID := exp.ID
 
 	token := ids.New()
 	tokenHash := sha256Hex(token)
@@ -388,12 +407,19 @@ func (s *Server) handleInviteDelete(w http.ResponseWriter, r *http.Request) {
 		errors.Write(w, errors.New(http.StatusNotFound, errors.ExpenseNotFound))
 		return
 	}
-	var payerID, step string
-	if err := d.QueryRow("SELECT payer_id, step FROM expenses WHERE id = ? AND deleted_at IS NULL", expenseID).
-		Scan(&payerID, &step); err != nil {
+	exp, err := getExpense(d, expenseID)
+	if err != nil {
+		internalErr(w)
+		return
+	}
+	if exp == nil {
 		errors.Write(w, errors.New(http.StatusNotFound, errors.ExpenseNotFound))
 		return
 	}
+	if !requireExpenseManager(w, exp, auth.UserFrom(r)) {
+		return
+	}
+	payerID, step := exp.PayerID, exp.Step
 
 	if _, err := d.Exec("DELETE FROM expense_invites WHERE id = ?", inviteID); err != nil {
 		internalErr(w)

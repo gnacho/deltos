@@ -4,7 +4,7 @@ import { zValidator } from '@hono/zod-validator';
 import { logger } from './logger.js';
 import { httpError } from './errors.js';
 import { ERROR_CODES } from './error-codes.js';
-import { resolveStep } from './routes-expenses.js';
+import { assertExpenseManager, resolveStep } from './routes-expenses.js';
 import type { Context, Hono } from 'hono';
 import type Database from 'better-sqlite3';
 import type { AppEnv } from './types.js';
@@ -51,18 +51,22 @@ function hashToken(token: string): string {
 }
 
 export function registerInviteRoutes(app: Hono<AppEnv>, { prod }: { prod: Database.Database }): void {
-  // GET /api/expenses/:id/invites — listar invitaciones de un gasto
+  // GET /api/expenses/:id/invites — listar invitaciones de un gasto (creador o pagador)
   app.get('/api/expenses/:id/invites', (c: Context<AppEnv>) => {
-    const user = c.get('user');
-    if (!user) httpError(401, ERROR_CODES.AUTH_REQUIRED);
+    const user = currentUser(c);
     const expenseId = c.req.param('id');
+    const expense = prod.prepare(
+      'SELECT created_by, payer_id FROM expenses WHERE id = ? AND deleted_at IS NULL'
+    ).get(expenseId) as { created_by: string; payer_id: string | null } | undefined;
+    if (!expense) httpError(404, ERROR_CODES.EXPENSE_NOT_FOUND);
+    assertExpenseManager(expense, user);
     const invites = prod.prepare(
       'SELECT id, invite_name, share_cents, paid, payment_method, notes, created_at FROM expense_invites WHERE expense_id = ? ORDER BY created_at'
     ).all(expenseId);
     return c.json({ invites });
   });
 
-  // POST /api/invite/create — generar link de invitación (autenticado)
+  // POST /api/invite/create — generar link de invitación (creador o pagador)
   app.post('/api/invite/create', zValidator('json', createSchema), (c: Context<AppEnv>) => {
     const user = currentUser(c);
     const { invite_name, share_cents, expense_id: expenseId, notes } = c.req.valid('json' as never) as z.infer<
@@ -70,9 +74,10 @@ export function registerInviteRoutes(app: Hono<AppEnv>, { prod }: { prod: Databa
     >;
 
     const expense = prod.prepare(
-      'SELECT id, created_by, amount_cents FROM expenses WHERE id = ? AND deleted_at IS NULL'
-    ).get(expenseId);
+      'SELECT id, created_by, payer_id, amount_cents FROM expenses WHERE id = ? AND deleted_at IS NULL'
+    ).get(expenseId) as { id: string; created_by: string; payer_id: string | null } | undefined;
     if (!expense) httpError(404, ERROR_CODES.EXPENSE_NOT_FOUND);
+    assertExpenseManager(expense, user);
 
     const token = generateToken();
     const tokenHash = hashToken(token);
@@ -243,6 +248,7 @@ app.delete('/api/invite/:id', (c: Context<AppEnv>) => {
     'SELECT created_by, payer_id, step FROM expenses WHERE id = ? AND deleted_at IS NULL'
   ).get(invite.expense_id) as { created_by: string; payer_id: string | null; step: string } | undefined;
   if (!expense) httpError(404, ERROR_CODES.EXPENSE_NOT_FOUND);
+  assertExpenseManager(expense, user);
 
   prod.prepare('DELETE FROM expense_invites WHERE id = ?').run(inviteId);
 
