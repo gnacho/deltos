@@ -1,7 +1,9 @@
 #!/bin/sh
 # deltos-update.sh — aplica la última release ESTABLE de Deltos.
-# Patrón app-auto-update (variante Node), layout CAPISTRANO:
+# Patrón app-auto-update, dos layouts (capistrano por symlink y plano):
 #   /opt/deltos/current -> releases/v<ver>   (rollback por symlink)
+#   /opt/deltos/{server,app/dist}            (plano, rollback por copia .bak-$TS)
+# Soporta el tarball Go (deltos-go + dist/) y el Node antiguo (server/).
 # NUNCA toca datos: el SQLite vive en $STATE_DIR (/var/lib/deltos), fuera de
 # releases/. El marker /opt/deltos/.release-id es la fuente de verdad de la
 # versión instalada (server/src/update.ts la lee para /api/update/status).
@@ -26,7 +28,7 @@ PROG_FILES=""
 [ -d /opt/deltos/data ] && PROG_FILES="/opt/deltos/data/update-progress.json"
 [ -d /var/lib/deltos ] && PROG_FILES="$PROG_FILES /var/lib/deltos/update-progress.json"
 prog() { # $1=step $2=pct
-  for f in $PROG_FILES; do
+  for f in ${PROG_FILES:-}; do
     printf '{"step":"%s","pct":%s,"ts":%s}' "$1" "$2" "$(date +%s000)" > "$f" 2>/dev/null || true
     chmod 0644 "$f" 2>/dev/null || true
   done
@@ -92,26 +94,45 @@ prog deploy 80
 # Dos layouts posibles:
 #  - Capistrano (install.sh): /opt/deltos/current → releases/vX, datos en /var/lib/deltos.
 #  - Plano (deploy manual CT 226): /opt/deltos/{server,app/dist}, datos en /opt/deltos/data.
+# Y dos formatos de tarball:
+#  - Go (v2.8.0+): deltos-go + dist/ (+ deploy/, install.sh).
+#  - Node (anterior): server/ con dist, node_modules y package.json.
+GO_PKG=0
+[ -f "$TMP_DIR/pkg/deltos-go" ] && GO_PKG=1
 if [ -L "$OPT_DIR/current" ]; then
   # Capistrano: nueva release + flip de symlink (la anterior queda intacta = rollback).
   RELEASE_DIR="$OPT_DIR/releases/v$VER_NO_V"
   mkdir -p "$RELEASE_DIR"
   cp -a "$TMP_DIR/pkg/dist" "$RELEASE_DIR/dist"
-  cp -a "$TMP_DIR/pkg/server" "$RELEASE_DIR/server"
+  if [ "$GO_PKG" = 1 ]; then
+    install -m 0755 "$TMP_DIR/pkg/deltos-go" "$RELEASE_DIR/deltos-go"
+  else
+    cp -a "$TMP_DIR/pkg/server" "$RELEASE_DIR/server"
+  fi
   cp -a "$TMP_DIR/pkg/install.sh" "$RELEASE_DIR/install.sh" 2>/dev/null || true
   cp -a "$TMP_DIR/pkg/deploy" "$RELEASE_DIR/deploy" 2>/dev/null || true
   chown -R "$APP:$APP" "$RELEASE_DIR"
   ln -sfn "$RELEASE_DIR" "$OPT_DIR/current"
-  [ -x "$OPT_DIR/node/bin/node" ] && ln -sfn "$OPT_DIR/node/bin/node" "$RELEASE_DIR/server/node" 2>/dev/null || true
   # Poda de releases antiguas: conserva las 2 anteriores además de la actual.
   ls -1dt "$OPT_DIR"/releases/v* 2>/dev/null | tail -n +4 | while read -r old; do
     rm -rf "$old"
   done
+elif [ "$GO_PKG" = 1 ]; then
+  # Plano + Go: backup y reemplazo quirúrgico. El binario en marcha no se puede
+  # sobrescribir ("Text file busy"): se instala al lado y se renombra.
+  [ -d "$OPT_DIR/app/dist" ] && cp -a "$OPT_DIR/app/dist" "$OPT_DIR/app.dist.bak-$TS"
+  [ -d "$OPT_DIR/server" ] && cp -a "$OPT_DIR/server" "$OPT_DIR/server.bak-$TS"
+  rm -rf "$OPT_DIR/app/dist"
+  mkdir -p "$OPT_DIR/app/dist"
+  cp -a "$TMP_DIR/pkg/dist/." "$OPT_DIR/app/dist/"
+  mkdir -p "$OPT_DIR/server"
+  install -o "$APP" -g "$APP" -m 0755 "$TMP_DIR/pkg/deltos-go" "$OPT_DIR/server/deltos-go.new"
+  mv -f "$OPT_DIR/server/deltos-go.new" "$OPT_DIR/server/deltos-go"
+  chown -R "$APP:$APP" "$OPT_DIR/app/dist" 2>/dev/null || true
 else
-  # Plano: backup + reemplazo quirúrgico (preserva .env y config local).
-  # NUNCA volar server/ entero: el .env (DATA_DIR/PORT/VAPID) y otros ficheros
-  # locales viven ahí y el tarball NO los trae (bug #40: rm -rf server dejaba
-  # el servicio en crash-loop). Se reemplaza SOLO el código.
+  # Plano + Node (legacy): backup + reemplazo quirúrgico (preserva la config
+  # local). NUNCA volar server/ entero: la config vive ahí y el tarball NO la
+  # trae (bug #40: rm -rf server dejaba el servicio en crash-loop).
   [ -d "$OPT_DIR/app/dist" ] && cp -a "$OPT_DIR/app/dist" "$OPT_DIR/app.dist.bak-$TS"
   [ -d "$OPT_DIR/server" ] && cp -a "$OPT_DIR/server" "$OPT_DIR/server.bak-$TS"
   # dist: reemplazo completo (no hay config local ahí).
@@ -119,7 +140,7 @@ else
   mkdir -p "$OPT_DIR/app/dist"
   cp -a "$TMP_DIR/pkg/dist/." "$OPT_DIR/app/dist/"
   # server: reemplazar el código compilado (dist), node_modules y
-  # package.json; dejar .env y la config local intactos.
+  # package.json; dejar la config local intacta.
   rm -rf "$OPT_DIR/server/dist"
   cp -a "$TMP_DIR/pkg/server/dist" "$OPT_DIR/server/dist"
   if [ -d "$TMP_DIR/pkg/server/node_modules" ]; then
@@ -144,7 +165,9 @@ PROG_OK=1
 log "actualizado a $VER_NO_V (port $PORT)"
 
 # Rollback manual (layout plano):
-#   rm -rf /opt/deltos/{app/dist,server} && mv /opt/deltos/server.bak-$TS /opt/deltos/server \
-#   && mv /opt/deltos/app.dist.bak-$TS /opt/deltos/app/dist && systemctl restart deltos
+#   rm -rf /opt/deltos/app/dist && mv /opt/deltos/app.dist.bak-$TS /opt/deltos/app/dist \
+#   && mv /opt/deltos/server/deltos-go /opt/deltos/server/deltos-go.new \
+#   && cp -a /opt/deltos/server.bak-$TS/deltos-go /opt/deltos/server/deltos-go \
+#   && systemctl restart deltos
 # Rollback manual (capistrano):
 #   ln -sfn /opt/deltos/releases/v<prev> /opt/deltos/current && systemctl restart deltos

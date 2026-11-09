@@ -2,9 +2,9 @@
 # =============================================================================
 # Deltos — one-liner installer (Linux server)
 #
-#   Kanban PWA for shared tasks and boards (Node 24 + SQLite, frontend built).
-#   Installs the versioned Node runtime + the app release (node_modules
-#   pre-built) as a sandboxed systemd service.
+#   Kanban PWA for shared tasks and boards (single Go binary + SQLite, frontend built).
+#   Installs the release (static binary + built frontend) as a sandboxed
+#   systemd service.
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/gnacho/deltos/main/install.sh | sh
@@ -17,9 +17,7 @@
 # amd64 / arm64. Verifies sha256 of every download (checksums.txt).
 #
 # Layout (capistrano-style):
-#   /opt/deltos/node-v<ver>-linux-<arch>/   versioned Node runtime
-#   /opt/deltos/node -> node-v<ver>...      runtime symlink
-#   /opt/deltos/releases/v<ver>/            app release (server/ + dist/)
+#   /opt/deltos/releases/v<ver>/            release (deltos-go + dist/ + deploy/)
 #   /opt/deltos/current -> releases/v<ver>  live symlink (update = flip, rollback = flip back)
 #   /var/lib/deltos                         SQLite + uploads (StateDirectory)
 #   /etc/deltos/env                         config (0600)
@@ -30,7 +28,6 @@ APP_NAME="deltos"
 GH_REPO="gnacho/deltos"
 DESCRIPTION="Kanban PWA for shared tasks and boards"
 DEFAULT_PORT="3000"
-NODE_VERSION="24.18.1"
 OPT_DIR="/opt/$APP_NAME"
 STATE_DIR="/var/lib/$APP_NAME"
 CONF_DIR="/etc/$APP_NAME"
@@ -121,8 +118,8 @@ OS_PRETTY="${PRETTY_NAME:-$(uname -s)}"
 
 ARCH=$(uname -m)
 case "$ARCH" in
-    x86_64|amd64)  REL_ARCH=amd64; NODE_ARCH=x64 ;;
-    aarch64|arm64) REL_ARCH=arm64; NODE_ARCH=arm64 ;;
+    x86_64|amd64)  REL_ARCH=amd64 ;;
+    aarch64|arm64) REL_ARCH=arm64 ;;
     *) fatal 20 "unsupported architecture: $ARCH (released: amd64, arm64)"
 esac
 
@@ -272,25 +269,13 @@ ok "sha256 verified"
 MANIFEST=$(tar -tzf "$TMP/$ASSET") || fatal 34 "tarball is corrupt"
 tarball_has() { printf '%s\n' "$MANIFEST" | grep -q "deploy/$1\$"; }
 
-# -------------------------------------------------------------- Node runtime --
-NODE_DIR="node-v${NODE_VERSION}-linux-${NODE_ARCH}"
-if [ ! -x "$OPT_DIR/$NODE_DIR/bin/node" ]; then
-    info "installing Node runtime v$NODE_VERSION ($NODE_ARCH)"
-    fetch_to "https://nodejs.org/dist/v${NODE_VERSION}/${NODE_DIR}.tar.xz" "$TMP/node.tar.xz" \
-        || fatal 35 "Node download failed"
-    fetch_to "https://nodejs.org/dist/v${NODE_VERSION}/SHASUMS256.txt" "$TMP/SHASUMS256.txt" \
-        || fatal 35 "SHASUMS256.txt download failed"
-    NSUM=$(sha256sum "$TMP/node.tar.xz" | awk '{print $1}')
-    NREF=$(grep "  ${NODE_DIR}.tar.xz\$" "$TMP/SHASUMS256.txt" | awk '{print $1}')
-    [ "$NSUM" = "$NREF" ] || fatal 35 "sha256 MISMATCH for the Node runtime"
-    run $SUDO install -d -m 0755 "$OPT_DIR"
-    run $SUDO tar -xJf "$TMP/node.tar.xz" -C "$OPT_DIR"
-    ok "Node v$NODE_VERSION verified and installed"
-else
-    ok "Node v$NODE_VERSION already present"
-fi
-run $SUDO ln -sfn "$OPT_DIR/$NODE_DIR" "$OPT_DIR/node"
-NODE_BIN="$OPT_DIR/node/bin/node"
+# ------------------------------------------------------------- Go binary check --
+# Go releases (v2.8.0+) ship a single static binary plus dist/. Older tarballs
+# carried the Node backend (server/ + node runtime) and cannot be installed by
+# this script.
+printf '%s\n' "$MANIFEST" | grep -q 'deltos-go$' \
+    || fatal 36 "release $DELTOS_VERSION doesn't carry the Go binary (pre-2.8 layout); use v2.8.0 or newer"
+BIN_PATH="$OPT_DIR/current/deltos-go"
 
 # --------------------------------------------------------------------- user --
 if ! id "$APP_NAME" >/dev/null 2>&1; then
@@ -344,7 +329,7 @@ User=$APP_NAME
 Group=$APP_NAME
 WorkingDirectory=$OPT_DIR/current
 EnvironmentFile=$ENV_FILE
-ExecStart=$NODE_BIN server/dist/index.js
+ExecStart=$BIN_PATH
 Restart=always
 RestartSec=5
 NoNewPrivileges=true
@@ -428,7 +413,7 @@ fi
 printf '\n%s================ %s installed ================%s\n' "$C_G" "$APP_NAME" "$C_0"
 printf 'Version:  %s%s\n' "$DELTOS_VERSION" "$( [ "$UPGRADING" -eq 1 ] && echo ' (upgrade)' || true)"
 printf 'App:      %s -> %s\n' "$OPT_DIR/current" "$RELEASE_DIR"
-printf 'Node:     %s\n' "$NODE_BIN"
+printf 'Binary:   %s\n' "$BIN_PATH"
 printf 'Data:     %s\n' "$STATE_DIR"
 printf 'Access:   http://<this-machine-ip>:%s\n' "$PORT"
 if [ "${FRESH_CREDENTIALS:-0}" -eq 1 ] && [ "$DRY_RUN" -eq 0 ]; then
