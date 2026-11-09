@@ -4,7 +4,7 @@ go 1.25
 
 require (
 	github.com/SherClockHolmes/webpush-go v1.4.0
-	github.com/go-chi/chi/v5 v5.2.2
+	github.com/go-chi/chi/v5 v5.4.0
 	golang.org/x/crypto v0.42.0
 	modernc.org/sqlite v1.38.0
 )
