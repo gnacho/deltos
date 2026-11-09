@@ -196,6 +196,16 @@ func getExpense(q querier, id string) (*expenseRow, error) {
 	return e, err
 }
 
+// requireExpenseManager mirrors the single expense rule (see assertExpenseManager
+// in routes-expenses.ts): only the creator or the payer manage an expense.
+func requireExpenseManager(w http.ResponseWriter, exp *expenseRow, user *auth.User) bool {
+	if exp.CreatedBy == user.ID || (exp.PayerID != "" && exp.PayerID == user.ID) {
+		return true
+	}
+	errors.Write(w, errors.New(http.StatusForbidden, errors.ProjectNotMember))
+	return false
+}
+
 func hydrateExpense(q querier, id string) (*expenseJSON, error) {
 	row := q.QueryRow(expenseSelect+" WHERE e.id = ?", id)
 	h, err := scanExpenseHyd(row)
@@ -876,8 +886,7 @@ func (s *Server) handleExpenseUpdate(w http.ResponseWriter, r *http.Request) {
 		errors.Write(w, errors.New(http.StatusNotFound, errors.ExpenseNotFound))
 		return
 	}
-	if current.CreatedBy != user.ID && current.PayerID != user.ID {
-		errors.Write(w, errors.New(http.StatusForbidden, errors.ProjectNotMember))
+	if !requireExpenseManager(w, current, user) {
 		return
 	}
 	var body expenseUpdateBody
@@ -1147,6 +1156,9 @@ func (s *Server) handleExpenseMove(w http.ResponseWriter, r *http.Request) {
 		errors.Write(w, errors.New(http.StatusNotFound, errors.ExpenseNotFound))
 		return
 	}
+	if !requireExpenseManager(w, current, user) {
+		return
+	}
 
 	var maxPos int64
 	_ = d.QueryRow("SELECT COALESCE(MAX(position), -1) FROM expenses WHERE step = ? AND deleted_at IS NULL AND archived_at IS NULL", body.Step).Scan(&maxPos)
@@ -1212,8 +1224,7 @@ func (s *Server) handleExpenseArchive(w http.ResponseWriter, r *http.Request) {
 		errors.Write(w, errors.New(http.StatusNotFound, errors.ExpenseNotFound))
 		return
 	}
-	if current.CreatedBy != user.ID && current.PayerID != user.ID {
-		errors.Write(w, errors.New(http.StatusForbidden, errors.ProjectNotMember))
+	if !requireExpenseManager(w, current, user) {
 		return
 	}
 	if current.Step != "hecho" {
@@ -1270,8 +1281,7 @@ func (s *Server) handleExpenseUnarchive(w http.ResponseWriter, r *http.Request) 
 		errors.Write(w, errors.New(http.StatusNotFound, errors.ExpenseNotFound))
 		return
 	}
-	if current.CreatedBy != user.ID && current.PayerID != user.ID {
-		errors.Write(w, errors.New(http.StatusForbidden, errors.ProjectNotMember))
+	if !requireExpenseManager(w, current, user) {
 		return
 	}
 	if !current.ArchivedAt.Valid {
@@ -1594,8 +1604,13 @@ func (s *Server) handleExpenseAttachmentDelete(w http.ResponseWriter, r *http.Re
 		return
 	}
 	var storedName string
-	if err := d.QueryRow("SELECT stored_name FROM expense_attachments WHERE id = ? AND expense_id = ?", attID, id).Scan(&storedName); err != nil {
+	var uploadedBy sql.NullString
+	if err := d.QueryRow("SELECT stored_name, uploaded_by FROM expense_attachments WHERE id = ? AND expense_id = ?", attID, id).Scan(&storedName, &uploadedBy); err != nil {
 		errors.Write(w, errors.New(http.StatusNotFound, errors.AttachmentNotFound))
+		return
+	}
+	/* Manage the expense (creator or payer) or the attachment uploader. */
+	if !(uploadedBy.Valid && uploadedBy.String == auth.UserFrom(r).ID) && !requireExpenseManager(w, exp, auth.UserFrom(r)) {
 		return
 	}
 	_ = os.Remove(filepath.Join(s.UploadsDir, filepath.Base(storedName)))

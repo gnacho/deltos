@@ -209,6 +209,16 @@ function pluginEnabled(prod: Database.Database): boolean {
   return kvGet(prod, 'plugin_expenses_enabled', '0') === '1'
 }
 
+/** Única regla de gestión de un gasto: su creador o su pagador. */
+export function assertExpenseManager(
+  expense: { created_by: string; payer_id: string | null },
+  user: { id: string }
+): void {
+  if (expense.created_by !== user.id && expense.payer_id !== user.id) {
+    httpError(403, ERROR_CODES.PROJECT_NOT_MEMBER)
+  }
+}
+
 function addExpenseEvent(
   db: Database.Database,
   expenseId: string | null,
@@ -518,9 +528,7 @@ export function registerExpenseRoutes(
 
     const current = getExpense(db, id)
     if (!current) httpError(404, ERROR_CODES.EXPENSE_NOT_FOUND)
-    if (current.created_by !== user.id && current.payer_id !== user.id) {
-      httpError(403, ERROR_CODES.PROJECT_NOT_MEMBER)
-    }
+    assertExpenseManager(current, user)
 
     const payerId = data.payer_id ?? current.payer_id
     if (data.payer_id && !db.prepare('SELECT id FROM users WHERE id = ?').get(payerId)) {
@@ -615,6 +623,7 @@ export function registerExpenseRoutes(
       | ExpenseRow
       | undefined
     if (!current) httpError(404, ERROR_CODES.EXPENSE_NOT_FOUND)
+    assertExpenseManager(current, currentUser(c))
 
     const { mx: maxPos } = db
       .prepare('SELECT COALESCE(MAX(position), -1) AS mx FROM expenses WHERE step = ? AND deleted_at IS NULL AND archived_at IS NULL')
@@ -647,9 +656,7 @@ export function registerExpenseRoutes(
     const current = getExpense(db, id)
     if (!current) httpError(404, ERROR_CODES.EXPENSE_NOT_FOUND)
     const me = currentUser(c)
-    if (current.created_by !== me.id && current.payer_id !== me.id) {
-      httpError(403, ERROR_CODES.PROJECT_NOT_MEMBER)
-    }
+    assertExpenseManager(current, me)
     if (current.step !== 'hecho') httpError(422, ERROR_CODES.EXPENSE_NOT_DONE)
     if (current.archived_at) return c.json({ expense: hydrateExpense(db, id) })
     db.transaction(() => {
@@ -668,9 +675,7 @@ export function registerExpenseRoutes(
     const current = getExpense(db, id)
     if (!current) httpError(404, ERROR_CODES.EXPENSE_NOT_FOUND)
     const me = currentUser(c)
-    if (current.created_by !== me.id && current.payer_id !== me.id) {
-      httpError(403, ERROR_CODES.PROJECT_NOT_MEMBER)
-    }
+    assertExpenseManager(current, me)
     if (!current.archived_at) return c.json({ expense: hydrateExpense(db, id) })
     const now = Date.now()
     db.transaction(() => {
@@ -802,9 +807,13 @@ export function registerExpenseRoutes(
   app.delete('/api/expenses/:id/attachments/:attId', zValidator('param', idParamSchema.extend({ attId: z.string().min(1).max(100) }), validationHook), (c: Context<AppEnv>) => {
     const db = c.get('db')
     const params = c.req.valid('param' as never) as z.infer<typeof idParamSchema> & { attId?: string }
-    if (!getExpense(db, params.id)) httpError(404, ERROR_CODES.EXPENSE_NOT_FOUND)
+    const expense = getExpense(db, params.id)
+    if (!expense) httpError(404, ERROR_CODES.EXPENSE_NOT_FOUND)
     const att = db.prepare('SELECT * FROM expense_attachments WHERE id = ? AND expense_id = ?').get(params.attId, params.id) as ExpenseAttachmentRow & { stored_name: string } | undefined
     if (!att) httpError(404, ERROR_CODES.ATTACHMENT_NOT_FOUND)
+    /* Gestiona el gasto (creador o pagador) o quien subió el adjunto. */
+    const user = currentUser(c)
+    if (att.uploaded_by !== user.id) assertExpenseManager(expense, user)
     const filePath = path.join(uploadsDir, path.basename(att.stored_name))
     try { fs.unlinkSync(filePath) } catch {}
     db.prepare('DELETE FROM expense_attachments WHERE id = ?').run(params.attId)

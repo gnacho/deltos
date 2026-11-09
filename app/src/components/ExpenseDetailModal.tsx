@@ -638,14 +638,16 @@ export function ExpenseDetailModal({ expense: initialExpense, onClose, onDeleted
                 </p>
               </div>
 
-              {/* Invitaciones */}
-              <div className="border-t border-app pt-4">
-                <ExpenseInvitePanel
-                  expenseId={expense.id}
-                  amountCents={expense.amount_cents}
-                  sharesCents={(expense.shares ?? []).reduce((s, sh) => s + sh.share_cents, 0)}
-                />
-              </div>
+              {/* Invitaciones (creador o pagador) */}
+              {(isCreator || expense.payer_id === user?.id) && (
+                <div className="border-t border-app pt-4">
+                  <ExpenseInvitePanel
+                    expenseId={expense.id}
+                    amountCents={expense.amount_cents}
+                    sharesCents={(expense.shares ?? []).reduce((s, sh) => s + sh.share_cents, 0)}
+                  />
+                </div>
+              )}
 
               {/* Archivar / Desarchivar (creador o pagador; solo pagados) */}
               {(isCreator || expense.payer_id === user?.id) &&
