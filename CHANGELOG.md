@@ -5,6 +5,16 @@ All notable changes to Deltos are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.4] - 2026-11-09
+
+### Security
+
+- **Expense authorization.** Invite listing, invite creation and revocation,
+  moving an expense and deleting its attachments now require the expense creator
+  or payer, the same rule already applied by update, archive, unarchive and
+  delete. Attachment deletion also accepts the attachment uploader. Reported by
+  realtasty via a private security advisory.
+
 ## [2.6.52] - 2026-10-19
 
 ### Changed
