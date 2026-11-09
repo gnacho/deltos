@@ -5,6 +5,16 @@ All notable changes to Deltos are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.8] - 2026-11-10
+
+### Security
+
+- **Dependency updates.** Clears every open Dependabot alert:
+  `golang.org/x/crypto` 0.52.0 (15 advisories, 7 critical, in the SSH/FIDO
+  code paths), `zod` 4.6.7 in the app, `vite` 8.3.7 and `vitest` 4.1.12, plus a
+  `minimatch` override in the app toolchain. `npm audit` is clean in both
+  manifests.
+
 ## [2.8.6] - 2026-11-09
 
 ### Fixed
