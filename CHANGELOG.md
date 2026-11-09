@@ -5,6 +5,20 @@ All notable changes to Deltos are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.6] - 2026-11-09
+
+### Fixed
+
+- **Deployment scripts handle the Go layout.** `install.sh` no longer installs a
+  Node runtime and starts `current/deltos-go`. The updater detects the tarball
+  format and replaces `dist/` and the binary atomically in both the plain and
+  the capistrano layouts, so in-app updates work again since the Go port (#329).
+
+### Changed
+
+- Dependency updates: `golang-jwt/jwt` 5.2.2, `go-chi/chi` 5.4.0 and `zod` 4.6.7.
+- `server/package-lock.json` version synced with the package manifest.
+
 ## [2.8.4] - 2026-11-09
 
 ### Security

@@ -4,4 +4,4 @@
 package version
 
 // Version is the Deltos server version.
-var Version = "2.8.4"
+var Version = "2.8.6"
